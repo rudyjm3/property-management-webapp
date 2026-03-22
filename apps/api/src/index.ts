@@ -3,6 +3,8 @@ import cors from 'cors';
 import helmet from 'helmet';
 import morgan from 'morgan';
 import dotenv from 'dotenv';
+import routes from './routes';
+import { errorHandler } from './middleware/error-handler';
 
 dotenv.config({ path: '../../.env' });
 
@@ -20,8 +22,11 @@ app.get('/api/health', (_req, res) => {
   res.json({ status: 'ok', timestamp: new Date().toISOString() });
 });
 
-// API v1 routes (to be added)
-// app.use('/api/v1', routes);
+// API v1 routes
+app.use('/api/v1', routes);
+
+// Error handler (must be last)
+app.use(errorHandler);
 
 app.listen(PORT, () => {
   console.log(`PropFlow API running on http://localhost:${PORT}`);
