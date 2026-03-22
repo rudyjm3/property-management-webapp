@@ -45,6 +45,16 @@ export const createUnitSchema = z.object({
 
 // ─── Tenant ──────────────────────────────────────────────────────────────────
 
+export const createTenantSchema = z.object({
+  email: z.string().email(),
+  name: z.string().min(1).max(200),
+  phone: z.string().max(20).nullable().optional(),
+  emergencyContactName: z.string().max(200).nullable().optional(),
+  emergencyContactPhone: z.string().max(20).nullable().optional(),
+});
+
+export const updateTenantSchema = createTenantSchema.partial();
+
 export const inviteTenantSchema = z.object({
   email: z.string().email(),
   name: z.string().min(1).max(200),

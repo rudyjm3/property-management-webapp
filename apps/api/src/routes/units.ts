@@ -8,7 +8,7 @@ const router = Router({ mergeParams: true });
 // GET /api/v1/organizations/:orgId/properties/:propertyId/units
 router.get('/', async (req: Request, res: Response, next: NextFunction) => {
   try {
-    const units = await unitService.listUnits(req.params.orgId, req.params.propertyId);
+    const units = await unitService.listUnits(req.params.orgId as string, req.params.propertyId as string);
     res.json({ data: units });
   } catch (err) {
     next(err);
@@ -19,9 +19,9 @@ router.get('/', async (req: Request, res: Response, next: NextFunction) => {
 router.get('/:unitId', async (req: Request, res: Response, next: NextFunction) => {
   try {
     const unit = await unitService.getUnit(
-      req.params.orgId,
-      req.params.propertyId,
-      req.params.unitId
+      req.params.orgId as string,
+      req.params.propertyId as string,
+      req.params.unitId as string
     );
     res.json({ data: unit });
   } catch (err) {
@@ -33,8 +33,8 @@ router.get('/:unitId', async (req: Request, res: Response, next: NextFunction) =
 router.post('/', validate(createUnitSchema), async (req: Request, res: Response, next: NextFunction) => {
   try {
     const unit = await unitService.createUnit(
-      req.params.orgId,
-      req.params.propertyId,
+      req.params.orgId as string,
+      req.params.propertyId as string,
       req.body
     );
     res.status(201).json({ data: unit });
@@ -47,9 +47,9 @@ router.post('/', validate(createUnitSchema), async (req: Request, res: Response,
 router.patch('/:unitId', async (req: Request, res: Response, next: NextFunction) => {
   try {
     const unit = await unitService.updateUnit(
-      req.params.orgId,
-      req.params.propertyId,
-      req.params.unitId,
+      req.params.orgId as string,
+      req.params.propertyId as string,
+      req.params.unitId as string,
       req.body
     );
     res.json({ data: unit });
@@ -62,9 +62,9 @@ router.patch('/:unitId', async (req: Request, res: Response, next: NextFunction)
 router.delete('/:unitId', async (req: Request, res: Response, next: NextFunction) => {
   try {
     await unitService.deleteUnit(
-      req.params.orgId,
-      req.params.propertyId,
-      req.params.unitId
+      req.params.orgId as string,
+      req.params.propertyId as string,
+      req.params.unitId as string
     );
     res.status(204).send();
   } catch (err) {

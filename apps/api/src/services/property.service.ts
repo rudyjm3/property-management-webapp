@@ -1,5 +1,4 @@
 import { prisma } from '@propflow/db';
-import { Prisma } from '@prisma/client';
 import { AppError } from '../middleware/error-handler';
 
 export async function listProperties(organizationId: string) {
@@ -43,7 +42,7 @@ export async function getProperty(organizationId: string, propertyId: string) {
 
 export async function createProperty(
   organizationId: string,
-  data: Prisma.PropertyCreateInput & { organizationId?: string }
+  data: Record<string, any>
 ) {
   const { organizationId: _, ...rest } = data;
   return prisma.property.create({
@@ -58,7 +57,7 @@ export async function createProperty(
 export async function updateProperty(
   organizationId: string,
   propertyId: string,
-  data: Prisma.PropertyUpdateInput
+  data: Record<string, any>
 ) {
   const existing = await prisma.property.findFirst({
     where: { id: propertyId, organizationId },

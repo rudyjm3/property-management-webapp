@@ -42,6 +42,24 @@ export const api = {
         method: 'DELETE',
       }),
   },
+  tenants: {
+    list: () => apiFetch<any[]>(`/api/v1/organizations/${ORG_ID}/tenants`),
+    get: (id: string) => apiFetch<any>(`/api/v1/organizations/${ORG_ID}/tenants/${id}`),
+    create: (data: any) =>
+      apiFetch<any>(`/api/v1/organizations/${ORG_ID}/tenants`, {
+        method: 'POST',
+        body: JSON.stringify(data),
+      }),
+    update: (id: string, data: any) =>
+      apiFetch<any>(`/api/v1/organizations/${ORG_ID}/tenants/${id}`, {
+        method: 'PATCH',
+        body: JSON.stringify(data),
+      }),
+    delete: (id: string) =>
+      apiFetch<void>(`/api/v1/organizations/${ORG_ID}/tenants/${id}`, {
+        method: 'DELETE',
+      }),
+  },
   units: {
     list: (propertyId: string) =>
       apiFetch<any[]>(`/api/v1/organizations/${ORG_ID}/properties/${propertyId}/units`),

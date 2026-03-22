@@ -1,0 +1,353 @@
+'use client';
+
+import { useEffect, useState } from 'react';
+import { useParams, useRouter } from 'next/navigation';
+import Link from 'next/link';
+import { api } from '@/lib/api';
+
+interface TenantDetail {
+  id: string;
+  name: string;
+  email: string;
+  phone: string | null;
+  emergencyContactName: string | null;
+  emergencyContactPhone: string | null;
+  createdAt: string;
+  leaseParticipants: Array<{
+    isPrimary: boolean;
+    lease: {
+      id: string;
+      startDate: string;
+      endDate: string;
+      rentAmount: string;
+      status: string;
+      unit: {
+        id: string;
+        unitNumber: string;
+        propertyId: string;
+        property: { id: string; name: string; address: string };
+      };
+    };
+  }>;
+  payments: Array<{
+    id: string;
+    amount: string;
+    type: string;
+    status: string;
+    dueDate: string;
+    paidDate: string | null;
+    createdAt: string;
+  }>;
+  workOrders: Array<{
+    id: string;
+    category: string;
+    priority: string;
+    status: string;
+    description: string;
+    createdAt: string;
+  }>;
+}
+
+export default function TenantDetailPage() {
+  const params = useParams();
+  const router = useRouter();
+  const tenantId = params.id as string;
+  const [tenant, setTenant] = useState<TenantDetail | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [editing, setEditing] = useState(false);
+  const [error, setError] = useState('');
+
+  useEffect(() => {
+    async function load() {
+      try {
+        const data = await api.tenants.get(tenantId);
+        setTenant(data);
+      } catch (err) {
+        console.error('Failed to load tenant:', err);
+      } finally {
+        setLoading(false);
+      }
+    }
+    load();
+  }, [tenantId]);
+
+  async function handleUpdate(e: React.FormEvent<HTMLFormElement>) {
+    e.preventDefault();
+    setError('');
+    const formData = new FormData(e.currentTarget);
+    try {
+      const updated = await api.tenants.update(tenantId, {
+        name: formData.get('name'),
+        email: formData.get('email'),
+        phone: formData.get('phone') || null,
+        emergencyContactName: formData.get('emergencyContactName') || null,
+        emergencyContactPhone: formData.get('emergencyContactPhone') || null,
+      });
+      setTenant((prev) => (prev ? { ...prev, ...updated } : prev));
+      setEditing(false);
+    } catch (err: any) {
+      setError(err.message || 'Failed to update tenant');
+    }
+  }
+
+  async function handleDelete() {
+    if (!confirm('Are you sure you want to remove this tenant? This cannot be undone.')) return;
+    try {
+      await api.tenants.delete(tenantId);
+      router.push('/tenants');
+    } catch (err: any) {
+      alert(err.message || 'Failed to delete tenant');
+    }
+  }
+
+  if (loading) return <div className="loading">Loading tenant...</div>;
+  if (!tenant) return <div className="loading">Tenant not found</div>;
+
+  const activeLease = tenant.leaseParticipants.find((lp) => lp.lease.status === 'active');
+
+  return (
+    <>
+      <div className="breadcrumb">
+        <Link href="/tenants">Tenants</Link>
+        <span>/</span>
+        <span>{tenant.name}</span>
+      </div>
+
+      <div className="page-header">
+        <div>
+          <h1 className="page-title">{tenant.name}</h1>
+          <p className="page-subtitle">
+            Tenant since {new Date(tenant.createdAt).toLocaleDateString()}
+          </p>
+        </div>
+        <div style={{ display: 'flex', gap: '8px' }}>
+          <button className="btn btn-secondary" onClick={() => setEditing(true)}>
+            Edit
+          </button>
+          <button className="btn btn-secondary" style={{ color: 'var(--color-danger)' }} onClick={handleDelete}>
+            Delete
+          </button>
+        </div>
+      </div>
+
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '24px' }}>
+        {/* Contact Info */}
+        <div className="card">
+          <div className="card-body">
+            <h3 style={{ marginBottom: '16px', fontSize: '16px', fontWeight: 600 }}>Contact Information</h3>
+            <div className="detail-grid">
+              <div className="detail-item">
+                <label>Email</label>
+                <span>{tenant.email}</span>
+              </div>
+              <div className="detail-item">
+                <label>Phone</label>
+                <span>{tenant.phone || '--'}</span>
+              </div>
+              <div className="detail-item">
+                <label>Emergency Contact</label>
+                <span>{tenant.emergencyContactName || '--'}</span>
+              </div>
+              <div className="detail-item">
+                <label>Emergency Phone</label>
+                <span>{tenant.emergencyContactPhone || '--'}</span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* Current Lease */}
+        <div className="card">
+          <div className="card-body">
+            <h3 style={{ marginBottom: '16px', fontSize: '16px', fontWeight: 600 }}>Current Lease</h3>
+            {activeLease ? (
+              <div className="detail-grid">
+                <div className="detail-item">
+                  <label>Property</label>
+                  <Link
+                    href={`/properties/${activeLease.lease.unit.property.id}`}
+                    style={{ color: 'var(--color-primary)', textDecoration: 'none' }}
+                  >
+                    {activeLease.lease.unit.property.name}
+                  </Link>
+                </div>
+                <div className="detail-item">
+                  <label>Unit</label>
+                  <Link
+                    href={`/properties/${activeLease.lease.unit.property.id}/units/${activeLease.lease.unit.id}`}
+                    style={{ color: 'var(--color-primary)', textDecoration: 'none' }}
+                  >
+                    Unit {activeLease.lease.unit.unitNumber}
+                  </Link>
+                </div>
+                <div className="detail-item">
+                  <label>Lease Start</label>
+                  <span>{new Date(activeLease.lease.startDate).toLocaleDateString()}</span>
+                </div>
+                <div className="detail-item">
+                  <label>Lease End</label>
+                  <span>{new Date(activeLease.lease.endDate).toLocaleDateString()}</span>
+                </div>
+                <div className="detail-item">
+                  <label>Monthly Rent</label>
+                  <span>${Number(activeLease.lease.rentAmount).toLocaleString()}</span>
+                </div>
+                <div className="detail-item">
+                  <label>Status</label>
+                  <span className="badge badge-occupied">{activeLease.lease.status}</span>
+                </div>
+              </div>
+            ) : (
+              <div className="empty-state" style={{ padding: '24px' }}>
+                <p>No active lease</p>
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
+
+      {/* Lease History */}
+      <div className="card" style={{ marginTop: '24px' }}>
+        <div className="card-body">
+          <h3 style={{ marginBottom: '16px', fontSize: '16px', fontWeight: 600 }}>
+            Lease History ({tenant.leaseParticipants.length})
+          </h3>
+          {tenant.leaseParticipants.length === 0 ? (
+            <div className="empty-state" style={{ padding: '24px' }}>
+              <p>No lease history</p>
+            </div>
+          ) : (
+            <div className="table-container">
+              <table>
+                <thead>
+                  <tr>
+                    <th>Property</th>
+                    <th>Unit</th>
+                    <th>Start</th>
+                    <th>End</th>
+                    <th>Rent</th>
+                    <th>Status</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {tenant.leaseParticipants.map((lp) => (
+                    <tr key={lp.lease.id}>
+                      <td>{lp.lease.unit.property.name}</td>
+                      <td>Unit {lp.lease.unit.unitNumber}</td>
+                      <td>{new Date(lp.lease.startDate).toLocaleDateString()}</td>
+                      <td>{new Date(lp.lease.endDate).toLocaleDateString()}</td>
+                      <td>${Number(lp.lease.rentAmount).toLocaleString()}</td>
+                      <td>
+                        <span className={`badge badge-${lp.lease.status === 'active' ? 'occupied' : lp.lease.status === 'expired' ? 'notice' : 'vacant'}`}>
+                          {lp.lease.status.replace('_', ' ')}
+                        </span>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* Work Orders */}
+      {tenant.workOrders.length > 0 && (
+        <div className="card" style={{ marginTop: '24px' }}>
+          <div className="card-body">
+            <h3 style={{ marginBottom: '16px', fontSize: '16px', fontWeight: 600 }}>
+              Recent Work Orders ({tenant.workOrders.length})
+            </h3>
+            <div className="table-container">
+              <table>
+                <thead>
+                  <tr>
+                    <th>Date</th>
+                    <th>Category</th>
+                    <th>Priority</th>
+                    <th>Status</th>
+                    <th>Description</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {tenant.workOrders.map((wo) => (
+                    <tr key={wo.id}>
+                      <td>{new Date(wo.createdAt).toLocaleDateString()}</td>
+                      <td style={{ textTransform: 'capitalize' }}>{wo.category}</td>
+                      <td>
+                        <span className={`badge badge-${wo.priority === 'urgent' || wo.priority === 'emergency' ? 'notice' : 'occupied'}`}>
+                          {wo.priority}
+                        </span>
+                      </td>
+                      <td>
+                        <span className={`badge badge-${wo.status === 'completed' ? 'occupied' : wo.status === 'new_order' ? 'vacant' : 'maintenance'}`}>
+                          {wo.status.replace('_', ' ')}
+                        </span>
+                      </td>
+                      <td style={{ maxWidth: '300px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                        {wo.description}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Edit Modal */}
+      {editing && (
+        <div className="modal-overlay" onClick={() => setEditing(false)}>
+          <div className="modal" onClick={(e) => e.stopPropagation()}>
+            <div className="modal-header">
+              <h2>Edit Tenant</h2>
+              <button className="btn btn-sm btn-secondary" onClick={() => setEditing(false)}>
+                X
+              </button>
+            </div>
+            <form onSubmit={handleUpdate}>
+              <div className="modal-body">
+                {error && (
+                  <div style={{ color: 'var(--color-danger)', marginBottom: '12px', fontSize: '14px' }}>
+                    {error}
+                  </div>
+                )}
+                <div className="form-group">
+                  <label>Full Name</label>
+                  <input name="name" required defaultValue={tenant.name} />
+                </div>
+                <div className="form-group">
+                  <label>Email</label>
+                  <input name="email" type="email" required defaultValue={tenant.email} />
+                </div>
+                <div className="form-group">
+                  <label>Phone</label>
+                  <input name="phone" defaultValue={tenant.phone || ''} />
+                </div>
+                <div className="form-row">
+                  <div className="form-group">
+                    <label>Emergency Contact Name</label>
+                    <input name="emergencyContactName" defaultValue={tenant.emergencyContactName || ''} />
+                  </div>
+                  <div className="form-group">
+                    <label>Emergency Contact Phone</label>
+                    <input name="emergencyContactPhone" defaultValue={tenant.emergencyContactPhone || ''} />
+                  </div>
+                </div>
+              </div>
+              <div className="modal-footer">
+                <button type="button" className="btn btn-secondary" onClick={() => setEditing(false)}>
+                  Cancel
+                </button>
+                <button type="submit" className="btn btn-primary">
+                  Save Changes
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+    </>
+  );
+}
