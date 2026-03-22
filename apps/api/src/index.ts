@@ -1,0 +1,30 @@
+import express from 'express';
+import cors from 'cors';
+import helmet from 'helmet';
+import morgan from 'morgan';
+import dotenv from 'dotenv';
+
+dotenv.config({ path: '../../.env' });
+
+const app = express();
+const PORT = process.env.PORT || 3001;
+
+// Middleware
+app.use(helmet());
+app.use(cors({ origin: process.env.APP_URL || 'http://localhost:3000' }));
+app.use(morgan('dev'));
+app.use(express.json());
+
+// Health check
+app.get('/api/health', (_req, res) => {
+  res.json({ status: 'ok', timestamp: new Date().toISOString() });
+});
+
+// API v1 routes (to be added)
+// app.use('/api/v1', routes);
+
+app.listen(PORT, () => {
+  console.log(`PropFlow API running on http://localhost:${PORT}`);
+});
+
+export default app;

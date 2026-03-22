@@ -1,0 +1,33 @@
+{
+  "name": "propflow",
+  "version": "0.1.0",
+  "private": true,
+  "packageManager": "npm@10.8.2",
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
+  "scripts": {
+    "dev": "turbo run dev",
+    "build": "turbo run build",
+    "lint": "turbo run lint",
+    "lint:fix": "turbo run lint:fix",
+    "format": "prettier --write \"**/*.{ts,tsx,js,jsx,json,md}\"",
+    "format:check": "prettier --check \"**/*.{ts,tsx,js,jsx,json,md}\"",
+    "db:migrate": "npm run migrate --workspace=@propflow/db",
+    "db:migrate:dev": "npm run migrate:dev --workspace=@propflow/db",
+    "db:seed": "npm run seed --workspace=@propflow/db",
+    "db:reset": "npm run reset --workspace=@propflow/db",
+    "db:studio": "npm run studio --workspace=@propflow/db",
+    "clean": "turbo run clean && rm -rf node_modules"
+  },
+  "overrides": {
+    "nanoid": "3.3.7"
+  },
+  "devDependencies": {
+    "prettier": "^3.5.0",
+    "tsx": "^4.21.0",
+    "turbo": "^2.8.19",
+    "typescript": "^5.7.0"
+  }
+}

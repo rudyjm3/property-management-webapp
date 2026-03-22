@@ -1,0 +1,370 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ─── Organization ────────────────────────────────────────────────────────────
+
+model Organization {
+  id                   String   @id @default(uuid())
+  name                 String   @db.VarChar(200)
+  slug                 String   @unique @db.VarChar(200)
+  logoUrl              String?  @map("logo_url")
+  stripeCustomerId     String?  @unique @map("stripe_customer_id")
+  stripeSubscriptionId String?  @map("stripe_subscription_id")
+  plan                 String   @default("base") @db.VarChar(50)
+  createdAt            DateTime @default(now()) @map("created_at")
+  updatedAt            DateTime @updatedAt @map("updated_at")
+
+  users        User[]
+  properties   Property[]
+  tenants      Tenant[]
+  messages     Message[]
+  documents    Document[]
+  notifications Notification[]
+
+  @@map("organizations")
+}
+
+// ─── User (Manager-side accounts) ────────────────────────────────────────────
+
+model User {
+  id             String    @id @default(uuid())
+  organizationId String    @map("organization_id")
+  supabaseUserId String?   @unique @map("supabase_user_id")
+  email          String    @db.VarChar(320)
+  name           String    @db.VarChar(200)
+  role           UserRole  @default(manager)
+  avatarUrl      String?   @map("avatar_url")
+  lastLoginAt    DateTime? @map("last_login_at")
+  createdAt      DateTime  @default(now()) @map("created_at")
+  updatedAt      DateTime  @updatedAt @map("updated_at")
+
+  organization     Organization   @relation(fields: [organizationId], references: [id])
+  assignedOrders   WorkOrder[]    @relation("AssignedWorkOrders")
+  sentMessages     Message[]      @relation("SentMessages")
+  uploadedDocuments Document[]    @relation("UploadedDocuments")
+  notifications    Notification[]
+
+  @@unique([organizationId, email])
+  @@index([organizationId])
+  @@map("users")
+}
+
+enum UserRole {
+  owner
+  manager
+  maintenance
+}
+
+// ─── Property ────────────────────────────────────────────────────────────────
+
+model Property {
+  id             String       @id @default(uuid())
+  organizationId String       @map("organization_id")
+  name           String       @db.VarChar(200)
+  address        String       @db.VarChar(500)
+  city           String       @db.VarChar(100)
+  state          String       @db.Char(2)
+  zip            String       @db.VarChar(10)
+  type           PropertyType @default(apartment)
+  yearBuilt      Int?         @map("year_built")
+  unitCount      Int          @default(0) @map("unit_count")
+  photoUrl       String?      @map("photo_url")
+  notes          String?
+  createdAt      DateTime     @default(now()) @map("created_at")
+  updatedAt      DateTime     @updatedAt @map("updated_at")
+
+  organization Organization @relation(fields: [organizationId], references: [id])
+  units        Unit[]
+
+  @@index([organizationId])
+  @@map("properties")
+}
+
+enum PropertyType {
+  apartment
+  condo
+  house
+}
+
+// ─── Unit ────────────────────────────────────────────────────────────────────
+
+model Unit {
+  id            String     @id @default(uuid())
+  propertyId    String     @map("property_id")
+  unitNumber    String     @map("unit_number") @db.VarChar(20)
+  floor         Int?
+  bedrooms      Int        @default(1)
+  bathrooms     Float      @default(1)
+  sqFt          Int?       @map("sq_ft")
+  rentAmount    Decimal    @map("rent_amount") @db.Decimal(10, 2)
+  depositAmount Decimal    @default(0) @map("deposit_amount") @db.Decimal(10, 2)
+  status        UnitStatus @default(vacant)
+  notes         String?
+  createdAt     DateTime   @default(now()) @map("created_at")
+  updatedAt     DateTime   @updatedAt @map("updated_at")
+
+  property   Property    @relation(fields: [propertyId], references: [id])
+  leases     Lease[]
+  workOrders WorkOrder[]
+
+  @@unique([propertyId, unitNumber])
+  @@index([propertyId])
+  @@index([status])
+  @@map("units")
+}
+
+enum UnitStatus {
+  vacant
+  occupied
+  notice
+  maintenance
+}
+
+// ─── Tenant (Tenant-side accounts) ───────────────────────────────────────────
+
+model Tenant {
+  id                    String   @id @default(uuid())
+  organizationId        String   @map("organization_id")
+  supabaseUserId        String?  @unique @map("supabase_user_id")
+  email                 String   @db.VarChar(320)
+  name                  String   @db.VarChar(200)
+  phone                 String?  @db.VarChar(20)
+  emergencyContactName  String?  @map("emergency_contact_name") @db.VarChar(200)
+  emergencyContactPhone String?  @map("emergency_contact_phone") @db.VarChar(20)
+  avatarUrl             String?  @map("avatar_url")
+  createdAt             DateTime @default(now()) @map("created_at")
+  updatedAt             DateTime @updatedAt @map("updated_at")
+  deletedAt             DateTime? @map("deleted_at")
+
+  organization      Organization       @relation(fields: [organizationId], references: [id])
+  leaseParticipants LeaseParticipant[]
+  payments          Payment[]
+  workOrders        WorkOrder[]
+  receivedMessages  Message[]          @relation("ReceivedMessages")
+
+  @@unique([organizationId, email])
+  @@index([organizationId])
+  @@map("tenants")
+}
+
+// ─── Lease ───────────────────────────────────────────────────────────────────
+
+model Lease {
+  id               String      @id @default(uuid())
+  unitId           String      @map("unit_id")
+  rentAmount       Decimal     @map("rent_amount") @db.Decimal(10, 2)
+  depositAmount    Decimal     @default(0) @map("deposit_amount") @db.Decimal(10, 2)
+  startDate        DateTime    @map("start_date") @db.Date
+  endDate          DateTime    @map("end_date") @db.Date
+  status           LeaseStatus @default(active)
+  lateFeeAmount    Decimal     @default(0) @map("late_fee_amount") @db.Decimal(10, 2)
+  lateFeeGraceDays Int         @default(5) @map("late_fee_grace_days")
+  documentUrl      String?     @map("document_url")
+  notes            String?
+  createdAt        DateTime    @default(now()) @map("created_at")
+  updatedAt        DateTime    @updatedAt @map("updated_at")
+  deletedAt        DateTime?   @map("deleted_at")
+
+  unit         Unit               @relation(fields: [unitId], references: [id])
+  participants LeaseParticipant[]
+  payments     Payment[]
+
+  @@index([unitId])
+  @@index([status])
+  @@index([endDate])
+  @@map("leases")
+}
+
+enum LeaseStatus {
+  active
+  month_to_month
+  notice_given
+  expired
+}
+
+// ─── Lease Participant (join table: Lease <-> Tenant) ────────────────────────
+
+model LeaseParticipant {
+  id        String  @id @default(uuid())
+  leaseId   String  @map("lease_id")
+  tenantId  String  @map("tenant_id")
+  isPrimary Boolean @default(false) @map("is_primary")
+
+  lease  Lease  @relation(fields: [leaseId], references: [id])
+  tenant Tenant @relation(fields: [tenantId], references: [id])
+
+  @@unique([leaseId, tenantId])
+  @@map("lease_participants")
+}
+
+// ─── Payment ─────────────────────────────────────────────────────────────────
+
+model Payment {
+  id                    String        @id @default(uuid())
+  leaseId               String        @map("lease_id")
+  tenantId              String        @map("tenant_id")
+  amount                Decimal       @db.Decimal(10, 2)
+  type                  PaymentType   @default(rent)
+  status                PaymentStatus @default(pending)
+  stripePaymentIntentId String?       @map("stripe_payment_intent_id")
+  paidAt                DateTime?     @map("paid_at")
+  dueDate               DateTime      @map("due_date") @db.Date
+  notes                 String?
+  createdAt             DateTime      @default(now()) @map("created_at")
+  updatedAt             DateTime      @updatedAt @map("updated_at")
+  deletedAt             DateTime?     @map("deleted_at")
+
+  lease  Lease  @relation(fields: [leaseId], references: [id])
+  tenant Tenant @relation(fields: [tenantId], references: [id])
+
+  @@index([leaseId])
+  @@index([tenantId])
+  @@index([status])
+  @@index([dueDate])
+  @@map("payments")
+}
+
+enum PaymentType {
+  rent
+  deposit
+  late_fee
+  credit
+}
+
+enum PaymentStatus {
+  pending
+  completed
+  failed
+  waived
+}
+
+// ─── Work Order ──────────────────────────────────────────────────────────────
+
+model WorkOrder {
+  id               String            @id @default(uuid())
+  unitId           String            @map("unit_id")
+  tenantId         String?           @map("tenant_id")
+  assignedToUserId String?           @map("assigned_to_user_id")
+  category         WorkOrderCategory @default(general)
+  priority         WorkOrderPriority @default(normal)
+  status           WorkOrderStatus   @default(new_order)
+  description      String
+  resolutionNotes  String?           @map("resolution_notes")
+  cost             Decimal?          @db.Decimal(10, 2)
+  completedAt      DateTime?         @map("completed_at")
+  createdAt        DateTime          @default(now()) @map("created_at")
+  updatedAt        DateTime          @updatedAt @map("updated_at")
+
+  unit       Unit    @relation(fields: [unitId], references: [id])
+  tenant     Tenant? @relation(fields: [tenantId], references: [id])
+  assignedTo User?   @relation("AssignedWorkOrders", fields: [assignedToUserId], references: [id])
+
+  @@index([unitId])
+  @@index([status])
+  @@index([priority])
+  @@index([createdAt])
+  @@map("work_orders")
+}
+
+enum WorkOrderCategory {
+  plumbing
+  electrical
+  appliance
+  hvac
+  general
+  other
+}
+
+enum WorkOrderPriority {
+  low
+  normal
+  urgent
+  emergency
+}
+
+enum WorkOrderStatus {
+  new_order
+  assigned
+  in_progress
+  pending_parts
+  completed
+  cancelled
+}
+
+// ─── Message ─────────────────────────────────────────────────────────────────
+
+model Message {
+  id                String   @id @default(uuid())
+  organizationId    String   @map("organization_id")
+  senderUserId      String?  @map("sender_user_id")
+  recipientTenantId String?  @map("recipient_tenant_id")
+  body              String
+  attachmentUrl     String?  @map("attachment_url")
+  readAt            DateTime? @map("read_at")
+  createdAt         DateTime @default(now()) @map("created_at")
+
+  organization Organization @relation(fields: [organizationId], references: [id])
+  sender       User?        @relation("SentMessages", fields: [senderUserId], references: [id])
+  recipient    Tenant?      @relation("ReceivedMessages", fields: [recipientTenantId], references: [id])
+
+  @@index([organizationId])
+  @@index([recipientTenantId])
+  @@map("messages")
+}
+
+// ─── Document ────────────────────────────────────────────────────────────────
+
+model Document {
+  id               String             @id @default(uuid())
+  organizationId   String             @map("organization_id")
+  entityType       DocumentEntityType @map("entity_type")
+  entityId         String             @map("entity_id")
+  name             String             @db.VarChar(500)
+  s3Key            String             @map("s3_key")
+  mimeType         String             @map("mime_type") @db.VarChar(100)
+  sizeBytes        Int                @map("size_bytes")
+  uploadedByUserId String             @map("uploaded_by_user_id")
+  visibleToTenant  Boolean            @default(false) @map("visible_to_tenant")
+  createdAt        DateTime           @default(now()) @map("created_at")
+
+  organization Organization @relation(fields: [organizationId], references: [id])
+  uploadedBy   User         @relation("UploadedDocuments", fields: [uploadedByUserId], references: [id])
+
+  @@index([organizationId])
+  @@index([entityType, entityId])
+  @@map("documents")
+}
+
+enum DocumentEntityType {
+  property
+  unit
+  lease
+  tenant
+  work_order
+}
+
+// ─── Notification ────────────────────────────────────────────────────────────
+
+model Notification {
+  id             String    @id @default(uuid())
+  userId         String    @map("user_id")
+  organizationId String    @map("organization_id")
+  type           String    @db.VarChar(100)
+  title          String    @db.VarChar(500)
+  body           String
+  readAt         DateTime? @map("read_at")
+  actionUrl      String?   @map("action_url")
+  createdAt      DateTime  @default(now()) @map("created_at")
+
+  user         User         @relation(fields: [userId], references: [id])
+  organization Organization @relation(fields: [organizationId], references: [id])
+
+  @@index([userId, readAt])
+  @@map("notifications")
+}
