@@ -39,7 +39,7 @@ async function main() {
     },
   });
 
-  // Create 10 units
+  // Create 10 units — 8 occupied (with tenants), 2 vacant
   const units = await Promise.all(
     Array.from({ length: 10 }, (_, i) =>
       prisma.unit.create({
@@ -58,64 +58,53 @@ async function main() {
     )
   );
 
-  // Create two demo tenants
-  const tenant1 = await prisma.tenant.create({
-    data: {
-      organizationId: org.id,
-      email: 'tenant1@demo.propflow.com',
-      name: 'Jordan Chen',
-      phone: '512-555-0101',
-    },
-  });
+  // Demo tenants — one for each occupied unit
+  const tenantData = [
+    { name: 'Jordan Chen', email: 'jordan.chen@demo.propflow.com', phone: '512-555-0101' },
+    { name: 'Sam Patel', email: 'sam.patel@demo.propflow.com', phone: '512-555-0102' },
+    { name: 'Maria Garcia', email: 'maria.garcia@demo.propflow.com', phone: '512-555-0103' },
+    { name: 'David Kim', email: 'david.kim@demo.propflow.com', phone: '512-555-0104' },
+    { name: 'Lisa Thompson', email: 'lisa.thompson@demo.propflow.com', phone: '512-555-0105' },
+    { name: 'James Wilson', email: 'james.wilson@demo.propflow.com', phone: '512-555-0106' },
+    { name: 'Ashley Brown', email: 'ashley.brown@demo.propflow.com', phone: '512-555-0107' },
+    { name: 'Michael Davis', email: 'michael.davis@demo.propflow.com', phone: '512-555-0108' },
+  ];
 
-  const tenant2 = await prisma.tenant.create({
-    data: {
-      organizationId: org.id,
-      email: 'tenant2@demo.propflow.com',
-      name: 'Sam Patel',
-      phone: '512-555-0102',
-    },
-  });
+  const tenants = await Promise.all(
+    tenantData.map((t) =>
+      prisma.tenant.create({
+        data: { organizationId: org.id, ...t },
+      })
+    )
+  );
 
-  // Create leases for the two tenants
-  const lease1 = await prisma.lease.create({
-    data: {
-      unitId: units[0].id,
-      rentAmount: 1200,
-      depositAmount: 1200,
-      startDate: new Date('2025-09-01'),
-      endDate: new Date('2026-08-31'),
-      status: 'active',
-      lateFeeAmount: 50,
-      lateFeeGraceDays: 5,
-      participants: {
-        create: { tenantId: tenant1.id, isPrimary: true },
-      },
-    },
-  });
-
-  const lease2 = await prisma.lease.create({
-    data: {
-      unitId: units[4].id,
-      rentAmount: 1600,
-      depositAmount: 1600,
-      startDate: new Date('2025-06-01'),
-      endDate: new Date('2026-05-31'),
-      status: 'active',
-      lateFeeAmount: 75,
-      lateFeeGraceDays: 5,
-      participants: {
-        create: { tenantId: tenant2.id, isPrimary: true },
-      },
-    },
-  });
+  // Create a lease for each occupied unit (first 8 units)
+  const leases = await Promise.all(
+    tenants.map((tenant, i) =>
+      prisma.lease.create({
+        data: {
+          unitId: units[i].id,
+          rentAmount: units[i].rentAmount,
+          depositAmount: units[i].depositAmount,
+          startDate: new Date('2025-09-01'),
+          endDate: new Date('2026-08-31'),
+          status: 'active',
+          lateFeeAmount: 50,
+          lateFeeGraceDays: 5,
+          participants: {
+            create: { tenantId: tenant.id, isPrimary: true },
+          },
+        },
+      })
+    )
+  );
 
   console.log('Seed complete:');
   console.log(`  Organization: ${org.name} (${org.id})`);
   console.log(`  Manager: ${manager.name}`);
   console.log(`  Property: ${property.name} — ${units.length} units`);
-  console.log(`  Tenants: ${tenant1.name}, ${tenant2.name}`);
-  console.log(`  Leases: ${lease1.id}, ${lease2.id}`);
+  console.log(`  Tenants: ${tenants.length} tenants created`);
+  console.log(`  Leases: ${leases.length} active leases created`);
 }
 
 main()

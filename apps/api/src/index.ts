@@ -13,7 +13,13 @@ const PORT = process.env.PORT || 3001;
 
 // Middleware
 app.use(helmet());
-app.use(cors({ origin: process.env.APP_URL || 'http://localhost:3000' }));
+app.use(
+  cors({
+    origin: process.env.NODE_ENV === 'production'
+      ? process.env.APP_URL
+      : true,
+  })
+);
 app.use(morgan('dev'));
 app.use(express.json());
 
