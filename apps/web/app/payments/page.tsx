@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useState, useCallback } from 'react';
+import { useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import { api } from '@/lib/api';
 
@@ -50,10 +51,11 @@ const FILTER_STATUSES = ['', 'pending', 'completed', 'failed', 'waived'];
 const FILTER_TYPES = ['', 'rent', 'deposit', 'late_fee', 'credit'];
 
 export default function PaymentsPage() {
+  const searchParams = useSearchParams();
   const [payments, setPayments] = useState<Payment[]>([]);
   const [loading, setLoading] = useState(true);
-  const [filterStatus, setFilterStatus] = useState('');
-  const [filterType, setFilterType] = useState('');
+  const [filterStatus, setFilterStatus] = useState(searchParams.get('status') ?? '');
+  const [filterType, setFilterType] = useState(searchParams.get('type') ?? '');
   const [showForm, setShowForm] = useState(false);
   const [formError, setFormError] = useState('');
   const [submitting, setSubmitting] = useState(false);
@@ -79,7 +81,7 @@ export default function PaymentsPage() {
         type: filterType || undefined,
         limit: 100,
       });
-      setPayments(result.data);
+      setPayments(result);
     } catch (err) {
       console.error('Failed to load payments:', err);
     } finally {

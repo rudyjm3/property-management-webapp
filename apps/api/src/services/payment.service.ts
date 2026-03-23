@@ -62,7 +62,15 @@ export async function getPaymentStats(organizationId: string) {
   const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
   const endOfMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59, 999);
 
-  const [thisMonthPayments, overduePayments, recentPayments] = await Promise.all([
+  const overdueWhere = {
+    deletedAt: null,
+    lease: { unit: { property: { organizationId } } },
+    status: 'pending',
+    type: 'rent',
+    dueDate: { lt: now },
+  } as const;
+
+  const [thisMonthPayments, overduePayments, overdueCount, recentPayments] = await Promise.all([
     // All payments due this month
     prisma.payment.findMany({
       where: {
@@ -74,19 +82,16 @@ export async function getPaymentStats(organizationId: string) {
       select: { amount: true, status: true },
     }),
 
-    // Overdue: pending rent with dueDate before today
+    // Overdue preview list (capped for display)
     prisma.payment.findMany({
-      where: {
-        deletedAt: null,
-        lease: { unit: { property: { organizationId } } },
-        status: 'pending',
-        type: 'rent',
-        dueDate: { lt: now },
-      },
+      where: overdueWhere,
       include: paymentInclude,
       orderBy: { dueDate: 'asc' },
       take: 10,
     }),
+
+    // Accurate overdue count (not capped)
+    prisma.payment.count({ where: overdueWhere }),
 
     // Recent completed payments (for dashboard feed)
     prisma.payment.findMany({
@@ -122,7 +127,7 @@ export async function getPaymentStats(organizationId: string) {
     expectedThisMonth,
     pendingThisMonth,
     collectionRate,
-    overdueCount: overduePayments.length,
+    overdueCount,
     overduePayments,
     recentPayments,
   };

@@ -105,7 +105,7 @@ export const api = {
       if (params?.type) query.set('type', params.type);
       if (params?.limit) query.set('limit', String(params.limit));
       const qs = query.toString();
-      return apiFetch<{ data: any[]; nextCursor: string | null }>(
+      return apiFetch<any[]>(
         `/api/v1/organizations/${ORG_ID}/payments${qs ? `?${qs}` : ''}`
       );
     },

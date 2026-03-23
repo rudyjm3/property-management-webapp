@@ -20,7 +20,7 @@ router.get('/', async (req: Request, res: Response, next: NextFunction) => {
   try {
     const filters = listPaymentsFiltersSchema.parse(req.query);
     const result = await paymentService.listPayments(req.params.orgId as string, filters);
-    res.json(result);
+    res.json({ data: result.data, nextCursor: result.nextCursor });
   } catch (err) {
     next(err);
   }
