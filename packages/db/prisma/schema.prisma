@@ -105,6 +105,10 @@ model Unit {
   rentAmount    Decimal    @map("rent_amount") @db.Decimal(10, 2)
   depositAmount Decimal    @default(0) @map("deposit_amount") @db.Decimal(10, 2)
   status        UnitStatus @default(vacant)
+  address       String?    @db.VarChar(500)
+  city          String?    @db.VarChar(100)
+  state         String?    @db.Char(2)
+  zip           String?    @db.VarChar(10)
   notes         String?
   createdAt     DateTime   @default(now()) @map("created_at")
   updatedAt     DateTime   @updatedAt @map("updated_at")

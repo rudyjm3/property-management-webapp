@@ -43,7 +43,7 @@ export async function getUnit(organizationId: string, propertyId: string, unitId
   const unit = await prisma.unit.findFirst({
     where: { id: unitId, propertyId },
     include: {
-      property: { select: { id: true, name: true, address: true } },
+      property: { select: { id: true, name: true, address: true, city: true, state: true, zip: true } },
       leases: {
         include: {
           participants: {
@@ -75,6 +75,10 @@ interface CreateUnitData {
   rentAmount: number;
   depositAmount: number;
   status?: 'vacant' | 'occupied' | 'notice' | 'maintenance';
+  address?: string | null;
+  city?: string | null;
+  state?: string | null;
+  zip?: string | null;
   notes?: string | null;
 }
 

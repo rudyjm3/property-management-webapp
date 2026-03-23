@@ -40,6 +40,10 @@ export const createUnitSchema = z.object({
   rentAmount: z.number().positive(),
   depositAmount: z.number().min(0),
   status: z.enum(UNIT_STATUSES).default('vacant'),
+  address: z.string().max(500).nullable().optional(),
+  city: z.string().max(100).nullable().optional(),
+  state: z.string().length(2).nullable().optional(),
+  zip: z.string().min(5).max(10).nullable().optional(),
   notes: z.string().max(2000).nullable().optional(),
 });
 

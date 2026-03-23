@@ -83,6 +83,10 @@ export interface Unit {
   rentAmount: number;
   depositAmount: number;
   status: UnitStatus;
+  address: string | null;
+  city: string | null;
+  state: string | null;
+  zip: string | null;
   notes: string | null;
   createdAt: Date;
 }
