@@ -1,5 +1,6 @@
 import { prisma } from '@propflow/db';
 import { AppError } from '../middleware/error-handler';
+import { CURRENT_LEASE_STATUSES } from '../constants';
 
 export async function listProperties(organizationId: string) {
   return prisma.property.findMany({
@@ -19,7 +20,7 @@ export async function getProperty(organizationId: string, propertyId: string) {
         orderBy: { unitNumber: 'asc' },
         include: {
           leases: {
-            where: { status: 'active' },
+            where: { status: { in: [...CURRENT_LEASE_STATUSES] } },
             include: {
               participants: {
                 include: { tenant: { select: { id: true, name: true, email: true } } },

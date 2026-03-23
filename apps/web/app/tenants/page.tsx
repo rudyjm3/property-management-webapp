@@ -3,6 +3,8 @@
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { api } from '@/lib/api';
+import { formatPhone } from '@/lib/phone';
+import PhoneInput from '@/components/PhoneInput';
 
 interface Tenant {
   id: string;
@@ -113,7 +115,7 @@ export default function TenantsPage() {
                       </Link>
                     </td>
                     <td>{tenant.email}</td>
-                    <td>{tenant.phone || '--'}</td>
+                    <td>{formatPhone(tenant.phone)}</td>
                     <td>
                       {activeLease ? (
                         <Link
@@ -166,7 +168,7 @@ export default function TenantsPage() {
                 </div>
                 <div className="form-group">
                   <label>Phone</label>
-                  <input name="phone" placeholder="(555) 123-4567" />
+                  <PhoneInput name="phone" />
                 </div>
                 <div className="form-row">
                   <div className="form-group">
@@ -175,7 +177,7 @@ export default function TenantsPage() {
                   </div>
                   <div className="form-group">
                     <label>Emergency Contact Phone</label>
-                    <input name="emergencyContactPhone" placeholder="(555) 987-6543" />
+                    <PhoneInput name="emergencyContactPhone" />
                   </div>
                 </div>
               </div>

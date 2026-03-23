@@ -49,15 +49,33 @@ function statusBadgeClass(status: string): string {
   }
 }
 
+interface UnitOption {
+  id: string;
+  label: string;
+  rentAmount: number;
+  depositAmount: number;
+}
+
+interface TenantOption {
+  id: string;
+  name: string;
+  email: string;
+}
+
 export default function LeasesPage() {
   const [leases, setLeases] = useState<Lease[]>([]);
   const [loading, setLoading] = useState(true);
   const [showForm, setShowForm] = useState(false);
   const [error, setError] = useState('');
 
+  // Dropdown data for new lease form
+  const [unitOptions, setUnitOptions] = useState<UnitOption[]>([]);
+  const [tenantOptions, setTenantOptions] = useState<TenantOption[]>([]);
+  const [formLoading, setFormLoading] = useState(false);
+
   // Form state for new lease
   const [unitId, setUnitId] = useState('');
-  const [tenantIdsInput, setTenantIdsInput] = useState('');
+  const [selectedTenantIds, setSelectedTenantIds] = useState<string[]>(['']);
   const [rentAmount, setRentAmount] = useState('');
   const [depositAmount, setDepositAmount] = useState('');
   const [startDate, setStartDate] = useState('');
@@ -81,24 +99,47 @@ export default function LeasesPage() {
     }
   }
 
+  async function openForm() {
+    setShowForm(true);
+    setFormLoading(true);
+    try {
+      const [properties, allTenants] = await Promise.all([
+        api.properties.list(),
+        api.tenants.list(),
+      ]);
+      const unitLists = await Promise.all(
+        properties.map((p: any) => api.units.list(p.id).then((units: any[]) =>
+          units.map((u) => ({
+            id: u.id,
+            label: `Unit ${u.unitNumber} — ${p.name} (${u.status})`,
+            rentAmount: Number(u.rentAmount),
+            depositAmount: Number(u.depositAmount),
+          }))
+        ))
+      );
+      setUnitOptions(unitLists.flat());
+      setTenantOptions(allTenants.map((t: any) => ({ id: t.id, name: t.name, email: t.email })));
+    } catch (err) {
+      console.error('Failed to load form data:', err);
+    } finally {
+      setFormLoading(false);
+    }
+  }
+
   async function handleCreate(e: React.FormEvent) {
     e.preventDefault();
     setError('');
 
-    const tenantIds = tenantIdsInput
-      .split(',')
-      .map((s) => s.trim())
-      .filter(Boolean);
-
-    if (tenantIds.length === 0) {
-      setError('Enter at least one Tenant ID.');
+    const filledIds = selectedTenantIds.filter((id) => id !== '');
+    if (filledIds.length === 0) {
+      setError('Select at least one tenant.');
       return;
     }
 
     try {
       await api.leases.create({
         unitId,
-        tenantIds,
+        tenantIds: filledIds,
         rentAmount: parseFloat(rentAmount),
         depositAmount: parseFloat(depositAmount || '0'),
         startDate,
@@ -117,7 +158,7 @@ export default function LeasesPage() {
 
   function resetForm() {
     setUnitId('');
-    setTenantIdsInput('');
+    setSelectedTenantIds(['']);
     setRentAmount('');
     setDepositAmount('');
     setStartDate('');
@@ -126,6 +167,18 @@ export default function LeasesPage() {
     setLateFeeGraceDays('5');
     setNotes('');
     setError('');
+  }
+
+  function setTenantAtIndex(index: number, id: string) {
+    setSelectedTenantIds((prev) => prev.map((v, i) => (i === index ? id : v)));
+  }
+
+  function addTenantSlot() {
+    setSelectedTenantIds((prev) => [...prev, '']);
+  }
+
+  function removeTenantSlot(index: number) {
+    setSelectedTenantIds((prev) => prev.filter((_, i) => i !== index));
   }
 
   if (loading) return <div className="loading">Loading leases...</div>;
@@ -153,7 +206,7 @@ export default function LeasesPage() {
             {leases.length} total &middot; {activeCount} active &middot; {expiringCount} expiring within 60 days
           </p>
         </div>
-        <button className="btn btn-primary" onClick={() => setShowForm(true)}>
+        <button className="btn btn-primary" onClick={openForm}>
           + New Lease
         </button>
       </div>
@@ -175,6 +228,7 @@ export default function LeasesPage() {
                 <th>Start</th>
                 <th>End / Expires</th>
                 <th>Status</th>
+                <th></th>
               </tr>
             </thead>
             <tbody>
@@ -218,15 +272,20 @@ export default function LeasesPage() {
                     </td>
                     <td>${Number(lease.rentAmount).toLocaleString()}</td>
                     <td>{new Date(lease.startDate).toLocaleDateString()}</td>
-                    <td>
-                      <Link href={`/leases/${lease.id}`} className={colorClass} style={{ textDecoration: 'none' }}>
-                        {new Date(lease.endDate).toLocaleDateString()}
-                      </Link>
-                    </td>
+                    <td className={colorClass}>{new Date(lease.endDate).toLocaleDateString()}</td>
                     <td>
                       <span className={`badge ${statusBadgeClass(lease.status)}`}>
                         {lease.status.replace(/_/g, ' ')}
                       </span>
+                    </td>
+                    <td>
+                      <Link
+                        href={`/leases/${lease.id}`}
+                        className="btn btn-sm btn-secondary"
+                        style={{ textDecoration: 'none' }}
+                      >
+                        Edit
+                      </Link>
                     </td>
                   </tr>
                 );
@@ -252,23 +311,73 @@ export default function LeasesPage() {
                     {error}
                   </div>
                 )}
+                {formLoading ? (
+                  <div style={{ textAlign: 'center', padding: '16px', color: '#6b7280' }}>Loading…</div>
+                ) : (
+                  <>
                 <div className="form-group">
-                  <label>Unit ID</label>
-                  <input
-                    required
-                    placeholder="Unit UUID"
-                    value={unitId}
-                    onChange={(e) => setUnitId(e.target.value)}
-                  />
+                  <label>Unit</label>
+                  <select required value={unitId} onChange={(e) => {
+                    const opt = unitOptions.find((u) => u.id === e.target.value);
+                    setUnitId(e.target.value);
+                    if (opt) { setRentAmount(String(opt.rentAmount)); setDepositAmount(String(opt.depositAmount)); }
+                  }}>
+                    <option value="">— Select a unit —</option>
+                    {unitOptions.map((u) => (
+                      <option key={u.id} value={u.id}>{u.label}</option>
+                    ))}
+                  </select>
                 </div>
                 <div className="form-group">
-                  <label>Tenant IDs (comma-separated)</label>
-                  <input
-                    required
-                    placeholder="UUID1, UUID2"
-                    value={tenantIdsInput}
-                    onChange={(e) => setTenantIdsInput(e.target.value)}
-                  />
+                  {tenantOptions.length === 0 ? (
+                    <p style={{ fontSize: '13px', color: '#6b7280', margin: 0 }}>No tenants found. Add tenants first.</p>
+                  ) : (
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                      {selectedTenantIds.map((selectedId, index) => {
+                        const takenIds = new Set(selectedTenantIds.filter((_, i) => i !== index));
+                        const available = tenantOptions.filter((t) => !takenIds.has(t.id));
+                        return (
+                          <div key={index} style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                            <div style={{ flex: 1 }}>
+                              <label style={{ fontSize: '13px', color: '#6b7280', display: 'block', marginBottom: '4px' }}>
+                                {index === 0 ? 'Primary Tenant' : `Additional Tenant ${index + 1}`}
+                              </label>
+                              <select
+                                required={index === 0}
+                                value={selectedId}
+                                onChange={(e) => setTenantAtIndex(index, e.target.value)}
+                              >
+                                <option value="">— Select a tenant —</option>
+                                {available.map((t) => (
+                                  <option key={t.id} value={t.id}>{t.name} ({t.email})</option>
+                                ))}
+                              </select>
+                            </div>
+                            {index > 0 && (
+                              <button
+                                type="button"
+                                className="btn btn-sm btn-secondary"
+                                style={{ color: 'var(--color-danger)', marginTop: '20px', flexShrink: 0 }}
+                                onClick={() => removeTenantSlot(index)}
+                              >
+                                Remove
+                              </button>
+                            )}
+                          </div>
+                        );
+                      })}
+                      {selectedTenantIds.length < tenantOptions.length && (
+                        <button
+                          type="button"
+                          className="btn btn-sm btn-secondary"
+                          style={{ alignSelf: 'flex-start' }}
+                          onClick={addTenantSlot}
+                        >
+                          + Add Another Person
+                        </button>
+                      )}
+                    </div>
+                  )}
                 </div>
                 <div className="form-row">
                   <div className="form-group">
@@ -345,6 +454,8 @@ export default function LeasesPage() {
                     onChange={(e) => setNotes(e.target.value)}
                   />
                 </div>
+                  </>
+                )}
               </div>
               <div className="modal-footer">
                 <button type="button" className="btn btn-secondary" onClick={() => { setShowForm(false); resetForm(); }}>

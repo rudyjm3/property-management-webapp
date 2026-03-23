@@ -66,6 +66,34 @@ router.post('/:leaseId/renew', validate(renewLeaseSchema), async (req: Request, 
   }
 });
 
+// POST /api/v1/organizations/:orgId/leases/:leaseId/participants
+router.post('/:leaseId/participants', async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const lease = await leaseService.addParticipant(
+      req.params.orgId as string,
+      req.params.leaseId as string,
+      req.body.tenantId
+    );
+    res.status(201).json({ data: lease });
+  } catch (err) {
+    next(err);
+  }
+});
+
+// DELETE /api/v1/organizations/:orgId/leases/:leaseId/participants/:participantId
+router.delete('/:leaseId/participants/:participantId', async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const lease = await leaseService.removeParticipant(
+      req.params.orgId as string,
+      req.params.leaseId as string,
+      req.params.participantId as string
+    );
+    res.json({ data: lease });
+  } catch (err) {
+    next(err);
+  }
+});
+
 // DELETE /api/v1/organizations/:orgId/leases/:leaseId
 router.delete('/:leaseId', async (req: Request, res: Response, next: NextFunction) => {
   try {

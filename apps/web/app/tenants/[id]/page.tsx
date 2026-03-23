@@ -4,6 +4,8 @@ import { useEffect, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { api } from '@/lib/api';
+import { formatPhone } from '@/lib/phone';
+import PhoneInput from '@/components/PhoneInput';
 
 interface TenantDetail {
   id: string;
@@ -142,7 +144,7 @@ export default function TenantDetailPage() {
               </div>
               <div className="detail-item">
                 <label>Phone</label>
-                <span>{tenant.phone || '--'}</span>
+                <span>{formatPhone(tenant.phone)}</span>
               </div>
               <div className="detail-item">
                 <label>Emergency Contact</label>
@@ -150,7 +152,7 @@ export default function TenantDetailPage() {
               </div>
               <div className="detail-item">
                 <label>Emergency Phone</label>
-                <span>{tenant.emergencyContactPhone || '--'}</span>
+                <span>{formatPhone(tenant.emergencyContactPhone)}</span>
               </div>
             </div>
           </div>
@@ -323,7 +325,7 @@ export default function TenantDetailPage() {
                 </div>
                 <div className="form-group">
                   <label>Phone</label>
-                  <input name="phone" defaultValue={tenant.phone || ''} />
+                  <PhoneInput name="phone" defaultValue={tenant.phone} />
                 </div>
                 <div className="form-row">
                   <div className="form-group">
@@ -332,7 +334,7 @@ export default function TenantDetailPage() {
                   </div>
                   <div className="form-group">
                     <label>Emergency Contact Phone</label>
-                    <input name="emergencyContactPhone" defaultValue={tenant.emergencyContactPhone || ''} />
+                    <PhoneInput name="emergencyContactPhone" defaultValue={tenant.emergencyContactPhone} />
                   </div>
                 </div>
               </div>

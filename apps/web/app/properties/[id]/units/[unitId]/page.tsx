@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react';
 import { useParams } from 'next/navigation';
 import Link from 'next/link';
 import { api } from '@/lib/api';
+import { formatPhone } from '@/lib/phone';
 
 interface UnitDetail {
   id: string;
@@ -148,7 +149,7 @@ export default function UnitDetailPage() {
                 </div>
                 <div className="detail-item">
                   <label>Phone</label>
-                  <span>{primaryTenant.phone || '--'}</span>
+                  <span>{formatPhone(primaryTenant.phone)}</span>
                 </div>
                 <div className="detail-item">
                   <label>Lease Status</label>

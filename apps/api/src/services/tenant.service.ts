@@ -1,5 +1,6 @@
 import { prisma } from '@propflow/db';
 import { AppError } from '../middleware/error-handler';
+import { CURRENT_LEASE_STATUSES } from '../constants';
 
 export async function listTenants(organizationId: string) {
   return prisma.tenant.findMany({
@@ -7,7 +8,7 @@ export async function listTenants(organizationId: string) {
     include: {
       leaseParticipants: {
         where: {
-          lease: { status: 'active' },
+          lease: { status: { in: [...CURRENT_LEASE_STATUSES] } },
         },
         include: {
           lease: {
@@ -140,7 +141,7 @@ export async function deleteTenant(organizationId: string, tenantId: string) {
     where: { id: tenantId, organizationId, deletedAt: null },
     include: {
       leaseParticipants: {
-        where: { lease: { status: 'active' } },
+        where: { lease: { status: { in: [...CURRENT_LEASE_STATUSES] } } },
         take: 1,
       },
     },

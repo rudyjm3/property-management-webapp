@@ -82,6 +82,15 @@ export const api = {
       apiFetch<void>(`/api/v1/organizations/${ORG_ID}/leases/${id}`, {
         method: 'DELETE',
       }),
+    addParticipant: (leaseId: string, tenantId: string) =>
+      apiFetch<any>(`/api/v1/organizations/${ORG_ID}/leases/${leaseId}/participants`, {
+        method: 'POST',
+        body: JSON.stringify({ tenantId }),
+      }),
+    removeParticipant: (leaseId: string, participantId: string) =>
+      apiFetch<any>(`/api/v1/organizations/${ORG_ID}/leases/${leaseId}/participants/${participantId}`, {
+        method: 'DELETE',
+      }),
   },
   units: {
     list: (propertyId: string) =>

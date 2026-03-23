@@ -1,5 +1,6 @@
 import { prisma } from '@propflow/db';
 import { AppError } from '../middleware/error-handler';
+import { CURRENT_LEASE_STATUSES } from '../constants';
 
 export async function listUnits(organizationId: string, propertyId: string) {
   // Verify property belongs to organization
@@ -15,7 +16,7 @@ export async function listUnits(organizationId: string, propertyId: string) {
     where: { propertyId },
     include: {
       leases: {
-        where: { status: 'active' },
+        where: { status: { in: [...CURRENT_LEASE_STATUSES] } },
         include: {
           participants: {
             where: { isPrimary: true },
@@ -150,7 +151,7 @@ export async function deleteUnit(
   const existing = await prisma.unit.findFirst({
     where: { id: unitId, propertyId },
     include: {
-      leases: { where: { status: 'active' }, take: 1 },
+      leases: { where: { status: { in: [...CURRENT_LEASE_STATUSES] } }, take: 1 },
     },
   });
 

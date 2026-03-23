@@ -74,7 +74,14 @@ export default function LeaseDetailPage() {
   const [loading, setLoading] = useState(true);
   const [showEditModal, setShowEditModal] = useState(false);
   const [showRenewModal, setShowRenewModal] = useState(false);
+  const [showAddTenantModal, setShowAddTenantModal] = useState(false);
   const [error, setError] = useState('');
+
+  // Add tenant state
+  const [allTenants, setAllTenants] = useState<{ id: string; name: string; email: string }[]>([]);
+  const [addTenantId, setAddTenantId] = useState('');
+  const [addTenantLoading, setAddTenantLoading] = useState(false);
+  const [addTenantError, setAddTenantError] = useState('');
 
   // Edit form state
   const [editStatus, setEditStatus] = useState('');
@@ -163,6 +170,44 @@ export default function LeaseDetailPage() {
       router.push(`/leases/${newLease.id}`);
     } catch (err: any) {
       setError(err.message || 'Failed to renew lease');
+    }
+  }
+
+  async function openAddTenantModal() {
+    setAddTenantError('');
+    setAddTenantId('');
+    setAddTenantLoading(true);
+    setShowAddTenantModal(true);
+    try {
+      const tenants = await api.tenants.list();
+      const onLease = new Set(lease!.participants.map((p) => p.tenant.id));
+      setAllTenants(tenants.filter((t: any) => !onLease.has(t.id)));
+    } catch {
+      setAddTenantError('Failed to load tenants.');
+    } finally {
+      setAddTenantLoading(false);
+    }
+  }
+
+  async function handleAddTenant(e: React.FormEvent) {
+    e.preventDefault();
+    setAddTenantError('');
+    try {
+      const updated = await api.leases.addParticipant(leaseId, addTenantId);
+      setLease(updated);
+      setShowAddTenantModal(false);
+    } catch (err: any) {
+      setAddTenantError(err.message || 'Failed to add tenant');
+    }
+  }
+
+  async function handleRemoveTenant(participantId: string, tenantName: string) {
+    if (!confirm(`Remove ${tenantName} from this lease?`)) return;
+    try {
+      const updated = await api.leases.removeParticipant(leaseId, participantId);
+      setLease(updated);
+    } catch (err: any) {
+      alert(err.message || 'Failed to remove tenant');
     }
   }
 
@@ -301,14 +346,19 @@ export default function LeaseDetailPage() {
               </div>
             </div>
 
-            <h4 style={{ fontSize: '13px', fontWeight: 600, color: '#6b7280', marginBottom: '12px', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
-              Tenants ({lease.participants.length})
-            </h4>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '12px' }}>
+              <h4 style={{ fontSize: '13px', fontWeight: 600, color: '#6b7280', textTransform: 'uppercase', letterSpacing: '0.05em', margin: 0 }}>
+                Tenants ({lease.participants.length})
+              </h4>
+              <button className="btn btn-sm btn-secondary" onClick={openAddTenantModal}>
+                + Add Tenant
+              </button>
+            </div>
             {lease.participants.length === 0 ? (
               <p style={{ fontSize: '14px', color: '#6b7280' }}>No tenants on this lease</p>
             ) : (
               <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                {lease.participants.map((p) => (
+                {[...lease.participants].sort((a, b) => (b.isPrimary ? 1 : 0) - (a.isPrimary ? 1 : 0)).map((p) => (
                   <div
                     key={p.id}
                     style={{
@@ -330,9 +380,20 @@ export default function LeaseDetailPage() {
                       </Link>
                       <div style={{ fontSize: '12px', color: '#6b7280' }}>{p.tenant.email}</div>
                     </div>
-                    {p.isPrimary && (
-                      <span className="badge badge-occupied" style={{ fontSize: '11px' }}>Primary</span>
-                    )}
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                      {p.isPrimary && (
+                        <span className="badge badge-occupied" style={{ fontSize: '11px' }}>Primary</span>
+                      )}
+                      {lease.participants.length > 1 && (
+                        <button
+                          className="btn btn-sm btn-secondary"
+                          style={{ color: 'var(--color-danger)', fontSize: '12px', padding: '2px 8px' }}
+                          onClick={() => handleRemoveTenant(p.id, p.tenant.name)}
+                        >
+                          Remove
+                        </button>
+                      )}
+                    </div>
                   </div>
                 ))}
               </div>
@@ -461,6 +522,46 @@ export default function LeaseDetailPage() {
               <div className="modal-footer">
                 <button type="button" className="btn btn-secondary" onClick={() => setShowEditModal(false)}>Cancel</button>
                 <button type="submit" className="btn btn-primary">Save Changes</button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Add Tenant Modal */}
+      {showAddTenantModal && (
+        <div className="modal-overlay" onClick={() => setShowAddTenantModal(false)}>
+          <div className="modal" onClick={(e) => e.stopPropagation()} style={{ maxWidth: '420px' }}>
+            <div className="modal-header">
+              <h2>Add Tenant</h2>
+              <button className="btn btn-sm btn-secondary" onClick={() => setShowAddTenantModal(false)}>X</button>
+            </div>
+            <form onSubmit={handleAddTenant}>
+              <div className="modal-body">
+                {addTenantError && (
+                  <div style={{ color: 'var(--color-danger)', marginBottom: '12px', fontSize: '14px' }}>{addTenantError}</div>
+                )}
+                {addTenantLoading ? (
+                  <div style={{ textAlign: 'center', padding: '16px', color: '#6b7280' }}>Loading…</div>
+                ) : allTenants.length === 0 ? (
+                  <p style={{ fontSize: '14px', color: '#6b7280' }}>No other tenants available to add.</p>
+                ) : (
+                  <div className="form-group">
+                    <label>Tenant</label>
+                    <select required value={addTenantId} onChange={(e) => setAddTenantId(e.target.value)}>
+                      <option value="">— Select a tenant —</option>
+                      {allTenants.map((t) => (
+                        <option key={t.id} value={t.id}>{t.name} ({t.email})</option>
+                      ))}
+                    </select>
+                  </div>
+                )}
+              </div>
+              <div className="modal-footer">
+                <button type="button" className="btn btn-secondary" onClick={() => setShowAddTenantModal(false)}>Cancel</button>
+                {!addTenantLoading && allTenants.length > 0 && (
+                  <button type="submit" className="btn btn-primary">Add to Lease</button>
+                )}
               </div>
             </form>
           </div>

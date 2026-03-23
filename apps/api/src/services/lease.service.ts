@@ -1,5 +1,6 @@
 import { prisma } from '@propflow/db';
 import { AppError } from '../middleware/error-handler';
+import { CURRENT_LEASE_STATUSES } from '../constants';
 
 // ─── Shared include shape used across list/get ────────────────────────────────
 
@@ -92,13 +93,13 @@ export async function createLease(organizationId: string, data: CreateLeaseData)
     throw new AppError(400, 'TENANT_NOT_FOUND', 'One or more tenants were not found in your organization.');
   }
 
-  // Check for an existing active lease on the unit
+  // Check for any existing current lease on the unit (active, month-to-month, or notice given)
   const existingActive = await prisma.lease.findFirst({
-    where: { unitId, status: 'active', deletedAt: null },
+    where: { unitId, status: { in: [...CURRENT_LEASE_STATUSES] }, deletedAt: null },
   });
 
   if (existingActive) {
-    throw new AppError(409, 'UNIT_ALREADY_LEASED', 'This unit already has an active lease.');
+    throw new AppError(409, 'UNIT_ALREADY_LEASED', 'This unit already has a current lease.');
   }
 
   // Create lease + participants in a transaction, then update unit status
@@ -163,6 +164,27 @@ export async function updateLease(
   const updateData: Record<string, unknown> = { ...data };
   if (data.endDate) updateData.endDate = new Date(data.endDate);
 
+  // If the update would set this lease back to a current status, ensure no other
+  // current lease already exists on the same unit (guards against reactivating
+  // a lease after a renewal has already created a replacement).
+  if (data.status && CURRENT_LEASE_STATUSES.includes(data.status as typeof CURRENT_LEASE_STATUSES[number])) {
+    const conflicting = await prisma.lease.findFirst({
+      where: {
+        unitId: existing.unitId,
+        id: { not: leaseId },
+        status: { in: [...CURRENT_LEASE_STATUSES] },
+        deletedAt: null,
+      },
+    });
+    if (conflicting) {
+      throw new AppError(
+        409,
+        'UNIT_ALREADY_LEASED',
+        'This unit already has a current lease. End it before reactivating this one.'
+      );
+    }
+  }
+
   // If status is changing to expired/notice_given, update unit status
   const lease = await prisma.$transaction(async (tx) => {
     const updated = await tx.lease.update({
@@ -198,7 +220,7 @@ export async function renewLease(
 ) {
   const existing = await prisma.lease.findFirst({
     where: { id: leaseId, deletedAt: null, unit: { property: { organizationId } } },
-    include: { participants: true },
+    include: { participants: { orderBy: { isPrimary: 'desc' } } },
   });
 
   if (!existing) {
@@ -209,7 +231,7 @@ export async function renewLease(
     throw new AppError(400, 'LEASE_NOT_RENEWABLE', 'Only active or notice-given leases can be renewed.');
   }
 
-  const tenantIds = existing.participants.map((p) => p.tenantId);
+  const participants = existing.participants;
 
   const newLease = await prisma.$transaction(async (tx) => {
     // Mark old lease as expired
@@ -227,9 +249,9 @@ export async function renewLease(
         lateFeeGraceDays: existing.lateFeeGraceDays,
         status: 'active',
         participants: {
-          create: tenantIds.map((tenantId, index) => ({
-            tenant: { connect: { id: tenantId } },
-            isPrimary: index === 0,
+          create: participants.map((p) => ({
+            tenant: { connect: { id: p.tenantId } },
+            isPrimary: p.isPrimary,
           })),
         },
       },
@@ -245,6 +267,89 @@ export async function renewLease(
   return newLease;
 }
 
+// ─── Add Participant ──────────────────────────────────────────────────────────
+
+export async function addParticipant(
+  organizationId: string,
+  leaseId: string,
+  tenantId: string
+) {
+  const lease = await prisma.lease.findFirst({
+    where: { id: leaseId, deletedAt: null, unit: { property: { organizationId } } },
+    include: { participants: true },
+  });
+
+  if (!lease) {
+    throw new AppError(404, 'LEASE_NOT_FOUND', 'No lease found with that ID in your organization.');
+  }
+
+  const tenant = await prisma.tenant.findFirst({
+    where: { id: tenantId, organizationId, deletedAt: null },
+  });
+
+  if (!tenant) {
+    throw new AppError(404, 'TENANT_NOT_FOUND', 'Tenant not found in your organization.');
+  }
+
+  const alreadyOn = lease.participants.some((p) => p.tenantId === tenantId);
+  if (alreadyOn) {
+    throw new AppError(409, 'TENANT_ALREADY_ON_LEASE', 'This tenant is already on the lease.');
+  }
+
+  await prisma.leaseParticipant.create({
+    data: { leaseId, tenantId, isPrimary: false },
+  });
+
+  return prisma.lease.findFirst({
+    where: { id: leaseId },
+    include: leaseInclude,
+  });
+}
+
+// ─── Remove Participant ───────────────────────────────────────────────────────
+
+export async function removeParticipant(
+  organizationId: string,
+  leaseId: string,
+  participantId: string
+) {
+  const lease = await prisma.lease.findFirst({
+    where: { id: leaseId, deletedAt: null, unit: { property: { organizationId } } },
+    include: { participants: true },
+  });
+
+  if (!lease) {
+    throw new AppError(404, 'LEASE_NOT_FOUND', 'No lease found with that ID in your organization.');
+  }
+
+  const participant = lease.participants.find((p) => p.id === participantId);
+  if (!participant) {
+    throw new AppError(404, 'PARTICIPANT_NOT_FOUND', 'Participant not found on this lease.');
+  }
+
+  if (lease.participants.length === 1) {
+    throw new AppError(400, 'LAST_PARTICIPANT', 'Cannot remove the only tenant from a lease.');
+  }
+
+  await prisma.leaseParticipant.delete({ where: { id: participantId } });
+
+  // If we removed the primary, promote the first remaining participant
+  if (participant.isPrimary) {
+    const remaining = lease.participants.find((p) => p.id !== participantId);
+    if (remaining) {
+      await prisma.leaseParticipant.update({
+        where: { id: remaining.id },
+        data: { isPrimary: true },
+      });
+    }
+  }
+
+  return prisma.lease.findFirst({
+    where: { id: leaseId },
+    include: leaseInclude,
+  });
+}
+
 // ─── Delete (soft) ────────────────────────────────────────────────────────────
 
 export async function deleteLease(organizationId: string, leaseId: string) {
@@ -256,11 +361,11 @@ export async function deleteLease(organizationId: string, leaseId: string) {
     throw new AppError(404, 'LEASE_NOT_FOUND', 'No lease found with that ID in your organization.');
   }
 
-  if (existing.status === 'active') {
+  if (CURRENT_LEASE_STATUSES.includes(existing.status as typeof CURRENT_LEASE_STATUSES[number])) {
     throw new AppError(
       400,
       'LEASE_IS_ACTIVE',
-      'Cannot delete an active lease. Change the status to expired first.'
+      'Cannot delete a current lease. Change the status to expired first.'
     );
   }
 

@@ -10,7 +10,7 @@ export const metadata: Metadata = {
 export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
   return (
     <html lang="en">
-      <body>
+      <body suppressHydrationWarning>
         <div className="app-layout">
           <Sidebar />
           <main className="main-content">{children}</main>
