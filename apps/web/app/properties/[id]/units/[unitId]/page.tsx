@@ -74,6 +74,8 @@ export default function UnitDetailPage() {
 
   const activeLease = unit.leases.find((l) => l.status === 'active');
   const primaryTenant = activeLease?.participants.find((p) => p.isPrimary)?.tenant;
+  const hasUnitAddress = !!(unit.address || unit.city || unit.state || unit.zip);
+  const resolvedAddress = `${unit.address ?? unit.property.address}, ${unit.city ?? unit.property.city}, ${unit.state ?? unit.property.state} ${unit.zip ?? unit.property.zip}`;
 
   return (
     <>
@@ -88,12 +90,8 @@ export default function UnitDetailPage() {
       <div className="page-header">
         <div>
           <h1 className="page-title">Unit {unit.unitNumber}</h1>
-          <p className="page-subtitle">
-            {unit.address
-              ? `${unit.address}, ${unit.city ?? unit.property.city}, ${unit.state ?? unit.property.state} ${unit.zip ?? unit.property.zip}`
-              : `${unit.property.address}, ${unit.property.city}, ${unit.property.state} ${unit.property.zip}`}
-          </p>
-          {unit.address && (
+          <p className="page-subtitle">{resolvedAddress}</p>
+          {hasUnitAddress && (
             <p style={{ fontSize: '12px', color: 'var(--color-text-muted)', marginTop: '2px' }}>
               Property: {unit.property.address}, {unit.property.city}, {unit.property.state} {unit.property.zip}
             </p>
@@ -113,10 +111,8 @@ export default function UnitDetailPage() {
               <div className="detail-item" style={{ gridColumn: '1 / -1' }}>
                 <label>Address</label>
                 <span>
-                  {unit.address
-                    ? `${unit.address}, ${unit.city ?? unit.property.city}, ${unit.state ?? unit.property.state} ${unit.zip ?? unit.property.zip}`
-                    : `${unit.property.address}, ${unit.property.city}, ${unit.property.state} ${unit.property.zip}`}
-                  {unit.address && (
+                  {resolvedAddress}
+                  {hasUnitAddress && (
                     <span style={{ marginLeft: '8px', fontSize: '11px', color: 'var(--color-text-muted)', fontStyle: 'italic' }}>
                       (unit-specific)
                     </span>
