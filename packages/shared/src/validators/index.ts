@@ -79,6 +79,22 @@ export const createLeaseSchema = z.object({
   notes: z.string().max(2000).nullable().optional(),
 });
 
+export const updateLeaseSchema = z.object({
+  status: z.enum(LEASE_STATUSES).optional(),
+  rentAmount: z.number().positive().optional(),
+  depositAmount: z.number().min(0).optional(),
+  endDate: z.string().date().optional(),
+  lateFeeAmount: z.number().min(0).optional(),
+  lateFeeGraceDays: z.number().int().min(0).optional(),
+  notes: z.string().max(2000).nullable().optional(),
+});
+
+export const renewLeaseSchema = z.object({
+  startDate: z.string().date(),
+  endDate: z.string().date(),
+  rentAmount: z.number().positive(),
+});
+
 // ─── Payment ─────────────────────────────────────────────────────────────────
 
 export const createPaymentSchema = z.object({
