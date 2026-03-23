@@ -2,6 +2,7 @@ import { Router } from 'express';
 import propertyRoutes from './properties';
 import tenantRoutes from './tenants';
 import leaseRoutes from './leases';
+import paymentRoutes from './payments';
 
 const router = Router();
 
@@ -9,5 +10,6 @@ const router = Router();
 router.use('/organizations/:orgId/properties', propertyRoutes);
 router.use('/organizations/:orgId/tenants', tenantRoutes);
 router.use('/organizations/:orgId/leases', leaseRoutes);
+router.use('/organizations/:orgId/payments', paymentRoutes);
 
 export default router;

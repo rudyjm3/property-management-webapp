@@ -96,6 +96,35 @@ export const api = {
         method: 'PATCH',
       }),
   },
+  payments: {
+    list: (params?: { leaseId?: string; tenantId?: string; status?: string; type?: string; limit?: number }) => {
+      const query = new URLSearchParams();
+      if (params?.leaseId) query.set('leaseId', params.leaseId);
+      if (params?.tenantId) query.set('tenantId', params.tenantId);
+      if (params?.status) query.set('status', params.status);
+      if (params?.type) query.set('type', params.type);
+      if (params?.limit) query.set('limit', String(params.limit));
+      const qs = query.toString();
+      return apiFetch<{ data: any[]; nextCursor: string | null }>(
+        `/api/v1/organizations/${ORG_ID}/payments${qs ? `?${qs}` : ''}`
+      );
+    },
+    stats: () => apiFetch<any>(`/api/v1/organizations/${ORG_ID}/payments/stats`),
+    create: (data: any) =>
+      apiFetch<any>(`/api/v1/organizations/${ORG_ID}/payments`, {
+        method: 'POST',
+        body: JSON.stringify(data),
+      }),
+    update: (id: string, data: any) =>
+      apiFetch<any>(`/api/v1/organizations/${ORG_ID}/payments/${id}`, {
+        method: 'PATCH',
+        body: JSON.stringify(data),
+      }),
+    delete: (id: string) =>
+      apiFetch<void>(`/api/v1/organizations/${ORG_ID}/payments/${id}`, {
+        method: 'DELETE',
+      }),
+  },
   units: {
     list: (propertyId: string) =>
       apiFetch<any[]>(`/api/v1/organizations/${ORG_ID}/properties/${propertyId}/units`),
