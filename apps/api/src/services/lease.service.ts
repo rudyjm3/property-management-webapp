@@ -350,6 +350,45 @@ export async function removeParticipant(
   });
 }
 
+// ─── Set Primary Participant ──────────────────────────────────────────────────
+
+export async function setPrimaryParticipant(
+  organizationId: string,
+  leaseId: string,
+  participantId: string
+) {
+  const lease = await prisma.lease.findFirst({
+    where: { id: leaseId, deletedAt: null, unit: { property: { organizationId } } },
+    include: { participants: true },
+  });
+
+  if (!lease) {
+    throw new AppError(404, 'LEASE_NOT_FOUND', 'No lease found with that ID in your organization.');
+  }
+
+  const participant = lease.participants.find((p) => p.id === participantId);
+  if (!participant) {
+    throw new AppError(404, 'PARTICIPANT_NOT_FOUND', 'Participant not found on this lease.');
+  }
+
+  if (participant.isPrimary) {
+    return prisma.lease.findFirst({ where: { id: leaseId }, include: leaseInclude });
+  }
+
+  await prisma.$transaction([
+    prisma.leaseParticipant.updateMany({
+      where: { leaseId },
+      data: { isPrimary: false },
+    }),
+    prisma.leaseParticipant.update({
+      where: { id: participantId },
+      data: { isPrimary: true },
+    }),
+  ]);
+
+  return prisma.lease.findFirst({ where: { id: leaseId }, include: leaseInclude });
+}
+
 // ─── Delete (soft) ────────────────────────────────────────────────────────────
 
 export async function deleteLease(organizationId: string, leaseId: string) {

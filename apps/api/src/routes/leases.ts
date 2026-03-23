@@ -80,6 +80,20 @@ router.post('/:leaseId/participants', async (req: Request, res: Response, next: 
   }
 });
 
+// PATCH /api/v1/organizations/:orgId/leases/:leaseId/participants/:participantId
+router.patch('/:leaseId/participants/:participantId', async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const lease = await leaseService.setPrimaryParticipant(
+      req.params.orgId as string,
+      req.params.leaseId as string,
+      req.params.participantId as string
+    );
+    res.json({ data: lease });
+  } catch (err) {
+    next(err);
+  }
+});
+
 // DELETE /api/v1/organizations/:orgId/leases/:leaseId/participants/:participantId
 router.delete('/:leaseId/participants/:participantId', async (req: Request, res: Response, next: NextFunction) => {
   try {

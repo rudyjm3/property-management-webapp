@@ -60,6 +60,7 @@ interface TenantOption {
   id: string;
   name: string;
   email: string;
+  activeLease: { unitNumber: string; propertyName: string; status: string } | null;
 }
 
 export default function LeasesPage() {
@@ -118,7 +119,19 @@ export default function LeasesPage() {
         ))
       );
       setUnitOptions(unitLists.flat());
-      setTenantOptions(allTenants.map((t: any) => ({ id: t.id, name: t.name, email: t.email })));
+      setTenantOptions(allTenants.map((t: any) => {
+        const lp = t.leaseParticipants?.[0];
+        return {
+          id: t.id,
+          name: t.name,
+          email: t.email,
+          activeLease: lp ? {
+            unitNumber: lp.lease.unit.unitNumber,
+            propertyName: lp.lease.unit.property.name,
+            status: lp.lease.status,
+          } : null,
+        };
+      }));
     } catch (err) {
       console.error('Failed to load form data:', err);
     } finally {
@@ -134,6 +147,20 @@ export default function LeasesPage() {
     if (filledIds.length === 0) {
       setError('Select at least one tenant.');
       return;
+    }
+
+    const conflicts = filledIds
+      .map((id) => tenantOptions.find((t) => t.id === id))
+      .filter((t): t is TenantOption => !!t?.activeLease);
+
+    if (conflicts.length > 0) {
+      const lines = conflicts.map(
+        (t) => `• ${t.name} — Unit ${t.activeLease!.unitNumber} at ${t.activeLease!.propertyName} (${t.activeLease!.status.replace(/_/g, ' ')})`
+      );
+      const confirmed = window.confirm(
+        `The following tenant(s) already have an active lease:\n\n${lines.join('\n')}\n\nCreate this lease anyway?`
+      );
+      if (!confirmed) return;
     }
 
     try {
@@ -349,7 +376,11 @@ export default function LeasesPage() {
                               >
                                 <option value="">— Select a tenant —</option>
                                 {available.map((t) => (
-                                  <option key={t.id} value={t.id}>{t.name} ({t.email})</option>
+                                  <option key={t.id} value={t.id}>
+                                    {t.activeLease
+                                      ? `⚠ ${t.name} (${t.email}) — Unit ${t.activeLease.unitNumber}, ${t.activeLease.propertyName}`
+                                      : `${t.name} (${t.email})`}
+                                  </option>
                                 ))}
                               </select>
                             </div>

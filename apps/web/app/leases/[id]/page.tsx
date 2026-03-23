@@ -39,6 +39,13 @@ interface LeaseDetail {
   }>;
 }
 
+interface TenantListItem {
+  id: string;
+  name: string;
+  email: string;
+  activeLease: { unitNumber: string; propertyName: string; status: string } | null;
+}
+
 function daysUntilExpiry(endDate: string): number {
   const end = new Date(endDate);
   const now = new Date();
@@ -78,7 +85,7 @@ export default function LeaseDetailPage() {
   const [error, setError] = useState('');
 
   // Add tenant state
-  const [allTenants, setAllTenants] = useState<{ id: string; name: string; email: string }[]>([]);
+  const [allTenants, setAllTenants] = useState<TenantListItem[]>([]);
   const [addTenantId, setAddTenantId] = useState('');
   const [addTenantLoading, setAddTenantLoading] = useState(false);
   const [addTenantError, setAddTenantError] = useState('');
@@ -181,7 +188,23 @@ export default function LeaseDetailPage() {
     try {
       const tenants = await api.tenants.list();
       const onLease = new Set(lease!.participants.map((p) => p.tenant.id));
-      setAllTenants(tenants.filter((t: any) => !onLease.has(t.id)));
+      setAllTenants(
+        tenants
+          .filter((t: any) => !onLease.has(t.id))
+          .map((t: any) => {
+            const lp = t.leaseParticipants?.[0];
+            return {
+              id: t.id,
+              name: t.name,
+              email: t.email,
+              activeLease: lp ? {
+                unitNumber: lp.lease.unit.unitNumber,
+                propertyName: lp.lease.unit.property.name,
+                status: lp.lease.status,
+              } : null,
+            };
+          })
+      );
     } catch {
       setAddTenantError('Failed to load tenants.');
     } finally {
@@ -192,12 +215,31 @@ export default function LeaseDetailPage() {
   async function handleAddTenant(e: React.FormEvent) {
     e.preventDefault();
     setAddTenantError('');
+
+    const tenant = allTenants.find((t) => t.id === addTenantId);
+    if (tenant?.activeLease) {
+      const { unitNumber, propertyName, status } = tenant.activeLease;
+      const confirmed = window.confirm(
+        `${tenant.name} already has an active lease on Unit ${unitNumber} at ${propertyName} (${status.replace(/_/g, ' ')}).\n\nAdd them to this lease anyway?`
+      );
+      if (!confirmed) return;
+    }
+
     try {
       const updated = await api.leases.addParticipant(leaseId, addTenantId);
       setLease(updated);
       setShowAddTenantModal(false);
     } catch (err: any) {
       setAddTenantError(err.message || 'Failed to add tenant');
+    }
+  }
+
+  async function handleSetPrimary(participantId: string) {
+    try {
+      const updated = await api.leases.setPrimaryParticipant(leaseId, participantId);
+      setLease(updated);
+    } catch (err: any) {
+      alert(err.message || 'Failed to update primary tenant');
     }
   }
 
@@ -384,6 +426,15 @@ export default function LeaseDetailPage() {
                       {p.isPrimary && (
                         <span className="badge badge-occupied" style={{ fontSize: '11px' }}>Primary</span>
                       )}
+                      {lease.participants.length > 1 && !p.isPrimary && (
+                        <button
+                          className="btn btn-sm btn-secondary"
+                          style={{ fontSize: '12px', padding: '2px 8px' }}
+                          onClick={() => handleSetPrimary(p.id)}
+                        >
+                          Make Primary
+                        </button>
+                      )}
                       {lease.participants.length > 1 && (
                         <button
                           className="btn btn-sm btn-secondary"
@@ -551,7 +602,11 @@ export default function LeaseDetailPage() {
                     <select required value={addTenantId} onChange={(e) => setAddTenantId(e.target.value)}>
                       <option value="">— Select a tenant —</option>
                       {allTenants.map((t) => (
-                        <option key={t.id} value={t.id}>{t.name} ({t.email})</option>
+                        <option key={t.id} value={t.id}>
+                          {t.activeLease
+                            ? `⚠ ${t.name} (${t.email}) — Unit ${t.activeLease.unitNumber}, ${t.activeLease.propertyName}`
+                            : `${t.name} (${t.email})`}
+                        </option>
                       ))}
                     </select>
                   </div>

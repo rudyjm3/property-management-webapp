@@ -91,6 +91,10 @@ export const api = {
       apiFetch<any>(`/api/v1/organizations/${ORG_ID}/leases/${leaseId}/participants/${participantId}`, {
         method: 'DELETE',
       }),
+    setPrimaryParticipant: (leaseId: string, participantId: string) =>
+      apiFetch<any>(`/api/v1/organizations/${ORG_ID}/leases/${leaseId}/participants/${participantId}`, {
+        method: 'PATCH',
+      }),
   },
   units: {
     list: (propertyId: string) =>

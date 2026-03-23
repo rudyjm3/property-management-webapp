@@ -16,6 +16,7 @@ interface Unit {
   status: string;
   leases: Array<{
     participants: Array<{
+      isPrimary: boolean;
       tenant: { id: string; name: string; email: string };
     }>;
   }>;
@@ -139,7 +140,8 @@ export default function PropertyDetailPage() {
       ) : (
         <div className="units-grid">
           {property.units.map((unit) => {
-            const tenant = unit.leases?.[0]?.participants?.[0]?.tenant;
+            const participants = unit.leases?.[0]?.participants;
+            const tenant = (participants?.find((p) => p.isPrimary) ?? participants?.[0])?.tenant;
             return (
               <Link
                 key={unit.id}

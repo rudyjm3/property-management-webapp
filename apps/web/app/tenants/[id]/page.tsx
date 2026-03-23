@@ -105,7 +105,11 @@ export default function TenantDetailPage() {
   if (loading) return <div className="loading">Loading tenant...</div>;
   if (!tenant) return <div className="loading">Tenant not found</div>;
 
-  const activeLease = tenant.leaseParticipants.find((lp) => lp.lease.status === 'active');
+  const CURRENT_LEASE_STATUSES = ['active', 'month_to_month', 'notice_given'];
+  const currentLeases = tenant.leaseParticipants.filter((lp) =>
+    CURRENT_LEASE_STATUSES.includes(lp.lease.status)
+  );
+  const activeLease = currentLeases[0] ?? null;
 
   return (
     <>
@@ -162,47 +166,61 @@ export default function TenantDetailPage() {
         <div className="card">
           <div className="card-body">
             <h3 style={{ marginBottom: '16px', fontSize: '16px', fontWeight: 600 }}>Current Lease</h3>
-            {activeLease ? (
-              <div className="detail-grid">
-                <div className="detail-item">
-                  <label>Property</label>
-                  <Link
-                    href={`/properties/${activeLease.lease.unit.property.id}`}
-                    style={{ color: 'var(--color-primary)', textDecoration: 'none' }}
-                  >
-                    {activeLease.lease.unit.property.name}
-                  </Link>
-                </div>
-                <div className="detail-item">
-                  <label>Unit</label>
-                  <Link
-                    href={`/properties/${activeLease.lease.unit.property.id}/units/${activeLease.lease.unit.id}`}
-                    style={{ color: 'var(--color-primary)', textDecoration: 'none' }}
-                  >
-                    Unit {activeLease.lease.unit.unitNumber}
-                  </Link>
-                </div>
-                <div className="detail-item">
-                  <label>Lease Start</label>
-                  <span>{new Date(activeLease.lease.startDate).toLocaleDateString()}</span>
-                </div>
-                <div className="detail-item">
-                  <label>Lease End</label>
-                  <span>{new Date(activeLease.lease.endDate).toLocaleDateString()}</span>
-                </div>
-                <div className="detail-item">
-                  <label>Monthly Rent</label>
-                  <span>${Number(activeLease.lease.rentAmount).toLocaleString()}</span>
-                </div>
-                <div className="detail-item">
-                  <label>Status</label>
-                  <span className="badge badge-occupied">{activeLease.lease.status}</span>
-                </div>
-              </div>
-            ) : (
+            {currentLeases.length === 0 ? (
               <div className="empty-state" style={{ padding: '24px' }}>
                 <p>No active lease</p>
               </div>
+            ) : (
+              <>
+                {currentLeases.length > 1 && (
+                  <div style={{ marginBottom: '12px', fontSize: '13px', color: '#ca8a04', fontWeight: 500 }}>
+                    This tenant is on {currentLeases.length} active leases.
+                  </div>
+                )}
+                {currentLeases.map((lp, i) => (
+                  <div
+                    key={lp.lease.id}
+                    style={i > 0 ? { marginTop: '16px', paddingTop: '16px', borderTop: '1px solid var(--color-border)' } : {}}
+                  >
+                    <div className="detail-grid">
+                      <div className="detail-item">
+                        <label>Property</label>
+                        <Link
+                          href={`/properties/${lp.lease.unit.property.id}`}
+                          style={{ color: 'var(--color-primary)', textDecoration: 'none' }}
+                        >
+                          {lp.lease.unit.property.name}
+                        </Link>
+                      </div>
+                      <div className="detail-item">
+                        <label>Unit</label>
+                        <Link
+                          href={`/properties/${lp.lease.unit.property.id}/units/${lp.lease.unit.id}`}
+                          style={{ color: 'var(--color-primary)', textDecoration: 'none' }}
+                        >
+                          Unit {lp.lease.unit.unitNumber}
+                        </Link>
+                      </div>
+                      <div className="detail-item">
+                        <label>Lease Start</label>
+                        <span>{new Date(lp.lease.startDate).toLocaleDateString()}</span>
+                      </div>
+                      <div className="detail-item">
+                        <label>Lease End</label>
+                        <span>{new Date(lp.lease.endDate).toLocaleDateString()}</span>
+                      </div>
+                      <div className="detail-item">
+                        <label>Monthly Rent</label>
+                        <span>${Number(lp.lease.rentAmount).toLocaleString()}</span>
+                      </div>
+                      <div className="detail-item">
+                        <label>Status</label>
+                        <span className="badge badge-occupied">{lp.lease.status.replace(/_/g, ' ')}</span>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </>
             )}
           </div>
         </div>
