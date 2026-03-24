@@ -43,7 +43,7 @@ export async function getProperty(organizationId: string, propertyId: string) {
 
 export async function createProperty(
   organizationId: string,
-  data: Record<string, any>
+  data: Record<string, unknown>
 ) {
   const { organizationId: _, ...rest } = data;
   return prisma.property.create({
@@ -58,7 +58,7 @@ export async function createProperty(
 export async function updateProperty(
   organizationId: string,
   propertyId: string,
-  data: Record<string, any>
+  data: Record<string, unknown>
 ) {
   const existing = await prisma.property.findFirst({
     where: { id: propertyId, organizationId },

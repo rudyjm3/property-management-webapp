@@ -10,9 +10,14 @@ import * as documentService from '../services/document.service';
 
 const router = Router({ mergeParams: true });
 
+/** Express Request extended with properties set by auth middleware. */
+interface AuthedRequest extends Request {
+  userId?: string;
+}
+
 /** Resolve the calling user's ID from auth middleware or the x-user-id header. */
-function resolveUserId(req: Request): string {
-  const userId = (req as any).userId ?? (req.headers['x-user-id'] as string | undefined);
+function resolveUserId(req: AuthedRequest): string {
+  const userId = req.userId ?? (req.headers['x-user-id'] as string | undefined);
   if (!userId) throw new AppError(401, 'UNAUTHORIZED', 'Missing user identity');
   return userId;
 }
@@ -22,7 +27,7 @@ function resolveUserId(req: Request): string {
 router.post(
   '/upload-url',
   validate(requestUploadSchema),
-  async (req: Request, res: Response, next: NextFunction) => {
+  async (req: AuthedRequest, res: Response, next: NextFunction) => {
     try {
       const userId = resolveUserId(req);
       const result = await documentService.requestUpload(
@@ -42,7 +47,7 @@ router.post(
 router.post(
   '/',
   validate(confirmUploadSchema),
-  async (req: Request, res: Response, next: NextFunction) => {
+  async (req: AuthedRequest, res: Response, next: NextFunction) => {
     try {
       const userId = resolveUserId(req);
       const document = await documentService.confirmUpload(
@@ -61,7 +66,7 @@ router.post(
 // List documents, optionally filtered by entityType + entityId query params
 router.get(
   '/',
-  async (req: Request, res: Response, next: NextFunction) => {
+  async (req: AuthedRequest, res: Response, next: NextFunction) => {
     try {
       const parsed = listDocumentsSchema.safeParse(req.query);
       if (!parsed.success) {
@@ -83,7 +88,7 @@ router.get(
 // Get a short-lived presigned download URL
 router.get(
   '/:docId/download-url',
-  async (req: Request, res: Response, next: NextFunction) => {
+  async (req: AuthedRequest, res: Response, next: NextFunction) => {
     try {
       const result = await documentService.getDownloadUrl(
         req.params.orgId as string,
@@ -99,7 +104,7 @@ router.get(
 // DELETE /api/v1/organizations/:orgId/documents/:docId
 router.delete(
   '/:docId',
-  async (req: Request, res: Response, next: NextFunction) => {
+  async (req: AuthedRequest, res: Response, next: NextFunction) => {
     try {
       await documentService.deleteDocument(
         req.params.orgId as string,

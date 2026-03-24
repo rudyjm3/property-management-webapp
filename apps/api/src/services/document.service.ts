@@ -1,4 +1,5 @@
 import { prisma } from '@propflow/db';
+import { DocumentCategory, DocumentEntityType } from '@prisma/client';
 import { AppError } from '../middleware/error-handler';
 import {
   buildS3Key,
@@ -67,14 +68,14 @@ export async function confirmUpload(
   const document = await prisma.document.create({
     data: {
       organizationId,
-      entityType: input.entityType as any,
+      entityType: input.entityType as DocumentEntityType,
       entityId: input.entityId,
       name: input.fileName,
       s3Key: input.s3Key,
       mimeType: input.mimeType,
       sizeBytes: input.sizeBytes,
       uploadedByUserId,
-      docCategory: (input.docCategory as any) ?? null,
+      docCategory: (input.docCategory as DocumentCategory) ?? null,
       label: input.label ?? null,
       visibleToTenant: input.visibleToTenant,
     },
@@ -93,7 +94,7 @@ export async function listDocuments(
   return prisma.document.findMany({
     where: {
       organizationId,
-      ...(query.entityType ? { entityType: query.entityType as any } : {}),
+      ...(query.entityType ? { entityType: query.entityType as DocumentEntityType } : {}),
       ...(query.entityId ? { entityId: query.entityId } : {}),
     },
     include: {

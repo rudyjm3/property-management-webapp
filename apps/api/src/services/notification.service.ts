@@ -73,7 +73,7 @@ export async function runRentReminderJob(organizationId?: string) {
   });
 
   const results = await Promise.allSettled(
-    payments.map(async (payment: any) => {
+    payments.map(async (payment) => {
       const org = payment.lease.unit.property.organization;
       const property = payment.lease.unit.property;
       const unit = payment.lease.unit;
@@ -152,7 +152,7 @@ export async function runOverdueRentJob(organizationId?: string) {
   });
 
   const results = await Promise.allSettled(
-    overduePayments.map(async (payment: any) => {
+    overduePayments.map(async (payment) => {
       const org = payment.lease.unit.property.organization;
       const property = payment.lease.unit.property;
       const unit = payment.lease.unit;
@@ -297,7 +297,7 @@ export async function runLeaseExpiryJob(organizationId?: string) {
 
   for (const { days, leases } of thresholdLeases) {
     const results = await Promise.allSettled(
-      leases.map(async (lease: any) => {
+      leases.map(async (lease) => {
         const org = lease.unit.property.organization;
         const property = lease.unit.property;
         const unit = lease.unit;
