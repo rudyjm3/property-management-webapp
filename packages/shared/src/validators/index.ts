@@ -106,8 +106,28 @@ export const createPaymentSchema = z.object({
   tenantId: z.string().uuid(),
   amount: z.number().positive(),
   type: z.enum(PAYMENT_TYPES),
+  status: z.enum(PAYMENT_STATUSES).default('completed'),
   dueDate: z.string().date(),
+  paidAt: z.string().datetime().nullable().optional(),
   notes: z.string().max(2000).nullable().optional(),
+});
+
+export const updatePaymentSchema = z.object({
+  amount: z.number().positive().optional(),
+  type: z.enum(PAYMENT_TYPES).optional(),
+  status: z.enum(PAYMENT_STATUSES).optional(),
+  paidAt: z.string().datetime().nullable().optional(),
+  dueDate: z.string().date().optional(),
+  notes: z.string().max(2000).nullable().optional(),
+});
+
+export const listPaymentsFiltersSchema = z.object({
+  leaseId: z.string().uuid().optional(),
+  tenantId: z.string().uuid().optional(),
+  status: z.enum(PAYMENT_STATUSES).optional(),
+  type: z.enum(PAYMENT_TYPES).optional(),
+  cursor: z.string().optional(),
+  limit: z.coerce.number().int().min(1).max(100).default(50),
 });
 
 // ─── Work Order ──────────────────────────────────────────────────────────────
