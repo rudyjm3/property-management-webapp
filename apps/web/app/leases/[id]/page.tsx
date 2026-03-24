@@ -12,8 +12,19 @@ interface LeaseDetail {
   startDate: string;
   endDate: string;
   status: string;
+  type: string | null;
+  moveInDate: string | null;
+  moveOutDate: string | null;
+  rentDueDay: number;
+  noticePeriodDays: number;
   lateFeeAmount: string;
   lateFeeGraceDays: number;
+  securityDepositStatus: string;
+  utilitiesIncluded: string[];
+  hasPetAddendum: boolean;
+  petDepositAmount: string | null;
+  hasParkingAddendum: boolean;
+  parkingFee: string | null;
   documentUrl: string | null;
   notes: string | null;
   createdAt: string;
@@ -58,6 +69,8 @@ function statusBadgeClass(status: string): string {
     case 'month_to_month': return 'badge-maintenance';
     case 'notice_given': return 'badge-notice';
     case 'expired': return 'badge-vacant';
+    case 'draft': return 'badge-neutral';
+    case 'terminated': return 'badge-vacant';
     default: return 'badge-vacant';
   }
 }
@@ -68,9 +81,17 @@ function paymentStatusClass(status: string): string {
     case 'pending': return 'badge-maintenance';
     case 'failed': return 'badge-notice';
     case 'waived': return 'badge-vacant';
+    case 'refunded': return 'badge-notice';
     default: return 'badge-vacant';
   }
 }
+
+const SECURITY_DEPOSIT_STATUS_LABELS: Record<string, string> = {
+  held: 'Held',
+  partial_return: 'Partial Return',
+  full_return: 'Full Return',
+  applied_to_balance: 'Applied to Balance',
+};
 
 export default function LeaseDetailPage() {
   const params = useParams();
@@ -93,15 +114,18 @@ export default function LeaseDetailPage() {
   // Edit form state
   const [editStatus, setEditStatus] = useState('');
   const [editEndDate, setEditEndDate] = useState('');
+  const [editMoveOutDate, setEditMoveOutDate] = useState('');
   const [editRentAmount, setEditRentAmount] = useState('');
   const [editLateFeeAmount, setEditLateFeeAmount] = useState('');
   const [editLateFeeGraceDays, setEditLateFeeGraceDays] = useState('');
+  const [editSecurityDepositStatus, setEditSecurityDepositStatus] = useState('');
   const [editNotes, setEditNotes] = useState('');
 
   // Renew form state
   const [renewStartDate, setRenewStartDate] = useState('');
   const [renewEndDate, setRenewEndDate] = useState('');
   const [renewRentAmount, setRenewRentAmount] = useState('');
+  const [renewLeaseType, setRenewLeaseType] = useState('');
 
   useEffect(() => {
     async function load() {
@@ -121,9 +145,11 @@ export default function LeaseDetailPage() {
     if (!lease) return;
     setEditStatus(lease.status);
     setEditEndDate(lease.endDate.split('T')[0]);
+    setEditMoveOutDate(lease.moveOutDate ? lease.moveOutDate.split('T')[0] : '');
     setEditRentAmount(String(Number(lease.rentAmount)));
     setEditLateFeeAmount(String(Number(lease.lateFeeAmount)));
     setEditLateFeeGraceDays(String(lease.lateFeeGraceDays));
+    setEditSecurityDepositStatus(lease.securityDepositStatus || 'held');
     setEditNotes(lease.notes || '');
     setError('');
     setShowEditModal(true);
@@ -141,6 +167,7 @@ export default function LeaseDetailPage() {
     setRenewStartDate(newStart.toISOString().split('T')[0]);
     setRenewEndDate(newEnd.toISOString().split('T')[0]);
     setRenewRentAmount(String(Number(lease.rentAmount)));
+    setRenewLeaseType(lease.type || 'fixed_term');
     setError('');
     setShowRenewModal(true);
   }
@@ -152,9 +179,11 @@ export default function LeaseDetailPage() {
       const updated = await api.leases.update(leaseId, {
         status: editStatus,
         endDate: editEndDate,
+        moveOutDate: editMoveOutDate || null,
         rentAmount: parseFloat(editRentAmount),
         lateFeeAmount: parseFloat(editLateFeeAmount),
         lateFeeGraceDays: parseInt(editLateFeeGraceDays, 10),
+        securityDepositStatus: editSecurityDepositStatus || undefined,
         notes: editNotes || null,
       });
       setLease((prev) => (prev ? { ...prev, ...updated } : prev));
@@ -172,6 +201,7 @@ export default function LeaseDetailPage() {
         startDate: renewStartDate,
         endDate: renewEndDate,
         rentAmount: parseFloat(renewRentAmount),
+        type: renewLeaseType || null,
       });
       // Navigate to the new lease
       router.push(`/leases/${newLease.id}`);
@@ -331,6 +361,12 @@ export default function LeaseDetailPage() {
                   {lease.status.replace(/_/g, ' ')}
                 </span>
               </div>
+              {lease.type && (
+                <div className="detail-item">
+                  <label>Lease Type</label>
+                  <span>{lease.type === 'fixed_term' ? 'Fixed Term' : 'Month-to-Month'}</span>
+                </div>
+              )}
               <div className="detail-item">
                 <label>Monthly Rent</label>
                 <span>${Number(lease.rentAmount).toLocaleString()}</span>
@@ -340,12 +376,36 @@ export default function LeaseDetailPage() {
                 <span>${Number(lease.depositAmount).toLocaleString()}</span>
               </div>
               <div className="detail-item">
+                <label>Deposit Status</label>
+                <span>{SECURITY_DEPOSIT_STATUS_LABELS[lease.securityDepositStatus] ?? lease.securityDepositStatus}</span>
+              </div>
+              <div className="detail-item">
                 <label>Start Date</label>
                 <span>{new Date(lease.startDate).toLocaleDateString()}</span>
               </div>
+              {lease.moveInDate && (
+                <div className="detail-item">
+                  <label>Move-In Date</label>
+                  <span>{new Date(lease.moveInDate).toLocaleDateString()}</span>
+                </div>
+              )}
               <div className="detail-item">
                 <label>End Date</label>
                 <span>{new Date(lease.endDate).toLocaleDateString()}</span>
+              </div>
+              {lease.moveOutDate && (
+                <div className="detail-item">
+                  <label>Move-Out Date</label>
+                  <span>{new Date(lease.moveOutDate).toLocaleDateString()}</span>
+                </div>
+              )}
+              <div className="detail-item">
+                <label>Rent Due Day</label>
+                <span>Day {lease.rentDueDay} of month</span>
+              </div>
+              <div className="detail-item">
+                <label>Notice Period</label>
+                <span>{lease.noticePeriodDays} days</span>
               </div>
               <div className="detail-item">
                 <label>Late Fee</label>
@@ -353,6 +413,26 @@ export default function LeaseDetailPage() {
                   ${Number(lease.lateFeeAmount).toLocaleString()} after {lease.lateFeeGraceDays} days
                 </span>
               </div>
+              {lease.utilitiesIncluded.length > 0 && (
+                <div className="detail-item" style={{ gridColumn: '1 / -1' }}>
+                  <label>Utilities Included</label>
+                  <span style={{ textTransform: 'capitalize' }}>{lease.utilitiesIncluded.join(', ')}</span>
+                </div>
+              )}
+              {(lease.hasPetAddendum || lease.hasParkingAddendum) && (
+                <div className="detail-item" style={{ gridColumn: '1 / -1' }}>
+                  <label>Addenda</label>
+                  <span>
+                    {lease.hasPetAddendum && (
+                      <span>Pet{lease.petDepositAmount ? ` (deposit: $${Number(lease.petDepositAmount).toLocaleString()})` : ''}</span>
+                    )}
+                    {lease.hasPetAddendum && lease.hasParkingAddendum && ' · '}
+                    {lease.hasParkingAddendum && (
+                      <span>Parking{lease.parkingFee ? ` ($${Number(lease.parkingFee).toLocaleString()}/mo)` : ''}</span>
+                    )}
+                  </span>
+                </div>
+              )}
             </div>
             {lease.notes && (
               <div style={{ marginTop: '16px', paddingTop: '16px', borderTop: '1px solid var(--color-border)' }}>
@@ -509,14 +589,27 @@ export default function LeaseDetailPage() {
                 {error && (
                   <div style={{ color: 'var(--color-danger)', marginBottom: '12px', fontSize: '14px' }}>{error}</div>
                 )}
-                <div className="form-group">
-                  <label>Status</label>
-                  <select value={editStatus} onChange={(e) => setEditStatus(e.target.value)}>
-                    <option value="active">Active</option>
-                    <option value="month_to_month">Month to Month</option>
-                    <option value="notice_given">Notice Given</option>
-                    <option value="expired">Expired</option>
-                  </select>
+                <div className="form-row">
+                  <div className="form-group">
+                    <label>Status</label>
+                    <select value={editStatus} onChange={(e) => setEditStatus(e.target.value)}>
+                      <option value="draft">Draft</option>
+                      <option value="active">Active</option>
+                      <option value="month_to_month">Month to Month</option>
+                      <option value="notice_given">Notice Given</option>
+                      <option value="expired">Expired</option>
+                      <option value="terminated">Terminated</option>
+                    </select>
+                  </div>
+                  <div className="form-group">
+                    <label>Security Deposit Status</label>
+                    <select value={editSecurityDepositStatus} onChange={(e) => setEditSecurityDepositStatus(e.target.value)}>
+                      <option value="held">Held</option>
+                      <option value="partial_return">Partial Return</option>
+                      <option value="full_return">Full Return</option>
+                      <option value="applied_to_balance">Applied to Balance</option>
+                    </select>
+                  </div>
                 </div>
                 <div className="form-row">
                   <div className="form-group">
@@ -539,6 +632,14 @@ export default function LeaseDetailPage() {
                       onChange={(e) => setEditEndDate(e.target.value)}
                     />
                   </div>
+                </div>
+                <div className="form-group">
+                  <label>Move-Out Date</label>
+                  <input
+                    type="date"
+                    value={editMoveOutDate}
+                    onChange={(e) => setEditMoveOutDate(e.target.value)}
+                  />
                 </div>
                 <div className="form-row">
                   <div className="form-group">
@@ -637,8 +738,15 @@ export default function LeaseDetailPage() {
                   <div style={{ color: 'var(--color-danger)', marginBottom: '12px', fontSize: '14px' }}>{error}</div>
                 )}
                 <p style={{ fontSize: '14px', color: '#6b7280', marginBottom: '16px' }}>
-                  This will expire the current lease and create a new one with the same tenants and unit.
+                  This will terminate the current lease and create a new one with the same tenants and unit.
                 </p>
+                <div className="form-group">
+                  <label>Lease Type</label>
+                  <select value={renewLeaseType} onChange={(e) => setRenewLeaseType(e.target.value)}>
+                    <option value="fixed_term">Fixed Term</option>
+                    <option value="month_to_month">Month-to-Month</option>
+                  </select>
+                </div>
                 <div className="form-row">
                   <div className="form-group">
                     <label>New Start Date</label>

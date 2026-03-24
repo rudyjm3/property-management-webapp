@@ -7,13 +7,30 @@ import { api } from '@/lib/api';
 import { formatPhone } from '@/lib/phone';
 import PhoneInput from '@/components/PhoneInput';
 
+const PORTAL_STATUS_LABELS: Record<string, string> = {
+  active: 'Portal Active',
+  invited: 'Invited',
+  never_logged_in: 'Not Invited',
+};
+
+const PORTAL_STATUS_BADGE: Record<string, string> = {
+  active: 'occupied',
+  invited: 'notice',
+  never_logged_in: 'vacant',
+};
+
 interface TenantDetail {
   id: string;
   name: string;
   email: string;
   phone: string | null;
+  fullLegalName: string | null;
+  dateOfBirth: string | null;
+  currentAddress: string | null;
   emergencyContactName: string | null;
   emergencyContactPhone: string | null;
+  emergencyContact1Relationship: string | null;
+  portalStatus: string;
   createdAt: string;
   leaseParticipants: Array<{
     isPrimary: boolean;
@@ -82,8 +99,12 @@ export default function TenantDetailPage() {
         name: formData.get('name'),
         email: formData.get('email'),
         phone: formData.get('phone') || null,
+        fullLegalName: (formData.get('fullLegalName') as string) || null,
+        dateOfBirth: (formData.get('dateOfBirth') as string) || null,
+        currentAddress: (formData.get('currentAddress') as string) || null,
         emergencyContactName: formData.get('emergencyContactName') || null,
         emergencyContactPhone: formData.get('emergencyContactPhone') || null,
+        emergencyContact1Relationship: (formData.get('emergencyContact1Relationship') as string) || null,
       });
       setTenant((prev) => (prev ? { ...prev, ...updated } : prev));
       setEditing(false);
@@ -122,8 +143,11 @@ export default function TenantDetailPage() {
       <div className="page-header">
         <div>
           <h1 className="page-title">{tenant.name}</h1>
-          <p className="page-subtitle">
+          <p className="page-subtitle" style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
             Tenant since {new Date(tenant.createdAt).toLocaleDateString()}
+            <span className={`badge badge-${PORTAL_STATUS_BADGE[tenant.portalStatus] ?? 'vacant'}`}>
+              {PORTAL_STATUS_LABELS[tenant.portalStatus] ?? tenant.portalStatus}
+            </span>
           </p>
         </div>
         <div style={{ display: 'flex', gap: '8px' }}>
@@ -150,9 +174,34 @@ export default function TenantDetailPage() {
                 <label>Phone</label>
                 <span>{formatPhone(tenant.phone)}</span>
               </div>
+              {tenant.fullLegalName && (
+                <div className="detail-item" style={{ gridColumn: '1 / -1' }}>
+                  <label>Full Legal Name</label>
+                  <span>{tenant.fullLegalName}</span>
+                </div>
+              )}
+              {tenant.dateOfBirth && (
+                <div className="detail-item">
+                  <label>Date of Birth</label>
+                  <span>{new Date(tenant.dateOfBirth).toLocaleDateString()}</span>
+                </div>
+              )}
+              {tenant.currentAddress && (
+                <div className="detail-item" style={{ gridColumn: '1 / -1' }}>
+                  <label>Current Address</label>
+                  <span>{tenant.currentAddress}</span>
+                </div>
+              )}
               <div className="detail-item">
                 <label>Emergency Contact</label>
-                <span>{tenant.emergencyContactName || '--'}</span>
+                <span>
+                  {tenant.emergencyContactName || '--'}
+                  {tenant.emergencyContact1Relationship && (
+                    <span style={{ color: 'var(--color-text-muted)', marginLeft: '6px', fontSize: '13px' }}>
+                      ({tenant.emergencyContact1Relationship})
+                    </span>
+                  )}
+                </span>
               </div>
               <div className="detail-item">
                 <label>Emergency Phone</label>
@@ -333,26 +382,51 @@ export default function TenantDetailPage() {
                     {error}
                   </div>
                 )}
-                <div className="form-group">
-                  <label>Full Name</label>
-                  <input name="name" required defaultValue={tenant.name} />
+                <div className="form-row">
+                  <div className="form-group">
+                    <label>Full Name</label>
+                    <input name="name" required defaultValue={tenant.name} />
+                  </div>
+                  <div className="form-group">
+                    <label>Full Legal Name</label>
+                    <input name="fullLegalName" defaultValue={tenant.fullLegalName || ''} />
+                  </div>
                 </div>
                 <div className="form-group">
                   <label>Email</label>
                   <input name="email" type="email" required defaultValue={tenant.email} />
                 </div>
-                <div className="form-group">
-                  <label>Phone</label>
-                  <PhoneInput name="phone" defaultValue={tenant.phone} />
-                </div>
                 <div className="form-row">
                   <div className="form-group">
-                    <label>Emergency Contact Name</label>
-                    <input name="emergencyContactName" defaultValue={tenant.emergencyContactName || ''} />
+                    <label>Phone</label>
+                    <PhoneInput name="phone" defaultValue={tenant.phone} />
                   </div>
                   <div className="form-group">
-                    <label>Emergency Contact Phone</label>
-                    <PhoneInput name="emergencyContactPhone" defaultValue={tenant.emergencyContactPhone} />
+                    <label>Date of Birth</label>
+                    <input name="dateOfBirth" type="date" defaultValue={tenant.dateOfBirth ? tenant.dateOfBirth.slice(0, 10) : ''} />
+                  </div>
+                </div>
+                <div className="form-group">
+                  <label>Current Address</label>
+                  <input name="currentAddress" defaultValue={tenant.currentAddress || ''} placeholder="123 Main St, City, ST 00000" />
+                </div>
+                <div style={{ marginTop: '16px', paddingTop: '16px', borderTop: '1px solid var(--color-border)' }}>
+                  <p style={{ fontSize: '12px', color: 'var(--color-text-muted)', marginBottom: '12px', fontWeight: 500, textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+                    Emergency Contact 1
+                  </p>
+                  <div className="form-row">
+                    <div className="form-group">
+                      <label>Name</label>
+                      <input name="emergencyContactName" defaultValue={tenant.emergencyContactName || ''} />
+                    </div>
+                    <div className="form-group">
+                      <label>Phone</label>
+                      <PhoneInput name="emergencyContactPhone" defaultValue={tenant.emergencyContactPhone} />
+                    </div>
+                  </div>
+                  <div className="form-group">
+                    <label>Relationship</label>
+                    <input name="emergencyContact1Relationship" defaultValue={tenant.emergencyContact1Relationship || ''} placeholder="e.g. Spouse, Parent, Sibling" />
                   </div>
                 </div>
               </div>

@@ -45,6 +45,8 @@ function statusBadgeClass(status: string): string {
     case 'month_to_month': return 'badge-maintenance';
     case 'notice_given': return 'badge-notice';
     case 'expired': return 'badge-vacant';
+    case 'draft': return 'badge-neutral';
+    case 'terminated': return 'badge-vacant';
     default: return 'badge-vacant';
   }
 }
@@ -77,12 +79,21 @@ export default function LeasesPage() {
   // Form state for new lease
   const [unitId, setUnitId] = useState('');
   const [selectedTenantIds, setSelectedTenantIds] = useState<string[]>(['']);
+  const [leaseType, setLeaseType] = useState('fixed_term');
   const [rentAmount, setRentAmount] = useState('');
   const [depositAmount, setDepositAmount] = useState('');
   const [startDate, setStartDate] = useState('');
   const [endDate, setEndDate] = useState('');
+  const [moveInDate, setMoveInDate] = useState('');
+  const [rentDueDay, setRentDueDay] = useState('1');
+  const [noticePeriodDays, setNoticePeriodDays] = useState('30');
   const [lateFeeAmount, setLateFeeAmount] = useState('50');
   const [lateFeeGraceDays, setLateFeeGraceDays] = useState('5');
+  const [utilitiesIncluded, setUtilitiesIncluded] = useState<string[]>([]);
+  const [hasPetAddendum, setHasPetAddendum] = useState(false);
+  const [petDepositAmount, setPetDepositAmount] = useState('');
+  const [hasParkingAddendum, setHasParkingAddendum] = useState(false);
+  const [parkingFee, setParkingFee] = useState('');
   const [notes, setNotes] = useState('');
 
   useEffect(() => {
@@ -167,12 +178,21 @@ export default function LeasesPage() {
       await api.leases.create({
         unitId,
         tenantIds: filledIds,
+        type: leaseType || null,
         rentAmount: parseFloat(rentAmount),
         depositAmount: parseFloat(depositAmount || '0'),
         startDate,
         endDate,
+        moveInDate: moveInDate || null,
+        rentDueDay: parseInt(rentDueDay || '1', 10),
+        noticePeriodDays: parseInt(noticePeriodDays || '30', 10),
         lateFeeAmount: parseFloat(lateFeeAmount || '0'),
         lateFeeGraceDays: parseInt(lateFeeGraceDays || '5', 10),
+        utilitiesIncluded,
+        hasPetAddendum,
+        petDepositAmount: hasPetAddendum && petDepositAmount ? parseFloat(petDepositAmount) : null,
+        hasParkingAddendum,
+        parkingFee: hasParkingAddendum && parkingFee ? parseFloat(parkingFee) : null,
         notes: notes || null,
       });
       setShowForm(false);
@@ -186,14 +206,29 @@ export default function LeasesPage() {
   function resetForm() {
     setUnitId('');
     setSelectedTenantIds(['']);
+    setLeaseType('fixed_term');
     setRentAmount('');
     setDepositAmount('');
     setStartDate('');
     setEndDate('');
+    setMoveInDate('');
+    setRentDueDay('1');
+    setNoticePeriodDays('30');
     setLateFeeAmount('50');
     setLateFeeGraceDays('5');
+    setUtilitiesIncluded([]);
+    setHasPetAddendum(false);
+    setPetDepositAmount('');
+    setHasParkingAddendum(false);
+    setParkingFee('');
     setNotes('');
     setError('');
+  }
+
+  function toggleUtility(utility: string) {
+    setUtilitiesIncluded((prev) =>
+      prev.includes(utility) ? prev.filter((u) => u !== utility) : [...prev, utility]
+    );
   }
 
   function setTenantAtIndex(index: number, id: string) {
@@ -412,6 +447,23 @@ export default function LeasesPage() {
                 </div>
                 <div className="form-row">
                   <div className="form-group">
+                    <label>Lease Type</label>
+                    <select value={leaseType} onChange={(e) => setLeaseType(e.target.value)}>
+                      <option value="fixed_term">Fixed Term</option>
+                      <option value="month_to_month">Month-to-Month</option>
+                    </select>
+                  </div>
+                  <div className="form-group">
+                    <label>Move-In Date</label>
+                    <input
+                      type="date"
+                      value={moveInDate}
+                      onChange={(e) => setMoveInDate(e.target.value)}
+                    />
+                  </div>
+                </div>
+                <div className="form-row">
+                  <div className="form-group">
                     <label>Monthly Rent ($)</label>
                     <input
                       type="number"
@@ -457,6 +509,27 @@ export default function LeasesPage() {
                 </div>
                 <div className="form-row">
                   <div className="form-group">
+                    <label>Rent Due Day (1–28)</label>
+                    <input
+                      type="number"
+                      min="1"
+                      max="28"
+                      value={rentDueDay}
+                      onChange={(e) => setRentDueDay(e.target.value)}
+                    />
+                  </div>
+                  <div className="form-group">
+                    <label>Notice Period (days)</label>
+                    <input
+                      type="number"
+                      min="0"
+                      value={noticePeriodDays}
+                      onChange={(e) => setNoticePeriodDays(e.target.value)}
+                    />
+                  </div>
+                </div>
+                <div className="form-row">
+                  <div className="form-group">
                     <label>Late Fee ($)</label>
                     <input
                       type="number"
@@ -475,6 +548,57 @@ export default function LeasesPage() {
                       onChange={(e) => setLateFeeGraceDays(e.target.value)}
                     />
                   </div>
+                </div>
+                <div className="form-group">
+                  <label>Utilities Included</label>
+                  <div style={{ display: 'flex', gap: '16px', flexWrap: 'wrap', marginTop: '4px' }}>
+                    {['Water', 'Gas', 'Electric', 'Trash'].map((util) => (
+                      <label key={util} style={{ display: 'flex', alignItems: 'center', gap: '6px', fontWeight: 400, fontSize: '14px', cursor: 'pointer' }}>
+                        <input
+                          type="checkbox"
+                          checked={utilitiesIncluded.includes(util.toLowerCase())}
+                          onChange={() => toggleUtility(util.toLowerCase())}
+                        />
+                        {util}
+                      </label>
+                    ))}
+                  </div>
+                </div>
+                <div style={{ marginTop: '4px' }}>
+                  <label style={{ display: 'flex', alignItems: 'center', gap: '8px', fontWeight: 400, fontSize: '14px', cursor: 'pointer', marginBottom: '8px' }}>
+                    <input type="checkbox" checked={hasPetAddendum} onChange={(e) => setHasPetAddendum(e.target.checked)} />
+                    Pet Addendum
+                  </label>
+                  {hasPetAddendum && (
+                    <div className="form-group" style={{ marginLeft: '24px' }}>
+                      <label>Pet Deposit ($)</label>
+                      <input
+                        type="number"
+                        min="0"
+                        step="0.01"
+                        placeholder="300"
+                        value={petDepositAmount}
+                        onChange={(e) => setPetDepositAmount(e.target.value)}
+                      />
+                    </div>
+                  )}
+                  <label style={{ display: 'flex', alignItems: 'center', gap: '8px', fontWeight: 400, fontSize: '14px', cursor: 'pointer', marginBottom: '8px' }}>
+                    <input type="checkbox" checked={hasParkingAddendum} onChange={(e) => setHasParkingAddendum(e.target.checked)} />
+                    Parking Addendum
+                  </label>
+                  {hasParkingAddendum && (
+                    <div className="form-group" style={{ marginLeft: '24px' }}>
+                      <label>Parking Fee ($/mo)</label>
+                      <input
+                        type="number"
+                        min="0"
+                        step="0.01"
+                        placeholder="75"
+                        value={parkingFee}
+                        onChange={(e) => setParkingFee(e.target.value)}
+                      />
+                    </div>
+                  )}
                 </div>
                 <div className="form-group">
                   <label>Notes</label>

@@ -6,11 +6,24 @@ import { api } from '@/lib/api';
 import { formatPhone } from '@/lib/phone';
 import PhoneInput from '@/components/PhoneInput';
 
+const PORTAL_STATUS_LABELS: Record<string, string> = {
+  active: 'Portal Active',
+  invited: 'Invited',
+  never_logged_in: 'Not Invited',
+};
+
+const PORTAL_STATUS_BADGE: Record<string, string> = {
+  active: 'occupied',
+  invited: 'notice',
+  never_logged_in: 'vacant',
+};
+
 interface Tenant {
   id: string;
   name: string;
   email: string;
   phone: string | null;
+  portalStatus: string;
   createdAt: string;
   leaseParticipants: Array<{
     lease: {
@@ -54,8 +67,12 @@ export default function TenantsPage() {
         name: formData.get('name'),
         email: formData.get('email'),
         phone: formData.get('phone') || null,
+        fullLegalName: (formData.get('fullLegalName') as string) || null,
+        dateOfBirth: (formData.get('dateOfBirth') as string) || null,
+        currentAddress: (formData.get('currentAddress') as string) || null,
         emergencyContactName: formData.get('emergencyContactName') || null,
         emergencyContactPhone: formData.get('emergencyContactPhone') || null,
+        emergencyContact1Relationship: (formData.get('emergencyContact1Relationship') as string) || null,
       });
       setShowForm(false);
       loadTenants();
@@ -98,6 +115,7 @@ export default function TenantsPage() {
                 <th>Phone</th>
                 <th>Unit</th>
                 <th>Property</th>
+                <th>Portal</th>
                 <th>Status</th>
               </tr>
             </thead>
@@ -130,6 +148,11 @@ export default function TenantsPage() {
                     </td>
                     <td>{activeLease?.lease.unit.property.name || '--'}</td>
                     <td>
+                      <span className={`badge badge-${PORTAL_STATUS_BADGE[tenant.portalStatus] ?? 'vacant'}`}>
+                        {PORTAL_STATUS_LABELS[tenant.portalStatus] ?? tenant.portalStatus}
+                      </span>
+                    </td>
+                    <td>
                       <span className={`badge badge-${activeLease ? 'occupied' : 'vacant'}`}>
                         {activeLease ? 'Active Lease' : 'No Lease'}
                       </span>
@@ -158,26 +181,51 @@ export default function TenantsPage() {
                     {error}
                   </div>
                 )}
-                <div className="form-group">
-                  <label>Full Name</label>
-                  <input name="name" required placeholder="e.g. John Smith" />
+                <div className="form-row">
+                  <div className="form-group">
+                    <label>Full Name</label>
+                    <input name="name" required placeholder="e.g. John Smith" />
+                  </div>
+                  <div className="form-group">
+                    <label>Full Legal Name</label>
+                    <input name="fullLegalName" placeholder="As on lease documents" />
+                  </div>
                 </div>
                 <div className="form-group">
                   <label>Email</label>
                   <input name="email" type="email" required placeholder="john@example.com" />
                 </div>
-                <div className="form-group">
-                  <label>Phone</label>
-                  <PhoneInput name="phone" />
-                </div>
                 <div className="form-row">
                   <div className="form-group">
-                    <label>Emergency Contact Name</label>
-                    <input name="emergencyContactName" placeholder="Jane Smith" />
+                    <label>Phone</label>
+                    <PhoneInput name="phone" />
                   </div>
                   <div className="form-group">
-                    <label>Emergency Contact Phone</label>
-                    <PhoneInput name="emergencyContactPhone" />
+                    <label>Date of Birth</label>
+                    <input name="dateOfBirth" type="date" />
+                  </div>
+                </div>
+                <div className="form-group">
+                  <label>Current Address</label>
+                  <input name="currentAddress" placeholder="123 Main St, City, ST 00000" />
+                </div>
+                <div style={{ marginTop: '16px', paddingTop: '16px', borderTop: '1px solid var(--color-border)' }}>
+                  <p style={{ fontSize: '12px', color: 'var(--color-text-muted)', marginBottom: '12px', fontWeight: 500, textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+                    Emergency Contact 1
+                  </p>
+                  <div className="form-row">
+                    <div className="form-group">
+                      <label>Name</label>
+                      <input name="emergencyContactName" placeholder="Jane Smith" />
+                    </div>
+                    <div className="form-group">
+                      <label>Phone</label>
+                      <PhoneInput name="emergencyContactPhone" />
+                    </div>
+                  </div>
+                  <div className="form-group">
+                    <label>Relationship</label>
+                    <input name="emergencyContact1Relationship" placeholder="e.g. Spouse, Parent, Sibling" />
                   </div>
                 </div>
               </div>

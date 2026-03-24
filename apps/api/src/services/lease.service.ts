@@ -193,7 +193,7 @@ export async function updateLease(
       include: leaseInclude,
     });
 
-    if (data.status === 'expired') {
+    if (data.status === 'expired' || data.status === 'terminated') {
       await tx.unit.update({ where: { id: existing.unitId }, data: { status: 'vacant' } });
     } else if (data.status === 'notice_given') {
       await tx.unit.update({ where: { id: existing.unitId }, data: { status: 'notice' } });
@@ -211,6 +211,8 @@ interface RenewLeaseData {
   startDate: string;
   endDate: string;
   rentAmount: number;
+  type?: string | null;
+  noticePeriodDays?: number;
 }
 
 export async function renewLease(
@@ -234,10 +236,10 @@ export async function renewLease(
   const participants = existing.participants;
 
   const newLease = await prisma.$transaction(async (tx) => {
-    // Mark old lease as expired
-    await tx.lease.update({ where: { id: leaseId }, data: { status: 'expired' } });
+    // Mark old lease as terminated
+    await tx.lease.update({ where: { id: leaseId }, data: { status: 'terminated' } });
 
-    // Create new lease with same unit/tenants but new dates/rent
+    // Create new lease copying key terms from old lease
     const created = await tx.lease.create({
       data: {
         unit: { connect: { id: existing.unitId } },
@@ -245,8 +247,12 @@ export async function renewLease(
         depositAmount: existing.depositAmount,
         startDate: new Date(data.startDate),
         endDate: new Date(data.endDate),
+        type: (data.type as any) ?? existing.type,
         lateFeeAmount: existing.lateFeeAmount,
         lateFeeGraceDays: existing.lateFeeGraceDays,
+        rentDueDay: existing.rentDueDay,
+        noticePeriodDays: data.noticePeriodDays ?? existing.noticePeriodDays,
+        renewalOfLeaseId: leaseId,
         status: 'active',
         participants: {
           create: participants.map((p) => ({

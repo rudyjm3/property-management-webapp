@@ -10,6 +10,7 @@ interface Payment {
   amount: string;
   type: string;
   status: string;
+  method: string;
   dueDate: string;
   paidAt: string | null;
   notes: string | null;
@@ -38,17 +39,30 @@ const STATUS_COLORS: Record<string, string> = {
   pending: 'badge-maintenance',
   failed: 'badge-notice',
   waived: 'badge-vacant',
+  refunded: 'badge-notice',
 };
 
 const TYPE_LABELS: Record<string, string> = {
   rent: 'Rent',
   deposit: 'Deposit',
   late_fee: 'Late Fee',
+  pet_deposit: 'Pet Deposit',
+  parking: 'Parking',
   credit: 'Credit',
+  other: 'Other',
 };
 
-const FILTER_STATUSES = ['', 'pending', 'completed', 'failed', 'waived'];
-const FILTER_TYPES = ['', 'rent', 'deposit', 'late_fee', 'credit'];
+const METHOD_LABELS: Record<string, string> = {
+  cash: 'Cash',
+  check: 'Check',
+  money_order: 'Money Order',
+  ach: 'ACH',
+  card: 'Card',
+  other: 'Other',
+};
+
+const FILTER_STATUSES = ['', 'pending', 'completed', 'failed', 'waived', 'refunded'];
+const FILTER_TYPES = ['', 'rent', 'deposit', 'late_fee', 'pet_deposit', 'parking', 'credit', 'other'];
 
 export default function PaymentsPage() {
   const searchParams = useSearchParams();
@@ -70,6 +84,11 @@ export default function PaymentsPage() {
   const [amount, setAmount] = useState('');
   const [type, setType] = useState('rent');
   const [status, setStatus] = useState('completed');
+  const [method, setMethod] = useState('other');
+  const [checkNumber, setCheckNumber] = useState('');
+  const [referenceNote, setReferenceNote] = useState('');
+  const [periodStart, setPeriodStart] = useState('');
+  const [periodEnd, setPeriodEnd] = useState('');
   const [dueDate, setDueDate] = useState('');
   const [notes, setNotes] = useState('');
 
@@ -138,6 +157,11 @@ export default function PaymentsPage() {
         amount: parseFloat(amount),
         type,
         status,
+        method,
+        checkNumber: checkNumber || null,
+        referenceNote: referenceNote || null,
+        periodStart: periodStart || null,
+        periodEnd: periodEnd || null,
         dueDate,
         notes: notes || null,
       });
@@ -158,6 +182,11 @@ export default function PaymentsPage() {
     setAmount('');
     setType('rent');
     setStatus('completed');
+    setMethod('other');
+    setCheckNumber('');
+    setReferenceNote('');
+    setPeriodStart('');
+    setPeriodEnd('');
     setDueDate('');
     setNotes('');
   }
@@ -254,6 +283,7 @@ export default function PaymentsPage() {
                 <th>Tenant</th>
                 <th>Unit / Property</th>
                 <th>Type</th>
+                <th>Method</th>
                 <th>Amount</th>
                 <th>Due Date</th>
                 <th>Paid On</th>
@@ -279,6 +309,7 @@ export default function PaymentsPage() {
                     </div>
                   </td>
                   <td>{TYPE_LABELS[payment.type] ?? payment.type}</td>
+                  <td>{METHOD_LABELS[payment.method] ?? payment.method}</td>
                   <td style={{ fontWeight: 600 }}>${Number(payment.amount).toLocaleString()}</td>
                   <td>{new Date(payment.dueDate).toLocaleDateString()}</td>
                   <td>
@@ -373,7 +404,10 @@ export default function PaymentsPage() {
                           <option value="rent">Rent</option>
                           <option value="deposit">Deposit</option>
                           <option value="late_fee">Late Fee</option>
+                          <option value="pet_deposit">Pet Deposit</option>
+                          <option value="parking">Parking</option>
                           <option value="credit">Credit</option>
+                          <option value="other">Other</option>
                         </select>
                       </div>
                       <div className="form-group">
@@ -385,6 +419,41 @@ export default function PaymentsPage() {
                           <option value="waived">Waived</option>
                         </select>
                       </div>
+                    </div>
+
+                    <div className="form-row">
+                      <div className="form-group">
+                        <label>Payment Method</label>
+                        <select value={method} onChange={(e) => setMethod(e.target.value)}>
+                          <option value="cash">Cash</option>
+                          <option value="check">Check</option>
+                          <option value="money_order">Money Order</option>
+                          <option value="ach">ACH</option>
+                          <option value="card">Card</option>
+                          <option value="other">Other</option>
+                        </select>
+                      </div>
+                      {(method === 'check' || method === 'money_order') && (
+                        <div className="form-group">
+                          <label>{method === 'check' ? 'Check #' : 'Money Order #'}</label>
+                          <input
+                            type="text"
+                            placeholder="e.g. 1234"
+                            value={checkNumber}
+                            onChange={(e) => setCheckNumber(e.target.value)}
+                          />
+                        </div>
+                      )}
+                    </div>
+
+                    <div className="form-group">
+                      <label>Reference / Note</label>
+                      <input
+                        type="text"
+                        placeholder="e.g. ACH confirmation #, memo line"
+                        value={referenceNote}
+                        onChange={(e) => setReferenceNote(e.target.value)}
+                      />
                     </div>
 
                     <div className="form-row">
@@ -411,11 +480,30 @@ export default function PaymentsPage() {
                       </div>
                     </div>
 
+                    <div className="form-row">
+                      <div className="form-group">
+                        <label>Period Start</label>
+                        <input
+                          type="date"
+                          value={periodStart}
+                          onChange={(e) => setPeriodStart(e.target.value)}
+                        />
+                      </div>
+                      <div className="form-group">
+                        <label>Period End</label>
+                        <input
+                          type="date"
+                          value={periodEnd}
+                          onChange={(e) => setPeriodEnd(e.target.value)}
+                        />
+                      </div>
+                    </div>
+
                     <div className="form-group">
                       <label>Notes (optional)</label>
                       <textarea
                         rows={2}
-                        placeholder="e.g. Paid by check #1234"
+                        placeholder="Additional notes..."
                         value={notes}
                         onChange={(e) => setNotes(e.target.value)}
                       />

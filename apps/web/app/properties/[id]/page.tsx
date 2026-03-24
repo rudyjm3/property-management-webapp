@@ -5,13 +5,24 @@ import { useParams } from 'next/navigation';
 import Link from 'next/link';
 import { api } from '@/lib/api';
 
+const UNIT_TYPE_LABELS: Record<string, string> = {
+  studio: 'Studio',
+  one_bed: '1 Bed',
+  two_bed: '2 Bed',
+  three_bed: '3 Bed',
+  four_plus_bed: '4+ Bed',
+  commercial: 'Commercial',
+};
+
 interface Unit {
   id: string;
   unitNumber: string;
   floor: number | null;
+  type: string | null;
   bedrooms: number;
   bathrooms: number;
   sqFt: number | null;
+  marketRent: string | null;
   rentAmount: string;
   status: string;
   leases: Array<{
@@ -65,9 +76,11 @@ export default function PropertyDetailPage() {
       await api.units.create(propertyId, {
         unitNumber: formData.get('unitNumber'),
         floor: formData.get('floor') ? Number(formData.get('floor')) : null,
+        type: (formData.get('type') as string) || null,
         bedrooms: Number(formData.get('bedrooms')),
         bathrooms: Number(formData.get('bathrooms')),
         sqFt: formData.get('sqFt') ? Number(formData.get('sqFt')) : null,
+        marketRent: formData.get('marketRent') ? Number(formData.get('marketRent')) : null,
         rentAmount: Number(formData.get('rentAmount')),
         depositAmount: Number(formData.get('depositAmount') || 0),
         address: (formData.get('unitAddress') as string) || null,
@@ -155,7 +168,12 @@ export default function PropertyDetailPage() {
                 <div className="unit-card">
                   <div className="unit-header">
                     <span className="unit-number">Unit {unit.unitNumber}</span>
-                    <span className={`badge badge-${unit.status}`}>{unit.status}</span>
+                    <div style={{ display: 'flex', gap: '6px', alignItems: 'center' }}>
+                      {unit.type && (
+                        <span className="badge badge-neutral">{UNIT_TYPE_LABELS[unit.type] ?? unit.type}</span>
+                      )}
+                      <span className={`badge badge-${unit.status}`}>{unit.status}</span>
+                    </div>
                   </div>
                   {tenant && <div className="unit-tenant">{tenant.name}</div>}
                   {!tenant && unit.status === 'vacant' && (
@@ -198,18 +216,36 @@ export default function PropertyDetailPage() {
                 </div>
                 <div className="form-row">
                   <div className="form-group">
-                    <label>Bedrooms</label>
-                    <input name="bedrooms" type="number" required defaultValue="1" min="0" />
+                    <label>Unit Type</label>
+                    <select name="type" defaultValue="">
+                      <option value="">— Select —</option>
+                      <option value="studio">Studio</option>
+                      <option value="one_bed">1 Bed</option>
+                      <option value="two_bed">2 Bed</option>
+                      <option value="three_bed">3 Bed</option>
+                      <option value="four_plus_bed">4+ Bed</option>
+                      <option value="commercial">Commercial</option>
+                    </select>
                   </div>
                   <div className="form-group">
-                    <label>Bathrooms</label>
-                    <input name="bathrooms" type="number" required defaultValue="1" min="0" step="0.5" />
+                    <label>Bedrooms</label>
+                    <input name="bedrooms" type="number" required defaultValue="1" min="0" />
                   </div>
                 </div>
                 <div className="form-row">
                   <div className="form-group">
+                    <label>Bathrooms</label>
+                    <input name="bathrooms" type="number" required defaultValue="1" min="0" step="0.5" />
+                  </div>
+                  <div className="form-group">
                     <label>Sq Ft</label>
                     <input name="sqFt" type="number" placeholder="750" />
+                  </div>
+                </div>
+                <div className="form-row">
+                  <div className="form-group">
+                    <label>Market Rent ($)</label>
+                    <input name="marketRent" type="number" placeholder="1200" min="0" step="0.01" />
                   </div>
                   <div className="form-group">
                     <label>Monthly Rent ($)</label>

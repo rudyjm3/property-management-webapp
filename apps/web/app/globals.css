@@ -325,6 +325,11 @@ a:hover {
   color: #3730a3;
 }
 
+.badge-neutral {
+  background: #f3f4f6;
+  color: #374151;
+}
+
 .unit-tenant {
   font-size: 13px;
   color: var(--color-text-muted);

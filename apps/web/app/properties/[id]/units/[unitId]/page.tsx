@@ -6,13 +6,25 @@ import Link from 'next/link';
 import { api } from '@/lib/api';
 import { formatPhone } from '@/lib/phone';
 
+const UNIT_TYPE_LABELS: Record<string, string> = {
+  studio: 'Studio',
+  one_bed: '1 Bed',
+  two_bed: '2 Bed',
+  three_bed: '3 Bed',
+  four_plus_bed: '4+ Bed',
+  commercial: 'Commercial',
+};
+
 interface UnitDetail {
   id: string;
   unitNumber: string;
   floor: number | null;
+  type: string | null;
   bedrooms: number;
   bathrooms: number;
   sqFt: number | null;
+  marketRent: string | null;
+  availableDate: string | null;
   rentAmount: string;
   depositAmount: string;
   status: string;
@@ -119,6 +131,12 @@ export default function UnitDetailPage() {
                   )}
                 </span>
               </div>
+              {unit.type && (
+                <div className="detail-item">
+                  <label>Unit Type</label>
+                  <span>{UNIT_TYPE_LABELS[unit.type] ?? unit.type}</span>
+                </div>
+              )}
               <div className="detail-item">
                 <label>Bedrooms</label>
                 <span>{unit.bedrooms}</span>
@@ -136,6 +154,10 @@ export default function UnitDetailPage() {
                 <span>{unit.floor || '--'}</span>
               </div>
               <div className="detail-item">
+                <label>Market Rent</label>
+                <span>{unit.marketRent ? `$${Number(unit.marketRent).toLocaleString()}` : '--'}</span>
+              </div>
+              <div className="detail-item">
                 <label>Monthly Rent</label>
                 <span>${Number(unit.rentAmount).toLocaleString()}</span>
               </div>
@@ -143,6 +165,12 @@ export default function UnitDetailPage() {
                 <label>Security Deposit</label>
                 <span>${Number(unit.depositAmount).toLocaleString()}</span>
               </div>
+              {unit.availableDate && (
+                <div className="detail-item">
+                  <label>Available Date</label>
+                  <span>{new Date(unit.availableDate).toLocaleDateString()}</span>
+                </div>
+              )}
             </div>
             {unit.notes && (
               <div style={{ marginTop: '16px' }}>

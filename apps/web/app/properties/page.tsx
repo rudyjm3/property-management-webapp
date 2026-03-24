@@ -4,6 +4,13 @@ import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { api } from '@/lib/api';
 
+const PROPERTY_TYPE_LABELS: Record<string, string> = {
+  multifamily: 'Multifamily',
+  single_family: 'Single Family',
+  commercial: 'Commercial',
+  mixed_use: 'Mixed Use',
+};
+
 interface Property {
   id: string;
   name: string;
@@ -89,7 +96,7 @@ export default function PropertiesPage() {
                 </div>
                 <div className="property-meta">
                   <span>{property._count.units} units</span>
-                  <span style={{ textTransform: 'capitalize' }}>{property.type}</span>
+                  <span>{PROPERTY_TYPE_LABELS[property.type] ?? property.type}</span>
                 </div>
               </div>
             </Link>
@@ -133,10 +140,11 @@ export default function PropertiesPage() {
                   </div>
                   <div className="form-group">
                     <label>Type</label>
-                    <select name="type" defaultValue="apartment">
-                      <option value="apartment">Apartment</option>
-                      <option value="condo">Condo</option>
-                      <option value="house">House</option>
+                    <select name="type" defaultValue="multifamily">
+                      <option value="multifamily">Multifamily</option>
+                      <option value="single_family">Single Family</option>
+                      <option value="commercial">Commercial</option>
+                      <option value="mixed_use">Mixed Use</option>
                     </select>
                   </div>
                 </div>
