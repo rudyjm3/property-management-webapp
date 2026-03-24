@@ -5,9 +5,17 @@ import {
   confirmUploadSchema,
   listDocumentsSchema,
 } from '@propflow/shared';
+import { AppError } from '../middleware/error-handler';
 import * as documentService from '../services/document.service';
 
 const router = Router({ mergeParams: true });
+
+/** Resolve the calling user's ID from auth middleware or the x-user-id header. */
+function resolveUserId(req: Request): string {
+  const userId = (req as any).userId ?? (req.headers['x-user-id'] as string | undefined);
+  if (!userId) throw new AppError(401, 'UNAUTHORIZED', 'Missing user identity');
+  return userId;
+}
 
 // POST /api/v1/organizations/:orgId/documents/upload-url
 // Step 1: request a presigned PUT URL for direct browser-to-S3 upload
@@ -16,8 +24,7 @@ router.post(
   validate(requestUploadSchema),
   async (req: Request, res: Response, next: NextFunction) => {
     try {
-      // userId comes from auth middleware; fall back to a header for now
-      const userId = (req as any).userId ?? req.headers['x-user-id'] as string;
+      const userId = resolveUserId(req);
       const result = await documentService.requestUpload(
         req.params.orgId as string,
         userId,
@@ -37,7 +44,7 @@ router.post(
   validate(confirmUploadSchema),
   async (req: Request, res: Response, next: NextFunction) => {
     try {
-      const userId = (req as any).userId ?? req.headers['x-user-id'] as string;
+      const userId = resolveUserId(req);
       const document = await documentService.confirmUpload(
         req.params.orgId as string,
         userId,

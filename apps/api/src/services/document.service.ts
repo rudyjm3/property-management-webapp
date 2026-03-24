@@ -24,6 +24,13 @@ export async function requestUpload(
   uploadedByUserId: string,
   input: RequestUploadInput,
 ) {
+  // Verify the caller belongs to the organization before minting a presigned URL
+  const user = await prisma.user.findFirst({
+    where: { id: uploadedByUserId, organizationId },
+    select: { id: true },
+  });
+  if (!user) throw new AppError(403, 'FORBIDDEN', 'Forbidden');
+
   const s3Key = buildS3Key(
     organizationId,
     input.entityType,

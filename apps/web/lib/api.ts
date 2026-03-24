@@ -169,11 +169,12 @@ export const api = {
 
     /**
      * Upload a file directly to S3 using the presigned URL (bypasses the API).
+     * contentType must match the value used when requesting the presigned URL.
      */
-    uploadToS3: async (uploadUrl: string, file: File): Promise<void> => {
+    uploadToS3: async (uploadUrl: string, file: File, contentType: string): Promise<void> => {
       const res = await fetch(uploadUrl, {
         method: 'PUT',
-        headers: { 'Content-Type': file.type },
+        headers: { 'Content-Type': contentType },
         body: file,
       });
       if (!res.ok) throw new Error(`S3 upload failed: ${res.status}`);

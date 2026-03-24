@@ -127,6 +127,21 @@ describe('document.service', () => {
       expect(result.expiresInSeconds).toBe(900);
       expect(prisma.document.create).not.toHaveBeenCalled();
     });
+
+    it('throws 403 if caller does not belong to the organization', async () => {
+      (prisma.user.findFirst as any).mockResolvedValue(null);
+
+      await expect(
+        documentService.requestUpload('org-1', 'outsider', {
+          entityType: 'property',
+          entityId: 'prop-1',
+          fileName: 'test.pdf',
+          mimeType: 'application/pdf',
+          sizeBytes: 100,
+          visibleToTenant: false,
+        }),
+      ).rejects.toMatchObject({ statusCode: 403 });
+    });
   });
 
   describe('confirmUpload', () => {

@@ -98,20 +98,23 @@ export default function DocumentPanel({ entityType, entityId }: Props) {
     setUploadError(null);
 
     try {
+      // Resolve once so step 1 and step 2 both use the identical value
+      const resolvedMimeType = selectedFile.type || 'application/octet-stream';
+
       // Step 1: Get presigned URL
       const { uploadUrl, s3Key } = await api.documents.requestUploadUrl({
         entityType,
         entityId,
         fileName: selectedFile.name,
-        mimeType: selectedFile.type || 'application/octet-stream',
+        mimeType: resolvedMimeType,
         sizeBytes: selectedFile.size,
         docCategory: category || null,
         label: label.trim() || null,
         visibleToTenant,
       });
 
-      // Step 2: Upload directly to S3
-      await api.documents.uploadToS3(uploadUrl, selectedFile);
+      // Step 2: Upload directly to S3 — Content-Type must match the signed value
+      await api.documents.uploadToS3(uploadUrl, selectedFile, resolvedMimeType);
 
       // Step 3: Confirm upload and persist metadata
       await api.documents.confirmUpload({
@@ -119,7 +122,7 @@ export default function DocumentPanel({ entityType, entityId }: Props) {
         entityType,
         entityId,
         fileName: selectedFile.name,
-        mimeType: selectedFile.type || 'application/octet-stream',
+        mimeType: resolvedMimeType,
         sizeBytes: selectedFile.size,
         docCategory: category || null,
         label: label.trim() || null,
