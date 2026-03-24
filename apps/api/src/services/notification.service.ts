@@ -211,7 +211,11 @@ export async function runOverdueRentJob(organizationId?: string) {
         }
       }
 
-      await Promise.allSettled(emailTasks);
+      const taskResults = await Promise.allSettled(emailTasks);
+      const taskFailures = taskResults.filter((r) => r.status === 'rejected');
+      if (taskFailures.length > 0) {
+        throw new Error(`${taskFailures.length} of ${emailTasks.length} notification tasks failed for payment ${payment.id}`);
+      }
     })
   );
 
@@ -351,7 +355,11 @@ export async function runLeaseExpiryJob(organizationId?: string) {
           );
         }
 
-        await Promise.allSettled(emailTasks);
+        const taskResults = await Promise.allSettled(emailTasks);
+        const taskFailures = taskResults.filter((r) => r.status === 'rejected');
+        if (taskFailures.length > 0) {
+          throw new Error(`${taskFailures.length} of ${emailTasks.length} notification tasks failed for lease ${lease.id}`);
+        }
       })
     );
 

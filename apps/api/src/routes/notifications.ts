@@ -3,6 +3,26 @@ import * as notifService from '../services/notification.service';
 
 const router = Router({ mergeParams: true });
 
+// ─── Cron-secret guard ────────────────────────────────────────────────────────
+// Job-trigger endpoints must be called with:
+//   Authorization: Bearer <CRON_SECRET>
+// Set CRON_SECRET in .env (and in your scheduler's environment) before use.
+function requireCronSecret(req: Request, res: Response, next: NextFunction): void {
+  const secret = process.env.CRON_SECRET;
+  if (!secret) {
+    // If no secret is configured, block all job requests to fail safe.
+    res.status(503).json({ error: { code: 'CRON_NOT_CONFIGURED', message: 'CRON_SECRET is not configured on this server.' } });
+    return;
+  }
+  const auth = req.headers.authorization ?? '';
+  const provided = auth.startsWith('Bearer ') ? auth.slice(7) : '';
+  if (provided !== secret) {
+    res.status(401).json({ error: { code: 'UNAUTHORIZED', message: 'Invalid or missing cron secret.' } });
+    return;
+  }
+  next();
+}
+
 // ─── In-App Notifications ─────────────────────────────────────────────────────
 
 // GET /api/v1/organizations/:orgId/notifications?userId=&unreadOnly=true
@@ -64,7 +84,7 @@ router.patch('/read-all', async (req: Request, res: Response, next: NextFunction
 // Vercel cron, or an external scheduler hitting a secured endpoint).
 
 // POST /api/v1/organizations/:orgId/notifications/jobs/rent-reminders
-router.post('/jobs/rent-reminders', async (req: Request, res: Response, next: NextFunction) => {
+router.post('/jobs/rent-reminders', requireCronSecret, async (req: Request, res: Response, next: NextFunction) => {
   try {
     const result = await notifService.runRentReminderJob(req.params.orgId as string);
     res.json({ data: result });
@@ -74,7 +94,7 @@ router.post('/jobs/rent-reminders', async (req: Request, res: Response, next: Ne
 });
 
 // POST /api/v1/organizations/:orgId/notifications/jobs/overdue-rent
-router.post('/jobs/overdue-rent', async (req: Request, res: Response, next: NextFunction) => {
+router.post('/jobs/overdue-rent', requireCronSecret, async (req: Request, res: Response, next: NextFunction) => {
   try {
     const result = await notifService.runOverdueRentJob(req.params.orgId as string);
     res.json({ data: result });
@@ -84,7 +104,7 @@ router.post('/jobs/overdue-rent', async (req: Request, res: Response, next: Next
 });
 
 // POST /api/v1/organizations/:orgId/notifications/jobs/lease-expiry
-router.post('/jobs/lease-expiry', async (req: Request, res: Response, next: NextFunction) => {
+router.post('/jobs/lease-expiry', requireCronSecret, async (req: Request, res: Response, next: NextFunction) => {
   try {
     const result = await notifService.runLeaseExpiryJob(req.params.orgId as string);
     res.json({ data: result });
