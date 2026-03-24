@@ -16,8 +16,12 @@ interface UnitDetail {
   rentAmount: string;
   depositAmount: string;
   status: string;
+  address: string | null;
+  city: string | null;
+  state: string | null;
+  zip: string | null;
   notes: string | null;
-  property: { id: string; name: string; address: string };
+  property: { id: string; name: string; address: string; city: string; state: string; zip: string };
   leases: Array<{
     id: string;
     startDate: string;
@@ -70,6 +74,8 @@ export default function UnitDetailPage() {
 
   const activeLease = unit.leases.find((l) => l.status === 'active');
   const primaryTenant = activeLease?.participants.find((p) => p.isPrimary)?.tenant;
+  const hasUnitAddress = !!(unit.address || unit.city || unit.state || unit.zip);
+  const resolvedAddress = `${unit.address ?? unit.property.address}, ${unit.city ?? unit.property.city}, ${unit.state ?? unit.property.state} ${unit.zip ?? unit.property.zip}`;
 
   return (
     <>
@@ -84,7 +90,12 @@ export default function UnitDetailPage() {
       <div className="page-header">
         <div>
           <h1 className="page-title">Unit {unit.unitNumber}</h1>
-          <p className="page-subtitle">{unit.property.address}</p>
+          <p className="page-subtitle">{resolvedAddress}</p>
+          {hasUnitAddress && (
+            <p style={{ fontSize: '12px', color: 'var(--color-text-muted)', marginTop: '2px' }}>
+              Property: {unit.property.address}, {unit.property.city}, {unit.property.state} {unit.property.zip}
+            </p>
+          )}
         </div>
         <span className={`badge badge-${unit.status}`} style={{ fontSize: '14px', padding: '4px 12px' }}>
           {unit.status}
@@ -97,6 +108,17 @@ export default function UnitDetailPage() {
           <div className="card-body">
             <h3 style={{ marginBottom: '16px', fontSize: '16px', fontWeight: 600 }}>Unit Details</h3>
             <div className="detail-grid">
+              <div className="detail-item" style={{ gridColumn: '1 / -1' }}>
+                <label>Address</label>
+                <span>
+                  {resolvedAddress}
+                  {hasUnitAddress && (
+                    <span style={{ marginLeft: '8px', fontSize: '11px', color: 'var(--color-text-muted)', fontStyle: 'italic' }}>
+                      (unit-specific)
+                    </span>
+                  )}
+                </span>
+              </div>
               <div className="detail-item">
                 <label>Bedrooms</label>
                 <span>{unit.bedrooms}</span>

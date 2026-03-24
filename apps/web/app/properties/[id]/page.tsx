@@ -70,6 +70,10 @@ export default function PropertyDetailPage() {
         sqFt: formData.get('sqFt') ? Number(formData.get('sqFt')) : null,
         rentAmount: Number(formData.get('rentAmount')),
         depositAmount: Number(formData.get('depositAmount') || 0),
+        address: (formData.get('unitAddress') as string) || null,
+        city: (formData.get('unitCity') as string) || null,
+        state: (formData.get('unitState') as string) || null,
+        zip: (formData.get('unitZip') as string) || null,
       });
       setShowAddUnit(false);
       loadProperty();
@@ -215,6 +219,29 @@ export default function PropertyDetailPage() {
                 <div className="form-group">
                   <label>Security Deposit ($)</label>
                   <input name="depositAmount" type="number" placeholder="1200" min="0" step="0.01" />
+                </div>
+                <div style={{ marginTop: '16px', paddingTop: '16px', borderTop: '1px solid var(--color-border)' }}>
+                  <p style={{ fontSize: '12px', color: 'var(--color-text-muted)', marginBottom: '12px', fontWeight: 500, textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+                    Address Override <span style={{ fontWeight: 400, textTransform: 'none', letterSpacing: 'normal' }}>(leave blank to use property address)</span>
+                  </p>
+                  <div className="form-group">
+                    <label>Street Address</label>
+                    <input name="unitAddress" placeholder="e.g. 456 Oak Ave" />
+                  </div>
+                  <div className="form-row">
+                    <div className="form-group">
+                      <label>City</label>
+                      <input name="unitCity" placeholder="e.g. Springfield" />
+                    </div>
+                    <div className="form-group">
+                      <label>State</label>
+                      <input name="unitState" placeholder="e.g. IL" maxLength={2} style={{ textTransform: 'uppercase' }} />
+                    </div>
+                    <div className="form-group">
+                      <label>ZIP</label>
+                      <input name="unitZip" placeholder="e.g. 62701" />
+                    </div>
+                  </div>
                 </div>
               </div>
               <div className="modal-footer">
