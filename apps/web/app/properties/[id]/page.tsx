@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react';
 import { useParams } from 'next/navigation';
 import Link from 'next/link';
 import { api } from '@/lib/api';
+import DocumentPanel from '@/components/DocumentPanel';
 
 const UNIT_TYPE_LABELS: Record<string, string> = {
   studio: 'Studio',
@@ -192,6 +193,8 @@ export default function PropertyDetailPage() {
           })}
         </div>
       )}
+
+      <DocumentPanel entityType="property" entityId={propertyId} />
 
       {showAddUnit && (
         <div className="modal-overlay" onClick={() => setShowAddUnit(false)}>

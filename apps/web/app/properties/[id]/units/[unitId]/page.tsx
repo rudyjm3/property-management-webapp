@@ -5,6 +5,7 @@ import { useParams } from 'next/navigation';
 import Link from 'next/link';
 import { api } from '@/lib/api';
 import { formatPhone } from '@/lib/phone';
+import DocumentPanel from '@/components/DocumentPanel';
 
 const UNIT_TYPE_LABELS: Record<string, string> = {
   studio: 'Studio',
@@ -323,6 +324,8 @@ export default function UnitDetailPage() {
           )}
         </div>
       </div>
+
+      <DocumentPanel entityType="unit" entityId={unitId} />
     </>
   );
 }

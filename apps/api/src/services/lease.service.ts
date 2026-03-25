@@ -1,4 +1,5 @@
 import { prisma } from '@propflow/db';
+import { LeaseType } from '@prisma/client';
 import { AppError } from '../middleware/error-handler';
 import { CURRENT_LEASE_STATUSES } from '../constants';
 
@@ -247,7 +248,7 @@ export async function renewLease(
         depositAmount: existing.depositAmount,
         startDate: new Date(data.startDate),
         endDate: new Date(data.endDate),
-        type: (data.type as any) ?? existing.type,
+        type: (data.type as LeaseType) ?? existing.type,
         lateFeeAmount: existing.lateFeeAmount,
         lateFeeGraceDays: existing.lateFeeGraceDays,
         rentDueDay: existing.rentDueDay,

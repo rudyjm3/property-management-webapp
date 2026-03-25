@@ -148,4 +148,76 @@ export const api = {
         { method: 'DELETE' }
       ),
   },
+  documents: {
+    /**
+     * Request a presigned S3 upload URL. Returns { uploadUrl, s3Key }.
+     */
+    requestUploadUrl: (data: {
+      entityType: string;
+      entityId: string;
+      fileName: string;
+      mimeType: string;
+      sizeBytes: number;
+      docCategory?: string | null;
+      label?: string | null;
+      visibleToTenant?: boolean;
+    }) =>
+      apiFetch<{ uploadUrl: string; s3Key: string; expiresInSeconds: number }>(
+        `/api/v1/organizations/${ORG_ID}/documents/upload-url`,
+        { method: 'POST', body: JSON.stringify(data) },
+      ),
+
+    /**
+     * Upload a file directly to S3 using the presigned URL (bypasses the API).
+     * contentType must match the value used when requesting the presigned URL.
+     */
+    uploadToS3: async (uploadUrl: string, file: File, contentType: string): Promise<void> => {
+      const res = await fetch(uploadUrl, {
+        method: 'PUT',
+        headers: { 'Content-Type': contentType },
+        body: file,
+      });
+      if (!res.ok) throw new Error(`S3 upload failed: ${res.status}`);
+    },
+
+    /**
+     * Confirm a successful upload and persist metadata in the DB.
+     */
+    confirmUpload: (data: {
+      s3Key: string;
+      entityType: string;
+      entityId: string;
+      fileName: string;
+      mimeType: string;
+      sizeBytes: number;
+      docCategory?: string | null;
+      label?: string | null;
+      visibleToTenant?: boolean;
+    }) =>
+      apiFetch<any>(
+        `/api/v1/organizations/${ORG_ID}/documents`,
+        { method: 'POST', body: JSON.stringify(data) },
+      ),
+
+    list: (params?: { entityType?: string; entityId?: string }) => {
+      const query = new URLSearchParams();
+      if (params?.entityType) query.set('entityType', params.entityType);
+      if (params?.entityId) query.set('entityId', params.entityId);
+      const qs = query.toString();
+      return apiFetch<any[]>(
+        `/api/v1/organizations/${ORG_ID}/documents${qs ? `?${qs}` : ''}`,
+      );
+    },
+
+    getDownloadUrl: (docId: string) =>
+      apiFetch<{ downloadUrl: string; document: any }>(
+        `/api/v1/organizations/${ORG_ID}/documents/${docId}/download-url`,
+      ),
+
+    delete: (docId: string) =>
+      apiFetch<void>(
+        `/api/v1/organizations/${ORG_ID}/documents/${docId}`,
+        { method: 'DELETE' },
+      ),
+  },
 };

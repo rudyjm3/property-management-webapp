@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { api } from '@/lib/api';
+import DocumentPanel from '@/components/DocumentPanel';
 
 interface LeaseDetail {
   id: string;
@@ -787,6 +788,8 @@ export default function LeaseDetailPage() {
           </div>
         </div>
       )}
+
+      <DocumentPanel entityType="lease" entityId={leaseId} />
     </>
   );
 }

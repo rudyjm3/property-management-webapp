@@ -17,6 +17,8 @@ import {
   INCOME_SOURCES,
   VENDOR_STATUSES,
   PROPERTY_TYPES,
+  DOCUMENT_ENTITY_TYPES,
+  DOCUMENT_CATEGORIES,
 } from '../constants';
 
 // ─── Organization ─────────────────────────────────────────────────────────────
@@ -286,6 +288,36 @@ export const sendMessageSchema = z.object({
   workOrderId: z.string().uuid().nullable().optional(),
   subject: z.string().max(500).nullable().optional(),
   threadId: z.string().uuid().nullable().optional(),
+});
+
+// ─── Document ─────────────────────────────────────────────────────────────────
+
+export const requestUploadSchema = z.object({
+  entityType: z.enum(DOCUMENT_ENTITY_TYPES),
+  entityId: z.string().uuid(),
+  fileName: z.string().min(1).max(500),
+  mimeType: z.string().min(1).max(100),
+  sizeBytes: z.number().int().positive().max(52_428_800), // 50 MB max
+  docCategory: z.enum(DOCUMENT_CATEGORIES).nullable().optional(),
+  label: z.string().max(200).nullable().optional(),
+  visibleToTenant: z.boolean().default(false),
+});
+
+export const confirmUploadSchema = z.object({
+  s3Key: z.string().min(1).max(1000),
+  entityType: z.enum(DOCUMENT_ENTITY_TYPES),
+  entityId: z.string().uuid(),
+  fileName: z.string().min(1).max(500),
+  mimeType: z.string().min(1).max(100),
+  sizeBytes: z.number().int().positive(),
+  docCategory: z.enum(DOCUMENT_CATEGORIES).nullable().optional(),
+  label: z.string().max(200).nullable().optional(),
+  visibleToTenant: z.boolean().default(false),
+});
+
+export const listDocumentsSchema = z.object({
+  entityType: z.enum(DOCUMENT_ENTITY_TYPES).optional(),
+  entityId: z.string().uuid().optional(),
 });
 
 // ─── Pagination ───────────────────────────────────────────────────────────────

@@ -6,6 +6,7 @@ import Link from 'next/link';
 import { api } from '@/lib/api';
 import { formatPhone } from '@/lib/phone';
 import PhoneInput from '@/components/PhoneInput';
+import DocumentPanel from '@/components/DocumentPanel';
 
 const PORTAL_STATUS_LABELS: Record<string, string> = {
   active: 'Portal Active',
@@ -442,6 +443,8 @@ export default function TenantDetailPage() {
           </div>
         </div>
       )}
+
+      <DocumentPanel entityType="tenant" entityId={tenantId} />
     </>
   );
 }

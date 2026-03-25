@@ -1,0 +1,90 @@
+name: CI
+
+on:
+  push:
+    branches: [main, master, "claude/**"]
+  pull_request:
+    branches: [main, master]
+
+jobs:
+  # ─── Lint + Type-check ────────────────────────────────────────────────────
+  lint:
+    name: Lint & type-check
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "npm"
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Lint (API)
+        run: npm run lint --workspace=apps/api
+
+      - name: Lint (web)
+        run: npm run lint --workspace=apps/web
+
+      - name: Type-check (API)
+        run: npx tsc --noEmit
+        working-directory: apps/api
+
+      - name: Type-check (web)
+        run: npx tsc --noEmit
+        working-directory: apps/web
+
+  # ─── Unit tests ───────────────────────────────────────────────────────────
+  test:
+    name: Unit tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "npm"
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run API tests
+        run: npm test --workspace=apps/api
+
+  # ─── Build ────────────────────────────────────────────────────────────────
+  build:
+    name: Build
+    runs-on: ubuntu-latest
+    needs: [lint, test]
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "npm"
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build all packages
+        run: npx turbo run build
+
+  # ─── Staging deploy ───────────────────────────────────────────────────────
+  # Vercel auto-deploys when this workflow pushes to main.
+  # Railway auto-deploys via its own GitHub integration.
+  # This job documents those flows and can be used for smoke-test hooks.
+  staging-status:
+    name: Staging deploy summary
+    runs-on: ubuntu-latest
+    needs: build
+    if: github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master'
+    steps:
+      - name: Confirm staging deploy triggered
+        run: |
+          echo "Build passed. Vercel + Railway will auto-deploy from main."
+          echo "Web:  https://propflow-staging.vercel.app  (Vercel)"
+          echo "API:  Railway dashboard > propflow-api-staging"

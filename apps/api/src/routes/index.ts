@@ -3,6 +3,7 @@ import propertyRoutes from './properties';
 import tenantRoutes from './tenants';
 import leaseRoutes from './leases';
 import paymentRoutes from './payments';
+import documentRoutes from './documents';
 import notificationRoutes from './notifications';
 
 const router = Router();
@@ -12,6 +13,7 @@ router.use('/organizations/:orgId/properties', propertyRoutes);
 router.use('/organizations/:orgId/tenants', tenantRoutes);
 router.use('/organizations/:orgId/leases', leaseRoutes);
 router.use('/organizations/:orgId/payments', paymentRoutes);
+router.use('/organizations/:orgId/documents', documentRoutes);
 router.use('/organizations/:orgId/notifications', notificationRoutes);
 
 export default router;
