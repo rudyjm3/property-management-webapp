@@ -177,6 +177,15 @@ export const api = {
         method: 'DELETE',
       }),
   },
+  staff: {
+    list: () => apiFetch<any[]>(`/api/v1/organizations/${ORG_ID}/staff`),
+  },
+  vendors: {
+    list: (params?: { activeOnly?: boolean }) => {
+      const qs = params?.activeOnly ? '?status=active' : '';
+      return apiFetch<any[]>(`/api/v1/organizations/${ORG_ID}/vendors${qs}`);
+    },
+  },
   documents: {
     /**
      * Request a presigned S3 upload URL. Returns { uploadUrl, s3Key }.

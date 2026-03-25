@@ -149,9 +149,18 @@ export async function updateWorkOrder(
   workOrderId: string,
   data: UpdateWorkOrderData
 ) {
-  await getWorkOrder(organizationId, workOrderId); // throws if not found
+  const existing = await getWorkOrder(organizationId, workOrderId); // throws if not found
 
   const updateData: Record<string, unknown> = { ...data };
+
+  // Auto-transition to 'assigned' when a staff member or vendor is first set
+  if (
+    (data.assignedToUserId || data.vendorId) &&
+    existing.status === 'new_order' &&
+    !data.status
+  ) {
+    updateData.status = 'assigned';
+  }
 
   if (data.scheduledAt !== undefined) {
     updateData.scheduledAt = data.scheduledAt ? new Date(data.scheduledAt) : null;

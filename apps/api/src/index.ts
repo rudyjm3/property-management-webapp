@@ -5,6 +5,7 @@ import morgan from 'morgan';
 import dotenv from 'dotenv';
 import routes from './routes';
 import { errorHandler } from './middleware/error-handler';
+import { startSlaBreachJob } from './jobs/slaBreachCheck';
 
 dotenv.config({ path: '../../.env' });
 
@@ -36,6 +37,7 @@ app.use(errorHandler);
 
 app.listen(PORT, () => {
   console.log(`PropFlow API running on http://localhost:${PORT}`);
+  startSlaBreachJob();
 });
 
 export default app;

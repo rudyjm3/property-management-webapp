@@ -6,6 +6,8 @@ import paymentRoutes from './payments';
 import documentRoutes from './documents';
 import notificationRoutes from './notifications';
 import workOrderRoutes from './workOrders';
+import staffRoutes from './staff';
+import vendorRoutes from './vendors';
 
 const router = Router();
 
@@ -17,5 +19,7 @@ router.use('/organizations/:orgId/payments', paymentRoutes);
 router.use('/organizations/:orgId/documents', documentRoutes);
 router.use('/organizations/:orgId/notifications', notificationRoutes);
 router.use('/organizations/:orgId/work-orders', workOrderRoutes);
+router.use('/organizations/:orgId/staff', staffRoutes);
+router.use('/organizations/:orgId/vendors', vendorRoutes);
 
 export default router;

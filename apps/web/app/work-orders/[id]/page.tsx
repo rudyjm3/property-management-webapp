@@ -36,6 +36,21 @@ interface WorkOrder {
   vendor: { id: string; companyName: string; contactName: string; phonePrimary: string } | null;
 }
 
+interface StaffMember {
+  id: string;
+  name: string;
+  email: string;
+  role: string;
+}
+
+interface Vendor {
+  id: string;
+  companyName: string;
+  contactName: string;
+  phonePrimary: string;
+  preferred: boolean | null;
+}
+
 const PRIORITY_COLORS: Record<string, string> = {
   emergency: 'badge-notice',
   urgent: 'badge-maintenance',
@@ -100,6 +115,16 @@ export default function WorkOrderDetailPage() {
   const [editError, setEditError] = useState('');
   const [editSubmitting, setEditSubmitting] = useState(false);
 
+  // Assign modal state
+  const [showAssign, setShowAssign] = useState(false);
+  const [staffList, setStaffList] = useState<StaffMember[]>([]);
+  const [vendorList, setVendorList] = useState<Vendor[]>([]);
+  const [assignStaffId, setAssignStaffId] = useState('');
+  const [assignVendorId, setAssignVendorId] = useState('');
+  const [assignError, setAssignError] = useState('');
+  const [assignSubmitting, setAssignSubmitting] = useState(false);
+  const [assignLoading, setAssignLoading] = useState(false);
+
   async function load() {
     try {
       const data = await api.workOrders.get(id);
@@ -161,6 +186,45 @@ export default function WorkOrderDetailPage() {
     }
   }
 
+  async function openAssign() {
+    if (!workOrder) return;
+    setAssignStaffId(workOrder.assignedTo?.id ?? '');
+    setAssignVendorId(workOrder.vendor?.id ?? '');
+    setAssignError('');
+    setShowAssign(true);
+    setAssignLoading(true);
+    try {
+      const [staff, vendors] = await Promise.all([
+        api.staff.list(),
+        api.vendors.list({ activeOnly: true }),
+      ]);
+      setStaffList(staff);
+      setVendorList(vendors);
+    } catch (err) {
+      console.error('Failed to load staff/vendors:', err);
+    } finally {
+      setAssignLoading(false);
+    }
+  }
+
+  async function handleAssignSubmit(e: React.FormEvent) {
+    e.preventDefault();
+    setAssignError('');
+    setAssignSubmitting(true);
+    try {
+      const updated = await api.workOrders.update(workOrder!.id, {
+        assignedToUserId: assignStaffId || null,
+        vendorId: assignVendorId || null,
+      });
+      setWorkOrder(updated);
+      setShowAssign(false);
+    } catch (err: any) {
+      setAssignError(err.message || 'Failed to assign');
+    } finally {
+      setAssignSubmitting(false);
+    }
+  }
+
   if (loading) return <div className="loading">Loading work order…</div>;
   if (!workOrder) return <div className="empty-state"><h3>Work order not found</h3></div>;
 
@@ -169,6 +233,7 @@ export default function WorkOrderDetailPage() {
     && !['completed', 'closed', 'cancelled'].includes(workOrder.status);
 
   const nextStatuses = NEXT_STATUSES[workOrder.status] ?? [];
+  const isAssigned = !!workOrder.assignedTo || !!workOrder.vendor;
 
   return (
     <>
@@ -187,6 +252,14 @@ export default function WorkOrderDetailPage() {
           </p>
         </div>
         <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+          {!['completed', 'closed', 'cancelled'].includes(workOrder.status) && (
+            <button
+              className={isAssigned ? 'btn btn-secondary' : 'btn btn-primary'}
+              onClick={openAssign}
+            >
+              {isAssigned ? 'Reassign' : 'Assign'}
+            </button>
+          )}
           <button className="btn btn-secondary" onClick={openEdit}>Edit Details</button>
         </div>
       </div>
@@ -317,6 +390,31 @@ export default function WorkOrderDetailPage() {
             </div>
           </div>
 
+          {/* Assigned to */}
+          <div className="card">
+            <div className="card-body">
+              <h3 style={{ fontSize: '13px', fontWeight: 600, color: 'var(--color-text-muted)', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: '12px' }}>Assigned To</h3>
+              {workOrder.assignedTo ? (
+                <div style={{ marginBottom: workOrder.vendor ? '12px' : 0 }}>
+                  <div style={{ fontSize: '11px', color: 'var(--color-text-muted)', marginBottom: '2px' }}>Staff</div>
+                  <div style={{ fontWeight: 500 }}>{workOrder.assignedTo.name}</div>
+                  <div style={{ fontSize: '13px', color: 'var(--color-text-muted)' }}>{workOrder.assignedTo.email}</div>
+                </div>
+              ) : null}
+              {workOrder.vendor ? (
+                <div>
+                  <div style={{ fontSize: '11px', color: 'var(--color-text-muted)', marginBottom: '2px' }}>Vendor</div>
+                  <div style={{ fontWeight: 500 }}>{workOrder.vendor.companyName}</div>
+                  <div style={{ fontSize: '13px', color: 'var(--color-text-muted)' }}>{workOrder.vendor.contactName}</div>
+                  <div style={{ fontSize: '13px', color: 'var(--color-text-muted)' }}>{workOrder.vendor.phonePrimary}</div>
+                </div>
+              ) : null}
+              {!workOrder.assignedTo && !workOrder.vendor && (
+                <div style={{ fontSize: '13px', color: 'var(--color-text-muted)' }}>Unassigned</div>
+              )}
+            </div>
+          </div>
+
           {/* Tenant */}
           {workOrder.tenant && (
             <div className="card">
@@ -343,29 +441,6 @@ export default function WorkOrderDetailPage() {
             </div>
           )}
 
-          {/* Assigned to */}
-          {workOrder.assignedTo && (
-            <div className="card">
-              <div className="card-body">
-                <h3 style={{ fontSize: '13px', fontWeight: 600, color: 'var(--color-text-muted)', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: '12px' }}>Assigned To</h3>
-                <div style={{ fontWeight: 500 }}>{workOrder.assignedTo.name}</div>
-                <div style={{ fontSize: '13px', color: 'var(--color-text-muted)' }}>{workOrder.assignedTo.email}</div>
-              </div>
-            </div>
-          )}
-
-          {/* Vendor */}
-          {workOrder.vendor && (
-            <div className="card">
-              <div className="card-body">
-                <h3 style={{ fontSize: '13px', fontWeight: 600, color: 'var(--color-text-muted)', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: '12px' }}>Vendor</h3>
-                <div style={{ fontWeight: 500 }}>{workOrder.vendor.companyName}</div>
-                <div style={{ fontSize: '13px', color: 'var(--color-text-muted)' }}>{workOrder.vendor.contactName}</div>
-                <div style={{ fontSize: '13px', color: 'var(--color-text-muted)' }}>{workOrder.vendor.phonePrimary}</div>
-              </div>
-            </div>
-          )}
-
           {/* Dates */}
           <div className="card">
             <div className="card-body">
@@ -378,6 +453,64 @@ export default function WorkOrderDetailPage() {
           </div>
         </div>
       </div>
+
+      {/* Assign Modal */}
+      {showAssign && (
+        <div className="modal-overlay" onClick={() => setShowAssign(false)}>
+          <div className="modal" onClick={(e) => e.stopPropagation()} style={{ maxWidth: '440px' }}>
+            <div className="modal-header">
+              <h2>{isAssigned ? 'Reassign Work Order' : 'Assign Work Order'}</h2>
+              <button className="btn btn-sm btn-secondary" onClick={() => setShowAssign(false)}>X</button>
+            </div>
+            <form onSubmit={handleAssignSubmit}>
+              <div className="modal-body">
+                {assignError && (
+                  <div style={{ color: 'var(--color-danger)', marginBottom: '12px', fontSize: '14px' }}>{assignError}</div>
+                )}
+                {assignLoading ? (
+                  <div style={{ fontSize: '14px', color: 'var(--color-text-muted)' }}>Loading staff and vendors…</div>
+                ) : (
+                  <>
+                    <div className="form-group">
+                      <label>Staff Member</label>
+                      <select value={assignStaffId} onChange={(e) => setAssignStaffId(e.target.value)}>
+                        <option value="">— None —</option>
+                        {staffList.map((s) => (
+                          <option key={s.id} value={s.id}>
+                            {s.name} ({s.role})
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                    <div className="form-group">
+                      <label>Vendor</label>
+                      <select value={assignVendorId} onChange={(e) => setAssignVendorId(e.target.value)}>
+                        <option value="">— None —</option>
+                        {vendorList.map((v) => (
+                          <option key={v.id} value={v.id}>
+                            {v.companyName}{v.preferred ? ' ★' : ''}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                    {!assignStaffId && !assignVendorId && (
+                      <p style={{ fontSize: '13px', color: 'var(--color-text-muted)', marginTop: '4px' }}>
+                        Select at least one assignee, or save with both empty to unassign.
+                      </p>
+                    )}
+                  </>
+                )}
+              </div>
+              <div className="modal-footer">
+                <button type="button" className="btn btn-secondary" onClick={() => setShowAssign(false)}>Cancel</button>
+                <button type="submit" className="btn btn-primary" disabled={assignSubmitting || assignLoading}>
+                  {assignSubmitting ? 'Saving…' : 'Save Assignment'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
 
       {/* Edit Details Modal */}
       {showEdit && (
