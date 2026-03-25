@@ -8,6 +8,7 @@ import notificationRoutes from './notifications';
 import workOrderRoutes from './workOrders';
 import staffRoutes from './staff';
 import vendorRoutes from './vendors';
+import messageRoutes from './messages';
 
 const router = Router();
 
@@ -21,5 +22,6 @@ router.use('/organizations/:orgId/notifications', notificationRoutes);
 router.use('/organizations/:orgId/work-orders', workOrderRoutes);
 router.use('/organizations/:orgId/staff', staffRoutes);
 router.use('/organizations/:orgId/vendors', vendorRoutes);
+router.use('/organizations/:orgId/messages', messageRoutes);
 
 export default router;

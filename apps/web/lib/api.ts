@@ -177,6 +177,17 @@ export const api = {
         method: 'DELETE',
       }),
   },
+  messages: {
+    threads: {
+      list: () => apiFetch<any[]>(`/api/v1/organizations/${ORG_ID}/messages/threads`),
+      get: (threadId: string) => apiFetch<any[]>(`/api/v1/organizations/${ORG_ID}/messages/threads/${threadId}`),
+    },
+    send: (data: { senderUserId: string; recipientTenantId: string; body: string; threadId?: string | null; subject?: string | null; unitId?: string | null; workOrderId?: string | null }) =>
+      apiFetch<any>(`/api/v1/organizations/${ORG_ID}/messages`, {
+        method: 'POST',
+        body: JSON.stringify(data),
+      }),
+  },
   staff: {
     list: () => apiFetch<any[]>(`/api/v1/organizations/${ORG_ID}/staff`),
   },
