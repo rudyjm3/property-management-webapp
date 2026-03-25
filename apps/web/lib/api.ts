@@ -148,6 +148,35 @@ export const api = {
         { method: 'DELETE' }
       ),
   },
+  workOrders: {
+    list: (params?: { status?: string; priority?: string; category?: string; propertyId?: string; unitId?: string; tenantId?: string; limit?: number }) => {
+      const query = new URLSearchParams();
+      if (params?.status) query.set('status', params.status);
+      if (params?.priority) query.set('priority', params.priority);
+      if (params?.category) query.set('category', params.category);
+      if (params?.propertyId) query.set('propertyId', params.propertyId);
+      if (params?.unitId) query.set('unitId', params.unitId);
+      if (params?.tenantId) query.set('tenantId', params.tenantId);
+      if (params?.limit) query.set('limit', String(params.limit));
+      const qs = query.toString();
+      return apiFetch<any[]>(`/api/v1/organizations/${ORG_ID}/work-orders${qs ? `?${qs}` : ''}`);
+    },
+    get: (id: string) => apiFetch<any>(`/api/v1/organizations/${ORG_ID}/work-orders/${id}`),
+    create: (data: any) =>
+      apiFetch<any>(`/api/v1/organizations/${ORG_ID}/work-orders`, {
+        method: 'POST',
+        body: JSON.stringify(data),
+      }),
+    update: (id: string, data: any) =>
+      apiFetch<any>(`/api/v1/organizations/${ORG_ID}/work-orders/${id}`, {
+        method: 'PATCH',
+        body: JSON.stringify(data),
+      }),
+    delete: (id: string) =>
+      apiFetch<void>(`/api/v1/organizations/${ORG_ID}/work-orders/${id}`, {
+        method: 'DELETE',
+      }),
+  },
   documents: {
     /**
      * Request a presigned S3 upload URL. Returns { uploadUrl, s3Key }.
