@@ -273,6 +273,57 @@ export interface LeaseExpiryTenantParams {
   organizationName: string;
 }
 
+// ─── Late Fee Applied (to tenant) ─────────────────────────────────────────────
+
+export interface LateFeeParams {
+  tenantName: string;
+  tenantEmail: string;
+  unitNumber: string;
+  propertyName: string;
+  originalDueDate: Date | string;
+  lateFeeAmount: number | string;
+  totalOwed: number | string;
+  organizationName: string;
+}
+
+export async function sendLateFeeToTenant(params: LateFeeParams) {
+  const {
+    tenantName,
+    tenantEmail,
+    unitNumber,
+    propertyName,
+    originalDueDate,
+    lateFeeAmount,
+    totalOwed,
+    organizationName,
+  } = params;
+
+  const body = `
+    <h1>Late Fee Applied</h1>
+    <p>Hi ${tenantName},</p>
+    <p>A late fee has been applied to your account because your rent payment was not received by the due date.</p>
+    <div class="info-box">
+      <div class="row"><span class="label">Property</span><span class="value">${propertyName}</span></div>
+      <div class="row"><span class="label">Unit</span><span class="value">${unitNumber}</span></div>
+      <div class="row"><span class="label">Original Due Date</span><span class="value">${formatDate(originalDueDate)}</span></div>
+      <div class="row"><span class="label">Late Fee</span><span class="value">${formatCurrency(lateFeeAmount)}</span></div>
+      <div class="row"><span class="label">Total Now Owed</span><span class="value">${formatCurrency(totalOwed)}</span></div>
+    </div>
+    <div class="alert-box"><p>Please submit your full payment including the late fee as soon as possible to avoid additional charges.</p></div>
+    <p>Contact your property manager if you have questions or would like to discuss a payment arrangement.</p>
+    <p style="margin-top:24px;font-size:13px;color:#9ca3af;">Managed by ${organizationName}</p>
+  `;
+
+  return resend.emails.send({
+    from: FROM,
+    to: tenantEmail,
+    subject: `Late fee applied — ${propertyName} Unit ${unitNumber}`,
+    html: baseLayout('Late Fee Applied', body),
+  });
+}
+
+// ─── Lease Expiry Notice (to tenant) ──────────────────────────────────────────
+
 export async function sendLeaseExpiryToTenant(params: LeaseExpiryTenantParams) {
   const {
     tenantName,

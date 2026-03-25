@@ -14,6 +14,8 @@ interface Payment {
   dueDate: string;
   paidAt: string | null;
   notes: string | null;
+  isLate: boolean;
+  lateFeeApplied: boolean;
   createdAt: string;
   lease: {
     id: string;
@@ -73,6 +75,8 @@ export default function PaymentsPage() {
   const [showForm, setShowForm] = useState(false);
   const [formError, setFormError] = useState('');
   const [submitting, setSubmitting] = useState(false);
+  const [runningLateFeeJob, setRunningLateFeeJob] = useState(false);
+  const [lateFeeJobResult, setLateFeeJobResult] = useState<string | null>(null);
 
   // Form options
   const [leaseOptions, setLeaseOptions] = useState<LeaseOption[]>([]);
@@ -191,6 +195,20 @@ export default function PaymentsPage() {
     setNotes('');
   }
 
+  async function handleRunLateFeeJob() {
+    setRunningLateFeeJob(true);
+    setLateFeeJobResult(null);
+    try {
+      const result = await api.notifications.triggerLateFees();
+      setLateFeeJobResult(`Applied ${result.lateFees.applied} late fee(s) — ${result.lateFees.skipped} skipped`);
+      await loadPayments();
+    } catch (err: any) {
+      setLateFeeJobResult(`Error: ${err.message}`);
+    } finally {
+      setRunningLateFeeJob(false);
+    }
+  }
+
   async function markAsPaid(paymentId: string) {
     try {
       await api.payments.update(paymentId, { status: 'completed' });
@@ -229,9 +247,21 @@ export default function PaymentsPage() {
             {payments.length} records &middot; ${totalCollected.toLocaleString()} collected &middot; ${totalPending.toLocaleString()} pending
           </p>
         </div>
-        <button className="btn btn-primary" onClick={openForm}>
-          + Log Payment
-        </button>
+        <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+          {lateFeeJobResult && (
+            <span style={{ fontSize: '13px', color: 'var(--color-text-muted)' }}>{lateFeeJobResult}</span>
+          )}
+          <button
+            className="btn btn-secondary"
+            onClick={handleRunLateFeeJob}
+            disabled={runningLateFeeJob}
+          >
+            {runningLateFeeJob ? 'Running…' : 'Run Late Fee Job'}
+          </button>
+          <button className="btn btn-primary" onClick={openForm}>
+            + Log Payment
+          </button>
+        </div>
       </div>
 
       {/* Filters */}
@@ -308,7 +338,17 @@ export default function PaymentsPage() {
                       {payment.lease.unit.property.name}
                     </div>
                   </td>
-                  <td>{TYPE_LABELS[payment.type] ?? payment.type}</td>
+                  <td>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                      {TYPE_LABELS[payment.type] ?? payment.type}
+                      {payment.type === 'late_fee' && (
+                        <span style={{ background: '#f59e0b', color: '#fff', borderRadius: '4px', fontSize: '10px', padding: '1px 5px', fontWeight: 700, letterSpacing: '0.02em' }}>LATE FEE</span>
+                      )}
+                      {payment.isLate && payment.type !== 'late_fee' && (
+                        <span style={{ background: 'var(--color-danger)', color: '#fff', borderRadius: '4px', fontSize: '10px', padding: '1px 5px', fontWeight: 700, letterSpacing: '0.02em' }}>LATE</span>
+                      )}
+                    </div>
+                  </td>
                   <td>{METHOD_LABELS[payment.method] ?? payment.method}</td>
                   <td style={{ fontWeight: 600 }}>${Number(payment.amount).toLocaleString()}</td>
                   <td>{new Date(payment.dueDate).toLocaleDateString()}</td>

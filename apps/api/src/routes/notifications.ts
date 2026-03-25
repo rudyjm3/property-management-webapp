@@ -113,4 +113,17 @@ router.post('/jobs/lease-expiry', requireCronSecret, async (req: Request, res: R
   }
 });
 
+// POST /api/v1/organizations/:orgId/notifications/jobs/late-fees
+// No cron secret required — intended to be triggered from the dashboard UI
+router.post('/jobs/late-fees', async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const { applyLateFees } = await import('../jobs/lateFeeJob');
+    const applyResult = await applyLateFees(req.params.orgId as string);
+    const notifResult = await notifService.runLateFeeNotificationJob(req.params.orgId as string);
+    res.json({ data: { lateFees: applyResult, notifications: notifResult } });
+  } catch (err) {
+    next(err);
+  }
+});
+
 export default router;

@@ -5,6 +5,7 @@ import {
   sendRentOverdueToManager,
   sendLeaseExpiryToManager,
   sendLeaseExpiryToTenant,
+  sendLateFeeToTenant,
 } from './email.service';
 
 // ─── Config ───────────────────────────────────────────────────────────────────
@@ -369,6 +370,122 @@ export async function runLeaseExpiryJob(organizationId?: string) {
   }
 
   return { processed: totalProcessed, succeeded: totalSucceeded, failed: totalFailed };
+}
+
+// ─── Late Fee Notifications ───────────────────────────────────────────────────
+
+/**
+ * Finds all pending late_fee payments created today and:
+ *  1. Emails the tenant about the applied late fee
+ *  2. Creates in-app notifications for managers with notifRentOverdue enabled
+ *
+ * Intended to be called after applyLateFees() runs.
+ */
+export async function runLateFeeNotificationJob(organizationId?: string) {
+  const now = new Date();
+  const startOfToday = new Date(now);
+  startOfToday.setHours(0, 0, 0, 0);
+  const endOfToday = new Date(now);
+  endOfToday.setHours(23, 59, 59, 999);
+
+  const lateFeePayments = await prisma.payment.findMany({
+    where: {
+      deletedAt: null,
+      status: 'pending',
+      type: 'late_fee',
+      createdAt: { gte: startOfToday, lte: endOfToday },
+      ...(organizationId ? { lease: { unit: { property: { organizationId } } } } : {}),
+    },
+    include: {
+      tenant: { select: { id: true, name: true, email: true } },
+      lease: {
+        include: {
+          payments: {
+            where: { type: 'rent', status: 'pending', deletedAt: null },
+            select: { amount: true, dueDate: true },
+            orderBy: { dueDate: 'desc' },
+            take: 1,
+          },
+          unit: {
+            include: {
+              property: {
+                include: {
+                  organization: {
+                    include: {
+                      users: {
+                        where: {
+                          status: 'active',
+                          role: { in: ['owner', 'manager'] },
+                          notifRentOverdue: { not: 'none' },
+                        },
+                        select: {
+                          id: true,
+                          name: true,
+                          notifRentOverdue: true,
+                        },
+                      },
+                    },
+                  },
+                },
+              },
+            },
+          },
+        },
+      },
+    },
+  });
+
+  const results = await Promise.allSettled(
+    lateFeePayments.map(async (payment) => {
+      const org = payment.lease.unit.property.organization;
+      const property = payment.lease.unit.property;
+      const unit = payment.lease.unit;
+      const relatedRent = payment.lease.payments[0];
+      const rentAmount = Number(relatedRent?.amount ?? 0);
+      const lateFeeAmount = Number(payment.amount);
+      const totalOwed = rentAmount + lateFeeAmount;
+
+      const tasks: Promise<unknown>[] = [];
+
+      // Email tenant
+      tasks.push(
+        sendLateFeeToTenant({
+          tenantName: payment.tenant.name,
+          tenantEmail: payment.tenant.email,
+          unitNumber: unit.unitNumber,
+          propertyName: property.name,
+          originalDueDate: relatedRent?.dueDate ?? payment.dueDate,
+          lateFeeAmount,
+          totalOwed,
+          organizationName: org.name,
+        })
+      );
+
+      // In-app notification for managers
+      for (const user of org.users) {
+        const pref = user.notifRentOverdue ?? 'email';
+        if (pref === 'in_app' || pref === 'both') {
+          tasks.push(
+            createInAppNotification({
+              userId: user.id,
+              organizationId: org.id,
+              type: 'late_fee_applied',
+              title: `Late fee applied — ${payment.tenant.name}`,
+              body: `A ${new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(lateFeeAmount)} late fee was applied to ${property.name} Unit ${unit.unitNumber}.`,
+              actionUrl: `/payments`,
+            })
+          );
+        }
+      }
+
+      await Promise.allSettled(tasks);
+    })
+  );
+
+  const succeeded = results.filter((r) => r.status === 'fulfilled').length;
+  const failed = results.filter((r) => r.status === 'rejected').length;
+
+  return { processed: lateFeePayments.length, succeeded, failed };
 }
 
 // ─── In-App Notification Queries ──────────────────────────────────────────────

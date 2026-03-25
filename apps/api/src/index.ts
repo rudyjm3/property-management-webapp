@@ -6,6 +6,7 @@ import dotenv from 'dotenv';
 import routes from './routes';
 import { errorHandler } from './middleware/error-handler';
 import { startSlaBreachJob } from './jobs/slaBreachCheck';
+import { startLateFeeJob } from './jobs/lateFeeJob';
 
 dotenv.config({ path: '../../.env' });
 
@@ -38,6 +39,7 @@ app.use(errorHandler);
 app.listen(PORT, () => {
   console.log(`PropFlow API running on http://localhost:${PORT}`);
   startSlaBreachJob();
+  startLateFeeJob();
 });
 
 export default app;

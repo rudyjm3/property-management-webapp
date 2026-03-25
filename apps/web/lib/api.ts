@@ -188,6 +188,12 @@ export const api = {
         body: JSON.stringify(data),
       }),
   },
+  notifications: {
+    triggerLateFees: () =>
+      apiFetch<any>(`/api/v1/organizations/${ORG_ID}/notifications/jobs/late-fees`, { method: 'POST' }),
+    triggerRentReminders: () =>
+      apiFetch<any>(`/api/v1/organizations/${ORG_ID}/notifications/jobs/rent-reminders`, { method: 'POST' }),
+  },
   staff: {
     list: () => apiFetch<any[]>(`/api/v1/organizations/${ORG_ID}/staff`),
   },
