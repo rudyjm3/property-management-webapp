@@ -2,6 +2,9 @@ import { PrismaClient } from '@prisma/client';
 
 const prisma = new PrismaClient();
 
+// Stable IDs — never change these so .env.local never needs updating
+const SEED_ORG_ID = 'a1b2c3d4-0000-4000-8000-seed00000001';
+
 async function main() {
   console.log('Seeding database...');
 
@@ -23,6 +26,7 @@ async function main() {
   // Create demo organization
   const org = await prisma.organization.create({
     data: {
+      id: SEED_ORG_ID,
       name: 'Sunset Property Management',
       slug: 'sunset-pm',
       email: 'manager@sunset-pm.com',
@@ -156,8 +160,7 @@ async function main() {
   console.log(`  Tenants: ${tenants.length} tenants created`);
   console.log(`  Leases: ${leases.length} active leases created`);
   console.log('');
-  console.log('  ⚠  Update apps/web/.env.local:');
-  console.log(`     NEXT_PUBLIC_ORG_ID=${org.id}`);
+  console.log(`  ORG_ID (stable): ${org.id}`);
 }
 
 main()
