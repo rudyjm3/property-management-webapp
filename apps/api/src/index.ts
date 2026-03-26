@@ -7,6 +7,7 @@ import routes from './routes';
 import { errorHandler } from './middleware/error-handler';
 import { startSlaBreachJob } from './jobs/slaBreachCheck';
 import { startLateFeeJob } from './jobs/lateFeeJob';
+import stripeWebhookHandler from './webhooks/stripe';
 
 dotenv.config({ path: '../../.env' });
 
@@ -23,6 +24,10 @@ app.use(
   })
 );
 app.use(morgan('dev'));
+
+// Stripe webhook — must be registered before express.json() to receive the raw body
+app.post('/api/webhooks/stripe', express.raw({ type: 'application/json' }), stripeWebhookHandler);
+
 app.use(express.json());
 
 // Health check

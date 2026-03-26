@@ -1,10 +1,10 @@
-import { prisma } from '@propflow/db';
+import { prisma, VendorStatus } from '@propflow/db';
 
 export async function listVendors(organizationId: string, opts: { activeOnly?: boolean } = {}) {
   return prisma.vendor.findMany({
     where: {
       organizationId,
-      ...(opts.activeOnly ? { status: 'active' as any } : {}),
+      ...(opts.activeOnly ? { status: VendorStatus.active } : {}),
     },
     select: {
       id: true,

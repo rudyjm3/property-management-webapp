@@ -1,8 +1,8 @@
-import { prisma } from '@propflow/db';
+import { prisma, WorkOrderStatus } from '@propflow/db';
 
 const INTERVAL_MS = 5 * 60 * 1000; // 5 minutes
 
-const TERMINAL_STATUSES = ['completed', 'closed', 'cancelled'];
+const TERMINAL_STATUSES: WorkOrderStatus[] = ['completed', 'closed', 'cancelled'];
 
 async function checkSlaBreaches() {
   try {
@@ -10,7 +10,7 @@ async function checkSlaBreaches() {
       where: {
         slaBreached: false,
         slaDeadlineAt: { lt: new Date() },
-        status: { notIn: TERMINAL_STATUSES as any[] },
+        status: { notIn: TERMINAL_STATUSES },
       },
       data: { slaBreached: true },
     });
