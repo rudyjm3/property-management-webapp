@@ -275,4 +275,26 @@ export const api = {
         { method: 'DELETE' },
       ),
   },
+
+  connect: {
+    getStatus: () =>
+      apiFetch<{
+        stripeAccountId: string | null;
+        stripeAccountStatus: 'not_connected' | 'pending' | 'active' | 'restricted';
+        stripeAccountDetailsSubmitted: boolean;
+      }>(`/api/v1/organizations/${ORG_ID}/connect/status`),
+
+    createAccountLink: () =>
+      apiFetch<{ url: string }>(`/api/v1/organizations/${ORG_ID}/connect/account-link`, {
+        method: 'POST',
+      }),
+
+    syncStatus: () =>
+      apiFetch<{
+        stripeAccountStatus: 'not_connected' | 'pending' | 'active' | 'restricted';
+        stripeAccountDetailsSubmitted: boolean;
+      }>(`/api/v1/organizations/${ORG_ID}/connect/sync`, {
+        method: 'POST',
+      }),
+  },
 };

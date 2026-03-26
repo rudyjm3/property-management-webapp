@@ -21,8 +21,11 @@ model Organization {
   planTier             PlanTier           @default(starter) @map("plan_tier")
   stripeCustomerId     String?            @unique @map("stripe_customer_id")
   stripeSubscriptionId String?            @map("stripe_subscription_id")
-  subscriptionStatus   SubscriptionStatus @default(trialing) @map("subscription_status")
-  trialEndsAt          DateTime?          @map("trial_ends_at")
+  subscriptionStatus            SubscriptionStatus   @default(trialing) @map("subscription_status")
+  trialEndsAt                   DateTime?            @map("trial_ends_at")
+  stripeAccountId               String?              @unique @map("stripe_account_id")
+  stripeAccountStatus           ConnectAccountStatus @default(not_connected) @map("stripe_account_status")
+  stripeAccountDetailsSubmitted Boolean              @default(false) @map("stripe_account_details_submitted")
   lateFeeAmount        Decimal            @default(50) @map("late_fee_amount") @db.Decimal(10, 2)
   gracePeriodDays      Int                @default(5) @map("grace_period_days")
   rentDueDay           Int                @default(1) @map("rent_due_day")
@@ -51,6 +54,13 @@ enum SubscriptionStatus {
   trialing
   past_due
   canceled
+}
+
+enum ConnectAccountStatus {
+  not_connected
+  pending
+  active
+  restricted
 }
 
 // ─── User ─────────────────────────────────────────────────────────────────────

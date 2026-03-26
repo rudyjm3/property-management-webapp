@@ -5,6 +5,7 @@ export type UserStatus = 'active' | 'invited' | 'deactivated';
 
 export type PlanTier = 'starter' | 'pro' | 'enterprise';
 export type SubscriptionStatus = 'active' | 'trialing' | 'past_due' | 'canceled';
+export type ConnectAccountStatus = 'not_connected' | 'pending' | 'active' | 'restricted';
 
 export type PropertyType = 'multifamily' | 'single_family' | 'commercial' | 'mixed_use';
 
@@ -69,6 +70,9 @@ export interface Organization {
   stripeSubscriptionId: string | null;
   subscriptionStatus: SubscriptionStatus;
   trialEndsAt: Date | null;
+  stripeAccountId: string | null;
+  stripeAccountStatus: ConnectAccountStatus;
+  stripeAccountDetailsSubmitted: boolean;
   lateFeeAmount: number;
   gracePeriodDays: number;
   rentDueDay: number;
