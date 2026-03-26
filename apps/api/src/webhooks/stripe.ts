@@ -33,24 +33,30 @@ export default async function stripeWebhookHandler(req: Request, res: Response):
     return;
   }
 
-  switch (event.type) {
-    case 'account.updated': {
-      const account = event.data.object as Stripe.Account;
-      const org = await prisma.organization.findFirst({
-        where: { stripeAccountId: account.id },
-        select: { id: true },
-      });
+  try {
+    switch (event.type) {
+      case 'account.updated': {
+        const account = event.data.object as Stripe.Account;
+        const org = await prisma.organization.findFirst({
+          where: { stripeAccountId: account.id },
+          select: { id: true },
+        });
 
-      if (org) {
-        await stripeService.syncAccountStatus(org.id, account.id);
-        console.log(`[stripe-webhook] Synced connect status for org ${org.id}`);
+        if (org) {
+          await stripeService.syncAccountStatus(org.id, account.id);
+          console.log(`[stripe-webhook] Synced connect status for org ${org.id}`);
+        }
+        break;
       }
-      break;
-    }
 
-    default:
-      // Acknowledge unhandled events without processing
-      break;
+      default:
+        // Acknowledge unhandled events without processing
+        break;
+    }
+  } catch (err) {
+    console.error(`[stripe-webhook] Failed to process event ${event.type}:`, err);
+    res.status(500).json({ error: 'Webhook processing failed' });
+    return;
   }
 
   res.status(200).json({ received: true });

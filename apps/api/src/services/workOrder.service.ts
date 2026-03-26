@@ -1,4 +1,4 @@
-import { prisma } from '@propflow/db';
+import { prisma, WorkOrderStatus, WorkOrderPriority, WorkOrderCategory } from '@propflow/db';
 import { AppError } from '../middleware/error-handler';
 
 // ─── SLA deadline helpers ──────────────────────────────────────────────────────
@@ -47,9 +47,9 @@ export async function listWorkOrders(organizationId: string, opts: ListWorkOrder
   return prisma.workOrder.findMany({
     where: {
       unit: { property: { organizationId } },
-      ...(status ? { status: status as any } : {}),
-      ...(priority ? { priority: priority as any } : {}),
-      ...(category ? { category: category as any } : {}),
+      ...(status ? { status: status as WorkOrderStatus } : {}),
+      ...(priority ? { priority: priority as WorkOrderPriority } : {}),
+      ...(category ? { category: category as WorkOrderCategory } : {}),
       ...(propertyId ? { propertyId } : {}),
       ...(unitId ? { unitId } : {}),
       ...(tenantId ? { tenantId } : {}),
@@ -110,9 +110,9 @@ export async function createWorkOrder(organizationId: string, data: CreateWorkOr
       unitId: data.unitId,
       propertyId: data.propertyId ?? unit.propertyId,
       title: data.title ?? null,
-      category: data.category as any,
-      priority: priority as any,
-      status: 'new_order' as any,
+      category: data.category as WorkOrderCategory,
+      priority: priority as WorkOrderPriority,
+      status: WorkOrderStatus.new_order,
       description: data.description,
       entryPermissionGranted: data.entryPermissionGranted ?? false,
       preferredContactWindow: data.preferredContactWindow ?? null,
