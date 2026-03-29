@@ -133,9 +133,10 @@ export async function cancelPaymentIntent(
   const stripe = getStripe();
   try {
     return await stripe.paymentIntents.cancel(paymentIntentId);
-  } catch (err: any) {
-    if (err?.code === 'payment_intent_unexpected_state') {
-      throw new AppError(400, 'PAYMENT_INTENT_CANNOT_CANCEL', err.message);
+  } catch (err) {
+    const stripeErr = err as { code?: string; message?: string };
+    if (stripeErr?.code === 'payment_intent_unexpected_state') {
+      throw new AppError(400, 'PAYMENT_INTENT_CANNOT_CANCEL', stripeErr.message ?? 'Cannot cancel this PaymentIntent');
     }
     throw err;
   }
