@@ -10,6 +10,7 @@ import staffRoutes from './staff';
 import vendorRoutes from './vendors';
 import messageRoutes from './messages';
 import connectRoutes from './connect';
+import ledgerRoutes from './ledger';
 
 const router = Router();
 
@@ -25,5 +26,6 @@ router.use('/organizations/:orgId/staff', staffRoutes);
 router.use('/organizations/:orgId/vendors', vendorRoutes);
 router.use('/organizations/:orgId/messages', messageRoutes);
 router.use('/organizations/:orgId/connect', connectRoutes);
+router.use('/organizations/:orgId/ledger', ledgerRoutes);
 
 export default router;

@@ -11,6 +11,7 @@ interface Payment {
   type: string;
   status: string;
   method: string;
+  stripePaymentIntentId: string | null;
   dueDate: string;
   paidAt: string | null;
   notes: string | null;
@@ -27,6 +28,15 @@ interface Payment {
     };
   };
   tenant: { id: string; name: string; email: string };
+}
+
+interface LedgerEntry {
+  id: string;
+  type: 'credit' | 'debit';
+  amount: string;
+  balanceAfter: string;
+  description: string;
+  createdAt: string;
 }
 
 interface LeaseOption {
@@ -78,6 +88,20 @@ export default function PaymentsPage() {
   const [runningLateFeeJob, setRunningLateFeeJob] = useState(false);
   const [lateFeeJobResult, setLateFeeJobResult] = useState<string | null>(null);
 
+  // Tab state
+  const [activeTab, setActiveTab] = useState<'payments' | 'ledger'>('payments');
+  const [ledgerEntries, setLedgerEntries] = useState<LedgerEntry[]>([]);
+  const [ledgerLoading, setLedgerLoading] = useState(false);
+
+  // Connect status (for ACH initiation eligibility)
+  const [connectStatus, setConnectStatus] = useState<'not_connected' | 'pending' | 'active' | 'restricted'>('not_connected');
+
+  // ACH modal state
+  const [achPayment, setAchPayment] = useState<Payment | null>(null);
+  const [achLoading, setAchLoading] = useState(false);
+  const [achError, setAchError] = useState('');
+  const [achResult, setAchResult] = useState<{ clientSecret: string; paymentIntentId: string; status: string } | null>(null);
+
   // Form options
   const [leaseOptions, setLeaseOptions] = useState<LeaseOption[]>([]);
   const [formLoading, setFormLoading] = useState(false);
@@ -115,6 +139,21 @@ export default function PaymentsPage() {
   useEffect(() => {
     loadPayments();
   }, [loadPayments]);
+
+  useEffect(() => {
+    api.connect.getStatus()
+      .then((s) => setConnectStatus(s.stripeAccountStatus))
+      .catch(() => {});
+  }, []);
+
+  useEffect(() => {
+    if (activeTab !== 'ledger') return;
+    setLedgerLoading(true);
+    api.ledger.list({ limit: 50 })
+      .then((entries) => setLedgerEntries(entries as LedgerEntry[]))
+      .catch(console.error)
+      .finally(() => setLedgerLoading(false));
+  }, [activeTab]);
 
   async function openForm() {
     setShowForm(true);
@@ -195,6 +234,37 @@ export default function PaymentsPage() {
     setNotes('');
   }
 
+  function openAchModal(payment: Payment) {
+    setAchPayment(payment);
+    setAchError('');
+    setAchResult(null);
+  }
+
+  async function handleInitiateACH() {
+    if (!achPayment) return;
+    setAchLoading(true);
+    setAchError('');
+    try {
+      const result = await api.payments.initiateACH(achPayment.id);
+      setAchResult(result);
+      await loadPayments();
+    } catch (err: any) {
+      setAchError(err.message || 'Failed to initiate ACH');
+    } finally {
+      setAchLoading(false);
+    }
+  }
+
+  async function handleCancelACH(payment: Payment) {
+    if (!confirm(`Cancel the ACH PaymentIntent for ${payment.tenant.name}?`)) return;
+    try {
+      await api.payments.cancelACH(payment.id);
+      await loadPayments();
+    } catch (err: any) {
+      alert(err.message || 'Failed to cancel ACH');
+    }
+  }
+
   async function handleRunLateFeeJob() {
     setRunningLateFeeJob(true);
     setLateFeeJobResult(null);
@@ -264,127 +334,295 @@ export default function PaymentsPage() {
         </div>
       </div>
 
-      {/* Filters */}
-      <div style={{ display: 'flex', gap: '12px', marginBottom: '20px', flexWrap: 'wrap' }}>
-        <select
-          value={filterStatus}
-          onChange={(e) => setFilterStatus(e.target.value)}
-          style={{ padding: '6px 12px', border: '1px solid var(--color-border)', borderRadius: 'var(--radius)', fontSize: '14px', background: 'white' }}
-        >
-          <option value="">All Statuses</option>
-          {FILTER_STATUSES.filter(Boolean).map((s) => (
-            <option key={s} value={s}>{s.charAt(0).toUpperCase() + s.slice(1)}</option>
-          ))}
-        </select>
-
-        <select
-          value={filterType}
-          onChange={(e) => setFilterType(e.target.value)}
-          style={{ padding: '6px 12px', border: '1px solid var(--color-border)', borderRadius: 'var(--radius)', fontSize: '14px', background: 'white' }}
-        >
-          <option value="">All Types</option>
-          {FILTER_TYPES.filter(Boolean).map((t) => (
-            <option key={t} value={t}>{TYPE_LABELS[t]}</option>
-          ))}
-        </select>
-
-        {(filterStatus || filterType) && (
+      {/* Tabs */}
+      <div style={{ display: 'flex', gap: '0', marginBottom: '24px', borderBottom: '1px solid var(--color-border)' }}>
+        {(['payments', 'ledger'] as const).map((tab) => (
           <button
-            className="btn btn-sm btn-secondary"
-            onClick={() => { setFilterStatus(''); setFilterType(''); }}
+            key={tab}
+            onClick={() => setActiveTab(tab)}
+            style={{
+              padding: '8px 20px',
+              fontSize: '14px',
+              fontWeight: activeTab === tab ? 600 : 400,
+              color: activeTab === tab ? 'var(--color-primary)' : 'var(--color-text-muted)',
+              borderTop: 'none',
+              borderLeft: 'none',
+              borderRight: 'none',
+              borderBottomStyle: 'solid',
+              borderBottomWidth: '2px',
+              borderBottomColor: activeTab === tab ? 'var(--color-primary)' : 'transparent',
+              background: 'none',
+              cursor: 'pointer',
+              textTransform: 'capitalize',
+            }}
           >
-            Clear Filters
+            {tab}
           </button>
-        )}
+        ))}
       </div>
 
-      {loading ? (
-        <div className="loading">Loading payments...</div>
-      ) : payments.length === 0 ? (
-        <div className="empty-state">
-          <h3>No payments found</h3>
-          <p>{filterStatus || filterType ? 'Try adjusting your filters.' : 'Log the first payment to get started.'}</p>
-        </div>
-      ) : (
-        <div className="table-container">
-          <table>
-            <thead>
-              <tr>
-                <th>Tenant</th>
-                <th>Unit / Property</th>
-                <th>Type</th>
-                <th>Method</th>
-                <th>Amount</th>
-                <th>Due Date</th>
-                <th>Paid On</th>
-                <th>Status</th>
-                <th></th>
-              </tr>
-            </thead>
-            <tbody>
-              {payments.map((payment) => (
-                <tr key={payment.id}>
-                  <td>
-                    <Link href={`/tenants/${payment.tenant.id}`} style={{ fontWeight: 500 }}>
-                      {payment.tenant.name}
-                    </Link>
-                    <div style={{ fontSize: '12px', color: 'var(--color-text-muted)' }}>{payment.tenant.email}</div>
-                  </td>
-                  <td>
-                    <Link href={`/properties/${payment.lease.unit.property.id}/units/${payment.lease.unit.id}`}>
-                      Unit {payment.lease.unit.unitNumber}
-                    </Link>
-                    <div style={{ fontSize: '12px', color: 'var(--color-text-muted)' }}>
-                      {payment.lease.unit.property.name}
-                    </div>
-                  </td>
-                  <td>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                      {TYPE_LABELS[payment.type] ?? payment.type}
-                      {payment.type === 'late_fee' && (
-                        <span style={{ background: '#f59e0b', color: '#fff', borderRadius: '4px', fontSize: '10px', padding: '1px 5px', fontWeight: 700, letterSpacing: '0.02em' }}>LATE FEE</span>
-                      )}
-                      {payment.isLate && payment.type !== 'late_fee' && (
-                        <span style={{ background: 'var(--color-danger)', color: '#fff', borderRadius: '4px', fontSize: '10px', padding: '1px 5px', fontWeight: 700, letterSpacing: '0.02em' }}>LATE</span>
-                      )}
-                    </div>
-                  </td>
-                  <td>{METHOD_LABELS[payment.method] ?? payment.method}</td>
-                  <td style={{ fontWeight: 600 }}>${Number(payment.amount).toLocaleString()}</td>
-                  <td>{new Date(payment.dueDate).toLocaleDateString()}</td>
-                  <td>
-                    {payment.paidAt
-                      ? new Date(payment.paidAt).toLocaleDateString()
-                      : <span style={{ color: 'var(--color-text-muted)' }}>—</span>}
-                  </td>
-                  <td>
-                    <span className={`badge ${STATUS_COLORS[payment.status] ?? 'badge-vacant'}`}>
-                      {payment.status}
-                    </span>
-                  </td>
-                  <td>
-                    <div style={{ display: 'flex', gap: '6px' }}>
-                      {payment.status === 'pending' && (
-                        <button
-                          className="btn btn-sm btn-primary"
-                          onClick={() => markAsPaid(payment.id)}
-                        >
-                          Mark Paid
-                        </button>
-                      )}
-                      <button
-                        className="btn btn-sm btn-secondary"
-                        style={{ color: 'var(--color-danger)' }}
-                        onClick={() => handleDelete(payment.id)}
-                      >
-                        Delete
-                      </button>
-                    </div>
-                  </td>
-                </tr>
+      {/* Payments tab */}
+      {activeTab === 'payments' && (
+        <>
+          <div style={{ display: 'flex', gap: '12px', marginBottom: '20px', flexWrap: 'wrap' }}>
+            <select
+              value={filterStatus}
+              onChange={(e) => setFilterStatus(e.target.value)}
+              style={{ padding: '6px 12px', border: '1px solid var(--color-border)', borderRadius: 'var(--radius)', fontSize: '14px', background: 'white' }}
+            >
+              <option value="">All Statuses</option>
+              {FILTER_STATUSES.filter(Boolean).map((s) => (
+                <option key={s} value={s}>{s.charAt(0).toUpperCase() + s.slice(1)}</option>
               ))}
-            </tbody>
-          </table>
+            </select>
+
+            <select
+              value={filterType}
+              onChange={(e) => setFilterType(e.target.value)}
+              style={{ padding: '6px 12px', border: '1px solid var(--color-border)', borderRadius: 'var(--radius)', fontSize: '14px', background: 'white' }}
+            >
+              <option value="">All Types</option>
+              {FILTER_TYPES.filter(Boolean).map((t) => (
+                <option key={t} value={t}>{TYPE_LABELS[t]}</option>
+              ))}
+            </select>
+
+            {(filterStatus || filterType) && (
+              <button
+                className="btn btn-sm btn-secondary"
+                onClick={() => { setFilterStatus(''); setFilterType(''); }}
+              >
+                Clear Filters
+              </button>
+            )}
+          </div>
+
+          {loading ? (
+            <div className="loading">Loading payments...</div>
+          ) : payments.length === 0 ? (
+            <div className="empty-state">
+              <h3>No payments found</h3>
+              <p>{filterStatus || filterType ? 'Try adjusting your filters.' : 'Log the first payment to get started.'}</p>
+            </div>
+          ) : (
+            <div className="table-container">
+              <table>
+                <thead>
+                  <tr>
+                    <th>Tenant</th>
+                    <th>Unit / Property</th>
+                    <th>Type</th>
+                    <th>Method</th>
+                    <th>Amount</th>
+                    <th>Due Date</th>
+                    <th>Paid On</th>
+                    <th>Status</th>
+                    <th></th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {payments.map((payment) => (
+                    <tr key={payment.id}>
+                      <td>
+                        <Link href={`/tenants/${payment.tenant.id}`} style={{ fontWeight: 500 }}>
+                          {payment.tenant.name}
+                        </Link>
+                        <div style={{ fontSize: '12px', color: 'var(--color-text-muted)' }}>{payment.tenant.email}</div>
+                      </td>
+                      <td>
+                        <Link href={`/properties/${payment.lease.unit.property.id}/units/${payment.lease.unit.id}`}>
+                          Unit {payment.lease.unit.unitNumber}
+                        </Link>
+                        <div style={{ fontSize: '12px', color: 'var(--color-text-muted)' }}>
+                          {payment.lease.unit.property.name}
+                        </div>
+                      </td>
+                      <td>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                          {TYPE_LABELS[payment.type] ?? payment.type}
+                          {payment.type === 'late_fee' && (
+                            <span style={{ background: '#f59e0b', color: '#fff', borderRadius: '4px', fontSize: '10px', padding: '1px 5px', fontWeight: 700, letterSpacing: '0.02em' }}>LATE FEE</span>
+                          )}
+                          {payment.isLate && payment.type !== 'late_fee' && (
+                            <span style={{ background: 'var(--color-danger)', color: '#fff', borderRadius: '4px', fontSize: '10px', padding: '1px 5px', fontWeight: 700, letterSpacing: '0.02em' }}>LATE</span>
+                          )}
+                        </div>
+                      </td>
+                      <td>{METHOD_LABELS[payment.method] ?? payment.method}</td>
+                      <td style={{ fontWeight: 600 }}>${Number(payment.amount).toLocaleString()}</td>
+                      <td>{new Date(payment.dueDate).toLocaleDateString()}</td>
+                      <td>
+                        {payment.paidAt
+                          ? new Date(payment.paidAt).toLocaleDateString()
+                          : <span style={{ color: 'var(--color-text-muted)' }}>—</span>}
+                      </td>
+                      <td>
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', alignItems: 'flex-start' }}>
+                          <span className={`badge ${STATUS_COLORS[payment.status] ?? 'badge-vacant'}`}>
+                            {payment.status}
+                          </span>
+                          {payment.status === 'pending' && payment.stripePaymentIntentId && (
+                            <span style={{ background: '#e0f2fe', color: '#0369a1', borderRadius: '4px', fontSize: '10px', padding: '1px 5px', fontWeight: 600 }}>
+                              PROCESSING
+                            </span>
+                          )}
+                        </div>
+                      </td>
+                      <td>
+                        <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
+                          {payment.status === 'pending' && !payment.stripePaymentIntentId && (
+                            <button
+                              className="btn btn-sm btn-primary"
+                              onClick={() => markAsPaid(payment.id)}
+                            >
+                              Mark Paid
+                            </button>
+                          )}
+                          {payment.status === 'pending' && connectStatus === 'active' && !payment.stripePaymentIntentId && (
+                            <button
+                              className="btn btn-sm btn-secondary"
+                              onClick={() => openAchModal(payment)}
+                            >
+                              Initiate ACH
+                            </button>
+                          )}
+                          {payment.status === 'pending' && payment.stripePaymentIntentId && (
+                            <button
+                              className="btn btn-sm btn-secondary"
+                              style={{ color: 'var(--color-danger)' }}
+                              onClick={() => handleCancelACH(payment)}
+                            >
+                              Cancel ACH
+                            </button>
+                          )}
+                          <button
+                            className="btn btn-sm btn-secondary"
+                            style={{ color: 'var(--color-danger)' }}
+                            onClick={() => handleDelete(payment.id)}
+                          >
+                            Delete
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </>
+      )}
+
+      {/* Ledger tab */}
+      {activeTab === 'ledger' && (
+        ledgerLoading ? (
+          <div className="loading">Loading ledger…</div>
+        ) : ledgerEntries.length === 0 ? (
+          <div className="empty-state">
+            <h3>No ledger entries yet</h3>
+            <p>Ledger entries are created automatically when ACH payments settle via Stripe webhooks.</p>
+          </div>
+        ) : (
+          <div className="table-container">
+            <table>
+              <thead>
+                <tr>
+                  <th>Date</th>
+                  <th>Type</th>
+                  <th>Description</th>
+                  <th>Amount</th>
+                  <th>Balance After</th>
+                </tr>
+              </thead>
+              <tbody>
+                {ledgerEntries.map((entry) => (
+                  <tr key={entry.id}>
+                    <td style={{ whiteSpace: 'nowrap' }}>{new Date(entry.createdAt).toLocaleDateString()}</td>
+                    <td>
+                      <span style={{
+                        color: entry.type === 'credit' ? 'var(--color-success, #16a34a)' : 'var(--color-danger)',
+                        fontWeight: 700,
+                        textTransform: 'uppercase',
+                        fontSize: '11px',
+                        letterSpacing: '0.05em',
+                      }}>
+                        {entry.type}
+                      </span>
+                    </td>
+                    <td style={{ fontSize: '13px', color: 'var(--color-text-muted)' }}>{entry.description}</td>
+                    <td style={{ fontWeight: 600 }}>
+                      <span style={{ color: entry.type === 'credit' ? 'var(--color-success, #16a34a)' : 'var(--color-danger)' }}>
+                        {entry.type === 'credit' ? '+' : '-'}${Number(entry.amount).toLocaleString()}
+                      </span>
+                    </td>
+                    <td style={{ fontWeight: 500 }}>${Number(entry.balanceAfter).toLocaleString()}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )
+      )}
+
+      {/* ACH Initiation Modal */}
+      {achPayment && (
+        <div className="modal-overlay" onClick={() => setAchPayment(null)}>
+          <div className="modal" onClick={(e) => e.stopPropagation()} style={{ maxWidth: '460px' }}>
+            <div className="modal-header">
+              <h2>Initiate ACH Payment</h2>
+              <button className="btn btn-sm btn-secondary" onClick={() => setAchPayment(null)}>X</button>
+            </div>
+            <div className="modal-body">
+              {achError && (
+                <div style={{ color: 'var(--color-danger)', marginBottom: '12px', fontSize: '14px' }}>
+                  {achError}
+                </div>
+              )}
+              {achResult ? (
+                <div>
+                  <p style={{ color: 'var(--color-success, #16a34a)', marginBottom: '8px', fontWeight: 600 }}>
+                    PaymentIntent created successfully
+                  </p>
+                  <p style={{ fontSize: '13px', color: 'var(--color-text-muted)' }}>
+                    Status: <strong>{achResult.status}</strong>
+                  </p>
+                  <p style={{ fontSize: '12px', color: 'var(--color-text-muted)', marginTop: '4px', wordBreak: 'break-all' }}>
+                    Intent ID: {achResult.paymentIntentId}
+                  </p>
+                  <p style={{ fontSize: '13px', marginTop: '12px' }}>
+                    The ACH debit has been submitted. Payment status will update automatically via webhook when the transfer settles (typically 3–5 business days).
+                  </p>
+                </div>
+              ) : (
+                <div>
+                  <p>This will create an ACH debit PaymentIntent for:</p>
+                  <ul style={{ margin: '12px 0', paddingLeft: '20px', fontSize: '14px', lineHeight: '1.8' }}>
+                    <li><strong>{achPayment.tenant.name}</strong></li>
+                    <li>Amount: <strong>${Number(achPayment.amount).toLocaleString()}</strong></li>
+                    <li>Type: <strong>{TYPE_LABELS[achPayment.type] ?? achPayment.type}</strong></li>
+                  </ul>
+                  <p style={{ fontSize: '13px', color: 'var(--color-text-muted)' }}>
+                    Funds will be transferred to your connected Stripe bank account after the ACH debit settles.
+                  </p>
+                </div>
+              )}
+            </div>
+            <div className="modal-footer">
+              <button type="button" className="btn btn-secondary" onClick={() => setAchPayment(null)}>
+                {achResult ? 'Close' : 'Cancel'}
+              </button>
+              {!achResult && (
+                <button
+                  type="button"
+                  className="btn btn-primary"
+                  disabled={achLoading}
+                  onClick={handleInitiateACH}
+                >
+                  {achLoading ? 'Creating…' : 'Confirm ACH'}
+                </button>
+              )}
+            </div>
+          </div>
         </div>
       )}
 

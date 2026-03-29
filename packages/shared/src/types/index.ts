@@ -54,6 +54,8 @@ export type VendorStatus = 'active' | 'inactive';
 export type DocumentEntityType = 'property' | 'unit' | 'lease' | 'tenant' | 'work_order' | 'vendor';
 export type DocumentCategory = 'lease' | 'inspection' | 'insurance' | 'id' | 'photo' | 'other';
 
+export type LedgerEntryType = 'credit' | 'debit';
+
 // ─── Entity Interfaces ────────────────────────────────────────────────────────
 
 export interface Organization {
@@ -368,6 +370,18 @@ export interface Document {
   visibleToTenant: boolean;
   docCategory: DocumentCategory | null;
   label: string | null;
+  createdAt: Date;
+}
+
+export interface LedgerEntry {
+  id: string;
+  organizationId: string;
+  paymentId: string | null;
+  type: LedgerEntryType;
+  amount: number;
+  balanceAfter: number;
+  description: string;
+  stripeEventId: string | null;
   createdAt: Date;
 }
 

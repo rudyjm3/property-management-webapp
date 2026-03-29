@@ -78,6 +78,10 @@ export const VENDOR_STATUSES = ['active', 'inactive'] as const;
 export const DOCUMENT_ENTITY_TYPES = ['property', 'unit', 'lease', 'tenant', 'work_order', 'vendor'] as const;
 export const DOCUMENT_CATEGORIES = ['lease', 'inspection', 'insurance', 'id', 'photo', 'other'] as const;
 
+// ─── Ledger ───────────────────────────────────────────────────────────────────
+
+export const LEDGER_ENTRY_TYPES = ['credit', 'debit'] as const;
+
 // ─── API ──────────────────────────────────────────────────────────────────────
 
 export const DEFAULT_PAGE_SIZE = 25;

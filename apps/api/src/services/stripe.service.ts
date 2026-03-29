@@ -94,3 +94,49 @@ export async function syncAccountStatus(orgId: string, stripeAccountId: string):
     },
   });
 }
+
+// ─── Create ACH PaymentIntent ─────────────────────────────────────────────────
+
+export interface CreatePaymentIntentOptions {
+  leaseId: string;
+  paymentId: string;
+  tenantName: string;
+  amount: number; // dollars — converted to cents internally
+  stripeAccountId: string;
+  description?: string;
+}
+
+export async function createPaymentIntent(
+  opts: CreatePaymentIntentOptions
+): Promise<Stripe.PaymentIntent> {
+  const stripe = getStripe();
+
+  return stripe.paymentIntents.create({
+    amount: Math.round(opts.amount * 100),
+    currency: 'usd',
+    payment_method_types: ['us_bank_account'],
+    transfer_data: { destination: opts.stripeAccountId },
+    description: opts.description ?? `Rent payment for lease ${opts.leaseId}`,
+    metadata: {
+      leaseId: opts.leaseId,
+      paymentId: opts.paymentId,
+      tenantName: opts.tenantName,
+    },
+  });
+}
+
+// ─── Cancel a PaymentIntent ───────────────────────────────────────────────────
+
+export async function cancelPaymentIntent(
+  paymentIntentId: string
+): Promise<Stripe.PaymentIntent> {
+  const stripe = getStripe();
+  try {
+    return await stripe.paymentIntents.cancel(paymentIntentId);
+  } catch (err: any) {
+    if (err?.code === 'payment_intent_unexpected_state') {
+      throw new AppError(400, 'PAYMENT_INTENT_CANNOT_CANCEL', err.message);
+    }
+    throw err;
+  }
+}
