@@ -80,28 +80,60 @@ export default function TenantInvitePage() {
     setError(null);
 
     try {
-      // 1. Create tenant
-      const tenant = await api.tenants.create({
-        name: tenantName,
-        email: tenantEmail,
-        phone: tenantPhone || null,
-      });
+      let tenantId = '';
+      const normalizedEmail = tenantEmail.trim().toLowerCase();
+
+      // 1. Create tenant (or reuse existing tenant if previous attempt already created them)
+      try {
+        const tenant = await api.tenants.create({
+          name: tenantName,
+          email: normalizedEmail,
+          phone: tenantPhone || null,
+        });
+        tenantId = tenant.id;
+      } catch (err: any) {
+        const message = String(err?.message || '');
+        if (!message.toLowerCase().includes('already exists')) {
+          throw err;
+        }
+
+        const existingTenants = await api.tenants.list();
+        const existing = existingTenants.find(
+          (t: any) => String(t.email || '').trim().toLowerCase() === normalizedEmail
+        );
+
+        if (!existing) {
+          throw err;
+        }
+
+        tenantId = existing.id;
+      }
+
+      const leaseEndDate =
+        leaseType === 'fixed_term'
+          ? endDate
+          : (() => {
+              if (!startDate) return '';
+              const d = new Date(`${startDate}T00:00:00`);
+              d.setMonth(d.getMonth() + 1);
+              return d.toISOString().slice(0, 10);
+            })();
 
       // 2. Create lease
       await api.leases.create({
         unitId: selectedUnitId,
         type: leaseType,
         startDate,
-        endDate: leaseType === 'fixed_term' ? endDate : null,
+        endDate: leaseEndDate,
         rentAmount: parseFloat(rentAmount),
         depositAmount: parseFloat(depositAmount || '0'),
         lateFeeAmount: parseFloat(lateFeeAmount || '50'),
         lateFeeGraceDays: parseInt(lateFeeGraceDays || '5', 10),
         rentDueDay: parseInt(rentDueDay || '1', 10),
-        tenantIds: [tenant.id],
+        tenantIds: [tenantId],
       });
 
-      setCreatedTenantId(tenant.id);
+      setCreatedTenantId(tenantId);
       setStep('done');
     } catch (err: any) {
       setError(err.message || 'Failed to create tenant and lease.');

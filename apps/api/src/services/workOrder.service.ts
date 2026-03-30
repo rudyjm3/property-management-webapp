@@ -9,6 +9,12 @@ const SLA_HOURS: Record<string, number> = {
   routine: 7 * 24,
 };
 
+function toDbPriority(priority: string): WorkOrderPriority {
+  // Backward compatibility: older DB enum uses "normal" where newer UI uses "routine".
+  if (priority === 'routine') return WorkOrderPriority.normal;
+  return priority as WorkOrderPriority;
+}
+
 function computeSlaDeadline(priority: string): Date {
   const hours = SLA_HOURS[priority] ?? SLA_HOURS.routine;
   return new Date(Date.now() + hours * 60 * 60 * 1000);
@@ -43,12 +49,13 @@ interface ListWorkOrdersOptions {
 
 export async function listWorkOrders(organizationId: string, opts: ListWorkOrdersOptions = {}) {
   const { status, priority, category, propertyId, unitId, tenantId, limit = 100 } = opts;
+  const dbPriority = priority ? toDbPriority(priority) : undefined;
 
   return prisma.workOrder.findMany({
     where: {
       unit: { property: { organizationId } },
       ...(status ? { status: status as WorkOrderStatus } : {}),
-      ...(priority ? { priority: priority as WorkOrderPriority } : {}),
+      ...(dbPriority ? { priority: dbPriority } : {}),
       ...(category ? { category: category as WorkOrderCategory } : {}),
       ...(propertyId ? { propertyId } : {}),
       ...(unitId ? { unitId } : {}),
@@ -103,7 +110,8 @@ export async function createWorkOrder(organizationId: string, data: CreateWorkOr
     throw new AppError(404, 'UNIT_NOT_FOUND', 'Unit not found in your organization.');
   }
 
-  const priority = data.priority ?? 'routine';
+  const requestedPriority = data.priority ?? 'routine';
+  const dbPriority = toDbPriority(requestedPriority);
 
   const workOrder = await prisma.workOrder.create({
     data: {
@@ -111,13 +119,16 @@ export async function createWorkOrder(organizationId: string, data: CreateWorkOr
       propertyId: data.propertyId ?? unit.propertyId,
       title: data.title ?? null,
       category: data.category as WorkOrderCategory,
-      priority: priority as WorkOrderPriority,
+      priority: dbPriority,
       status: WorkOrderStatus.new_order,
       description: data.description,
       entryPermissionGranted: data.entryPermissionGranted ?? false,
       preferredContactWindow: data.preferredContactWindow ?? null,
-      slaDeadlineAt: computeSlaDeadline(priority),
+      slaDeadlineAt: computeSlaDeadline(requestedPriority),
       tenantId: data.tenantId ?? null,
+      // Some local DB states have NOT NULL without default on these columns.
+      photosBefore: [],
+      photosAfter: [],
     },
     include: workOrderInclude,
   });
@@ -173,6 +184,7 @@ export async function updateWorkOrder(
 
   // Recompute SLA deadline if priority changes
   if (data.priority) {
+    updateData.priority = toDbPriority(data.priority);
     updateData.slaDeadlineAt = computeSlaDeadline(data.priority);
   }
 
