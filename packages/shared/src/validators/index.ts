@@ -19,6 +19,7 @@ import {
   PROPERTY_TYPES,
   DOCUMENT_ENTITY_TYPES,
   DOCUMENT_CATEGORIES,
+  LEDGER_ENTRY_TYPES,
 } from '../constants';
 
 // ─── Organization ─────────────────────────────────────────────────────────────
@@ -318,6 +319,15 @@ export const confirmUploadSchema = z.object({
 export const listDocumentsSchema = z.object({
   entityType: z.enum(DOCUMENT_ENTITY_TYPES).optional(),
   entityId: z.string().uuid().optional(),
+});
+
+// ─── Ledger ───────────────────────────────────────────────────────────────────
+
+export const listLedgerFiltersSchema = z.object({
+  paymentId: z.string().uuid().optional(),
+  type: z.enum(LEDGER_ENTRY_TYPES).optional(),
+  cursor: z.string().optional(),
+  limit: z.coerce.number().int().min(1).max(100).default(25),
 });
 
 // ─── Pagination ───────────────────────────────────────────────────────────────

@@ -124,6 +124,16 @@ export const api = {
       apiFetch<void>(`/api/v1/organizations/${ORG_ID}/payments/${id}`, {
         method: 'DELETE',
       }),
+    initiateACH: (paymentId: string) =>
+      apiFetch<{ clientSecret: string; paymentIntentId: string; status: string }>(
+        `/api/v1/organizations/${ORG_ID}/payments/${paymentId}/initiate-ach`,
+        { method: 'POST' }
+      ),
+    cancelACH: (paymentId: string) =>
+      apiFetch<{ cancelled: boolean }>(
+        `/api/v1/organizations/${ORG_ID}/payments/${paymentId}/cancel-ach`,
+        { method: 'POST' }
+      ),
   },
   units: {
     list: (propertyId: string) =>
@@ -274,6 +284,18 @@ export const api = {
         `/api/v1/organizations/${ORG_ID}/documents/${docId}`,
         { method: 'DELETE' },
       ),
+  },
+
+  ledger: {
+    list: (params?: { paymentId?: string; type?: string; limit?: number; cursor?: string }) => {
+      const query = new URLSearchParams();
+      if (params?.paymentId) query.set('paymentId', params.paymentId);
+      if (params?.type) query.set('type', params.type);
+      if (params?.limit) query.set('limit', String(params.limit));
+      if (params?.cursor) query.set('cursor', params.cursor);
+      const qs = query.toString();
+      return apiFetch<any[]>(`/api/v1/organizations/${ORG_ID}/ledger${qs ? `?${qs}` : ''}`);
+    },
   },
 
   connect: {

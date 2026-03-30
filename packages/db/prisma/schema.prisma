@@ -39,6 +39,7 @@ model Organization {
   messages      Message[]
   documents     Document[]
   notifications Notification[]
+  ledgerEntries LedgerEntry[]
 
   @@map("organizations")
 }
@@ -424,8 +425,9 @@ model Payment {
   updatedAt             DateTime      @updatedAt @map("updated_at")
   deletedAt             DateTime?     @map("deleted_at")
 
-  lease  Lease  @relation(fields: [leaseId], references: [id])
-  tenant Tenant @relation(fields: [tenantId], references: [id])
+  lease         Lease         @relation(fields: [leaseId], references: [id])
+  tenant        Tenant        @relation(fields: [tenantId], references: [id])
+  ledgerEntries LedgerEntry[]
 
   @@index([leaseId])
   @@index([tenantId])
@@ -459,6 +461,32 @@ enum PaymentMethod {
   cash
   money_order
   other
+}
+
+// ─── Ledger ───────────────────────────────────────────────────────────────────
+
+enum LedgerEntryType {
+  credit
+  debit
+}
+
+model LedgerEntry {
+  id             String          @id @default(uuid())
+  organizationId String          @map("organization_id")
+  paymentId      String?         @map("payment_id")
+  type           LedgerEntryType
+  amount         Decimal         @db.Decimal(10, 2)
+  balanceAfter   Decimal         @map("balance_after") @db.Decimal(10, 2)
+  description    String          @db.VarChar(500)
+  stripeEventId  String?         @unique @map("stripe_event_id") @db.VarChar(255)
+  createdAt      DateTime        @default(now()) @map("created_at")
+
+  organization Organization @relation(fields: [organizationId], references: [id])
+  payment      Payment?     @relation(fields: [paymentId], references: [id])
+
+  @@index([organizationId, createdAt])
+  @@index([paymentId])
+  @@map("ledger_entries")
 }
 
 // ─── Work Order ───────────────────────────────────────────────────────────────
