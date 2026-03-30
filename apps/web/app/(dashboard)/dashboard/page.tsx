@@ -296,8 +296,8 @@ export default function DashboardPage() {
               </div>
             ) : (
               <div>
-                {paymentStats.overduePayments.map((p) => (
-                  <div key={p.id} style={{ padding: '12px 20px', borderBottom: '1px solid var(--color-border)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                {paymentStats.overduePayments.map((p, index) => (
+                  <div key={`${p.id}-${index}`} style={{ padding: '12px 20px', borderBottom: '1px solid var(--color-border)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                     <div>
                       <Link href={`/tenants/${p.tenant.id}`} style={{ fontWeight: 500, fontSize: '14px' }}>
                         {p.tenant.name}
@@ -332,8 +332,8 @@ export default function DashboardPage() {
               </div>
             ) : (
               <div>
-                {paymentStats.recentPayments.map((p) => (
-                  <div key={p.id} style={{ padding: '12px 20px', borderBottom: '1px solid var(--color-border)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                {paymentStats.recentPayments.map((p, index) => (
+                  <div key={`${p.id}-${index}`} style={{ padding: '12px 20px', borderBottom: '1px solid var(--color-border)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                     <div>
                       <Link href={`/tenants/${p.tenant.id}`} style={{ fontWeight: 500, fontSize: '14px' }}>
                         {p.tenant.name}
@@ -371,9 +371,9 @@ export default function DashboardPage() {
             </div>
           ) : (
             <div>
-              {recentThreads.map((thread) => (
+              {recentThreads.map((thread, index) => (
                 <Link
-                  key={thread.id}
+                  key={`${thread.id}-${index}`}
                   href="/messages"
                   style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '12px 20px', borderBottom: '1px solid var(--color-border)', textDecoration: 'none', color: 'inherit' }}
                 >
