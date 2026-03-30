@@ -73,17 +73,52 @@ interface CreateTenantData {
   email: string;
   name: string;
   phone?: string | null;
+  fullLegalName?: string | null;
+  dateOfBirth?: string | null;
+  currentAddress?: string | null;
   emergencyContactName?: string | null;
   emergencyContactPhone?: string | null;
+  emergencyContact1Relationship?: string | null;
+}
+
+function normalizeOptionalString(value: string | null | undefined): string | null | undefined {
+  if (value === undefined) return undefined;
+  if (value === null) return null;
+  const trimmed = value.trim();
+  return trimmed.length > 0 ? trimmed : null;
+}
+
+function normalizeTenantData(data: Partial<CreateTenantData>): Record<string, unknown> {
+  const normalized: Record<string, unknown> = {};
+
+  if (data.email !== undefined) normalized.email = data.email.trim().toLowerCase();
+  if (data.name !== undefined) normalized.name = data.name.trim();
+  if (data.phone !== undefined) normalized.phone = normalizeOptionalString(data.phone);
+  if (data.fullLegalName !== undefined) normalized.fullLegalName = normalizeOptionalString(data.fullLegalName);
+  if (data.currentAddress !== undefined) normalized.currentAddress = normalizeOptionalString(data.currentAddress);
+  if (data.emergencyContactName !== undefined) normalized.emergencyContactName = normalizeOptionalString(data.emergencyContactName);
+  if (data.emergencyContactPhone !== undefined) normalized.emergencyContactPhone = normalizeOptionalString(data.emergencyContactPhone);
+  if (data.emergencyContact1Relationship !== undefined) {
+    normalized.emergencyContact1Relationship = normalizeOptionalString(data.emergencyContact1Relationship);
+  }
+
+  if (data.dateOfBirth !== undefined) {
+    normalized.dateOfBirth = data.dateOfBirth ? new Date(`${data.dateOfBirth}T00:00:00.000Z`) : null;
+  }
+
+  return normalized;
 }
 
 export async function createTenant(
   organizationId: string,
   data: CreateTenantData
 ) {
+  const normalizedData = normalizeTenantData(data);
+  const normalizedEmail = String(normalizedData.email ?? '').trim().toLowerCase();
+
   // Check for duplicate email within the organization
   const existing = await prisma.tenant.findFirst({
-    where: { organizationId, email: data.email, deletedAt: null },
+    where: { organizationId, email: normalizedEmail, deletedAt: null },
   });
 
   if (existing) {
@@ -96,7 +131,7 @@ export async function createTenant(
 
   return prisma.tenant.create({
     data: {
-      ...data,
+      ...(normalizedData as any),
       organization: { connect: { id: organizationId } },
     },
   });
@@ -107,6 +142,8 @@ export async function updateTenant(
   tenantId: string,
   data: Partial<CreateTenantData>
 ) {
+  const normalizedData = normalizeTenantData(data);
+
   const existing = await prisma.tenant.findFirst({
     where: { id: tenantId, organizationId, deletedAt: null },
   });
@@ -116,9 +153,14 @@ export async function updateTenant(
   }
 
   // If email is being changed, check for duplicates
-  if (data.email && data.email !== existing.email) {
+  if (normalizedData.email && normalizedData.email !== existing.email) {
     const emailTaken = await prisma.tenant.findFirst({
-      where: { organizationId, email: data.email, deletedAt: null, id: { not: tenantId } },
+      where: {
+        organizationId,
+        email: String(normalizedData.email),
+        deletedAt: null,
+        id: { not: tenantId },
+      },
     });
 
     if (emailTaken) {
@@ -132,7 +174,7 @@ export async function updateTenant(
 
   return prisma.tenant.update({
     where: { id: tenantId },
-    data,
+    data: normalizedData as any,
   });
 }
 

@@ -1,5 +1,5 @@
 import type { Metadata } from 'next';
-import Sidebar from '@/components/Sidebar';
+import { AuthProvider } from '@/contexts/AuthContext';
 import './globals.css';
 
 export const metadata: Metadata = {
@@ -11,10 +11,9 @@ export default function RootLayout({ children }: Readonly<{ children: React.Reac
   return (
     <html lang="en">
       <body suppressHydrationWarning>
-        <div className="app-layout">
-          <Sidebar />
-          <main className="main-content">{children}</main>
-        </div>
+        <AuthProvider>
+          {children}
+        </AuthProvider>
       </body>
     </html>
   );

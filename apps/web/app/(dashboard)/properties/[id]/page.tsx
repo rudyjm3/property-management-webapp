@@ -15,6 +15,13 @@ const UNIT_TYPE_LABELS: Record<string, string> = {
   commercial: 'Commercial',
 };
 
+const PROPERTY_TYPE_LABELS: Record<string, string> = {
+  multifamily: 'Multifamily',
+  single_family: 'Single Family',
+  commercial: 'Commercial',
+  mixed_use: 'Mixed Use',
+};
+
 interface Unit {
   id: string;
   unitNumber: string;
@@ -54,6 +61,7 @@ export default function PropertyDetailPage() {
   const [property, setProperty] = useState<PropertyDetail | null>(null);
   const [loading, setLoading] = useState(true);
   const [showAddUnit, setShowAddUnit] = useState(false);
+  const [showEditProperty, setShowEditProperty] = useState(false);
 
   useEffect(() => {
     loadProperty();
@@ -96,6 +104,25 @@ export default function PropertyDetailPage() {
     }
   }
 
+  async function handleEditProperty(e: React.FormEvent<HTMLFormElement>) {
+    e.preventDefault();
+    const formData = new FormData(e.currentTarget);
+    try {
+      await api.properties.update(propertyId, {
+        name: formData.get('name'),
+        address: formData.get('address'),
+        city: formData.get('city'),
+        state: (formData.get('state') as string)?.toUpperCase(),
+        zip: formData.get('zip'),
+        type: formData.get('type'),
+      });
+      setShowEditProperty(false);
+      loadProperty();
+    } catch (err) {
+      console.error('Failed to update property:', err);
+    }
+  }
+
   if (loading) return <div className="loading">Loading property...</div>;
   if (!property) return <div className="loading">Property not found</div>;
 
@@ -117,9 +144,14 @@ export default function PropertyDetailPage() {
             {property.address}, {property.city}, {property.state} {property.zip}
           </p>
         </div>
-        <button className="btn btn-primary" onClick={() => setShowAddUnit(true)}>
-          + Add Unit
-        </button>
+        <div style={{ display: 'flex', gap: '8px' }}>
+          <button className="btn btn-secondary" onClick={() => setShowEditProperty(true)}>
+            Edit Property
+          </button>
+          <button className="btn btn-primary" onClick={() => setShowAddUnit(true)}>
+            + Add Unit
+          </button>
+        </div>
       </div>
 
       <div className="stats-grid">
@@ -289,6 +321,67 @@ export default function PropertyDetailPage() {
                 </button>
                 <button type="submit" className="btn btn-primary">
                   Add Unit
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {showEditProperty && (
+        <div className="modal-overlay" onClick={() => setShowEditProperty(false)}>
+          <div className="modal" onClick={(e) => e.stopPropagation()}>
+            <div className="modal-header">
+              <h2>Edit Property</h2>
+              <button className="btn btn-sm btn-secondary" onClick={() => setShowEditProperty(false)}>
+                X
+              </button>
+            </div>
+            <form onSubmit={handleEditProperty}>
+              <div className="modal-body">
+                <div className="form-group">
+                  <label>Property Name</label>
+                  <input name="name" required defaultValue={property.name} />
+                </div>
+                <div className="form-group">
+                  <label>Address</label>
+                  <input name="address" required defaultValue={property.address} />
+                </div>
+                <div className="form-row">
+                  <div className="form-group">
+                    <label>City</label>
+                    <input name="city" required defaultValue={property.city} />
+                  </div>
+                  <div className="form-group">
+                    <label>State</label>
+                    <input name="state" required maxLength={2} defaultValue={property.state} />
+                  </div>
+                </div>
+                <div className="form-row">
+                  <div className="form-group">
+                    <label>Zip Code</label>
+                    <input name="zip" required defaultValue={property.zip} />
+                  </div>
+                  <div className="form-group">
+                    <label>Type</label>
+                    <select name="type" defaultValue={property.type}>
+                      <option value="multifamily">Multifamily</option>
+                      <option value="single_family">Single Family</option>
+                      <option value="commercial">Commercial</option>
+                      <option value="mixed_use">Mixed Use</option>
+                    </select>
+                  </div>
+                </div>
+                <div className="property-meta" style={{ marginTop: '8px' }}>
+                  <span>Current type: {PROPERTY_TYPE_LABELS[property.type] ?? property.type}</span>
+                </div>
+              </div>
+              <div className="modal-footer">
+                <button type="button" className="btn btn-secondary" onClick={() => setShowEditProperty(false)}>
+                  Cancel
+                </button>
+                <button type="submit" className="btn btn-primary">
+                  Save Changes
                 </button>
               </div>
             </form>

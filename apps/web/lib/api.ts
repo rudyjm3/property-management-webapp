@@ -1,9 +1,37 @@
+import { createClient } from './supabase';
+
 const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
 
+// Runtime auth state — set by AuthProvider after login
+let _orgId: string = process.env.NEXT_PUBLIC_ORG_ID || '';
+let _userId: string = '';
+
+export function setAuthContext(orgId: string, userId: string) {
+  _orgId = orgId;
+  _userId = userId;
+}
+
+export function getOrgId() {
+  return _orgId;
+}
+
+async function getAuthToken(): Promise<string | null> {
+  try {
+    const supabase = createClient();
+    const { data: { session } } = await supabase.auth.getSession();
+    return session?.access_token ?? null;
+  } catch {
+    return null;
+  }
+}
+
 async function apiFetch<T>(path: string, options?: RequestInit): Promise<T> {
+  const token = await getAuthToken();
+
   const res = await fetch(`${API_URL}${path}`, {
     headers: {
       'Content-Type': 'application/json',
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
       ...options?.headers,
     },
     ...options,
@@ -20,79 +48,119 @@ async function apiFetch<T>(path: string, options?: RequestInit): Promise<T> {
   return json.data;
 }
 
-// Hardcoded for now — will come from auth session later
-const ORG_ID = process.env.NEXT_PUBLIC_ORG_ID || '';
-
 export const api = {
+  auth: {
+    me: () => apiFetch<{
+      id: string;
+      email: string;
+      name: string;
+      role: string;
+      organizationId: string;
+      organization: {
+        id: string;
+        name: string;
+        slug: string;
+        timezone: string;
+        rentDueDay: number;
+        gracePeriodDays: number;
+        lateFeeAmount: string;
+      };
+    }>('/api/v1/auth/me'),
+
+    register: (data: { name: string; orgName: string; orgPhone?: string; timezone?: string }) =>
+      apiFetch<{ userId: string; orgId: string; orgName: string; role: string }>('/api/v1/auth/register', {
+        method: 'POST',
+        body: JSON.stringify(data),
+      }),
+  },
+
+  organizations: {
+    get: () => apiFetch<any>(`/api/v1/organizations/${_orgId}`),
+    update: (data: {
+      name?: string;
+      phone?: string;
+      email?: string;
+      timezone?: string;
+      dateFormat?: string;
+      rentDueDay?: number;
+      gracePeriodDays?: number;
+      lateFeeAmount?: number;
+    }) =>
+      apiFetch<any>(`/api/v1/organizations/${_orgId}`, {
+        method: 'PATCH',
+        body: JSON.stringify(data),
+      }),
+  },
+
   properties: {
-    list: () => apiFetch<any[]>(`/api/v1/organizations/${ORG_ID}/properties`),
-    get: (id: string) => apiFetch<any>(`/api/v1/organizations/${ORG_ID}/properties/${id}`),
+    list: () => apiFetch<any[]>(`/api/v1/organizations/${_orgId}/properties`),
+    get: (id: string) => apiFetch<any>(`/api/v1/organizations/${_orgId}/properties/${id}`),
     create: (data: any) =>
-      apiFetch<any>(`/api/v1/organizations/${ORG_ID}/properties`, {
+      apiFetch<any>(`/api/v1/organizations/${_orgId}/properties`, {
         method: 'POST',
         body: JSON.stringify(data),
       }),
     update: (id: string, data: any) =>
-      apiFetch<any>(`/api/v1/organizations/${ORG_ID}/properties/${id}`, {
+      apiFetch<any>(`/api/v1/organizations/${_orgId}/properties/${id}`, {
         method: 'PATCH',
         body: JSON.stringify(data),
       }),
     delete: (id: string) =>
-      apiFetch<void>(`/api/v1/organizations/${ORG_ID}/properties/${id}`, {
+      apiFetch<void>(`/api/v1/organizations/${_orgId}/properties/${id}`, {
         method: 'DELETE',
       }),
   },
   tenants: {
-    list: () => apiFetch<any[]>(`/api/v1/organizations/${ORG_ID}/tenants`),
-    get: (id: string) => apiFetch<any>(`/api/v1/organizations/${ORG_ID}/tenants/${id}`),
+    list: () => apiFetch<any[]>(`/api/v1/organizations/${_orgId}/tenants`),
+    get: (id: string) => apiFetch<any>(`/api/v1/organizations/${_orgId}/tenants/${id}`),
     create: (data: any) =>
-      apiFetch<any>(`/api/v1/organizations/${ORG_ID}/tenants`, {
+      apiFetch<any>(`/api/v1/organizations/${_orgId}/tenants`, {
         method: 'POST',
         body: JSON.stringify(data),
       }),
     update: (id: string, data: any) =>
-      apiFetch<any>(`/api/v1/organizations/${ORG_ID}/tenants/${id}`, {
+      apiFetch<any>(`/api/v1/organizations/${_orgId}/tenants/${id}`, {
         method: 'PATCH',
         body: JSON.stringify(data),
       }),
     delete: (id: string) =>
-      apiFetch<void>(`/api/v1/organizations/${ORG_ID}/tenants/${id}`, {
+      apiFetch<void>(`/api/v1/organizations/${_orgId}/tenants/${id}`, {
         method: 'DELETE',
       }),
   },
   leases: {
-    list: () => apiFetch<any[]>(`/api/v1/organizations/${ORG_ID}/leases`),
-    get: (id: string) => apiFetch<any>(`/api/v1/organizations/${ORG_ID}/leases/${id}`),
+    list: () => apiFetch<any[]>(`/api/v1/organizations/${_orgId}/leases`),
+    get: (id: string) => apiFetch<any>(`/api/v1/organizations/${_orgId}/leases/${id}`),
     create: (data: any) =>
-      apiFetch<any>(`/api/v1/organizations/${ORG_ID}/leases`, {
+      apiFetch<any>(`/api/v1/organizations/${_orgId}/leases`, {
         method: 'POST',
         body: JSON.stringify(data),
       }),
     update: (id: string, data: any) =>
-      apiFetch<any>(`/api/v1/organizations/${ORG_ID}/leases/${id}`, {
+      apiFetch<any>(`/api/v1/organizations/${_orgId}/leases/${id}`, {
         method: 'PATCH',
         body: JSON.stringify(data),
       }),
     renew: (id: string, data: any) =>
-      apiFetch<any>(`/api/v1/organizations/${ORG_ID}/leases/${id}/renew`, {
+      apiFetch<any>(`/api/v1/organizations/${_orgId}/leases/${id}/renew`, {
         method: 'POST',
         body: JSON.stringify(data),
       }),
     delete: (id: string) =>
-      apiFetch<void>(`/api/v1/organizations/${ORG_ID}/leases/${id}`, {
+      apiFetch<void>(`/api/v1/organizations/${_orgId}/leases/${id}`, {
         method: 'DELETE',
       }),
     addParticipant: (leaseId: string, tenantId: string) =>
-      apiFetch<any>(`/api/v1/organizations/${ORG_ID}/leases/${leaseId}/participants`, {
+      apiFetch<any>(`/api/v1/organizations/${_orgId}/leases/${leaseId}/participants`, {
         method: 'POST',
         body: JSON.stringify({ tenantId }),
       }),
     removeParticipant: (leaseId: string, participantId: string) =>
-      apiFetch<any>(`/api/v1/organizations/${ORG_ID}/leases/${leaseId}/participants/${participantId}`, {
+      apiFetch<any>(`/api/v1/organizations/${_orgId}/leases/${leaseId}/participants/${participantId}`, {
         method: 'DELETE',
       }),
     setPrimaryParticipant: (leaseId: string, participantId: string) =>
-      apiFetch<any>(`/api/v1/organizations/${ORG_ID}/leases/${leaseId}/participants/${participantId}`, {
+      apiFetch<any>(`/api/v1/organizations/${_orgId}/leases/${leaseId}/participants/${participantId}`, {
         method: 'PATCH',
       }),
   },
@@ -106,55 +174,55 @@ export const api = {
       if (params?.limit) query.set('limit', String(params.limit));
       const qs = query.toString();
       return apiFetch<any[]>(
-        `/api/v1/organizations/${ORG_ID}/payments${qs ? `?${qs}` : ''}`
+        `/api/v1/organizations/${_orgId}/payments${qs ? `?${qs}` : ''}`
       );
     },
-    stats: () => apiFetch<any>(`/api/v1/organizations/${ORG_ID}/payments/stats`),
+    stats: () => apiFetch<any>(`/api/v1/organizations/${_orgId}/payments/stats`),
     create: (data: any) =>
-      apiFetch<any>(`/api/v1/organizations/${ORG_ID}/payments`, {
+      apiFetch<any>(`/api/v1/organizations/${_orgId}/payments`, {
         method: 'POST',
         body: JSON.stringify(data),
       }),
     update: (id: string, data: any) =>
-      apiFetch<any>(`/api/v1/organizations/${ORG_ID}/payments/${id}`, {
+      apiFetch<any>(`/api/v1/organizations/${_orgId}/payments/${id}`, {
         method: 'PATCH',
         body: JSON.stringify(data),
       }),
     delete: (id: string) =>
-      apiFetch<void>(`/api/v1/organizations/${ORG_ID}/payments/${id}`, {
+      apiFetch<void>(`/api/v1/organizations/${_orgId}/payments/${id}`, {
         method: 'DELETE',
       }),
     initiateACH: (paymentId: string) =>
       apiFetch<{ clientSecret: string; paymentIntentId: string; status: string }>(
-        `/api/v1/organizations/${ORG_ID}/payments/${paymentId}/initiate-ach`,
+        `/api/v1/organizations/${_orgId}/payments/${paymentId}/initiate-ach`,
         { method: 'POST' }
       ),
     cancelACH: (paymentId: string) =>
       apiFetch<{ cancelled: boolean }>(
-        `/api/v1/organizations/${ORG_ID}/payments/${paymentId}/cancel-ach`,
+        `/api/v1/organizations/${_orgId}/payments/${paymentId}/cancel-ach`,
         { method: 'POST' }
       ),
   },
   units: {
     list: (propertyId: string) =>
-      apiFetch<any[]>(`/api/v1/organizations/${ORG_ID}/properties/${propertyId}/units`),
+      apiFetch<any[]>(`/api/v1/organizations/${_orgId}/properties/${propertyId}/units`),
     get: (propertyId: string, unitId: string) =>
       apiFetch<any>(
-        `/api/v1/organizations/${ORG_ID}/properties/${propertyId}/units/${unitId}`
+        `/api/v1/organizations/${_orgId}/properties/${propertyId}/units/${unitId}`
       ),
     create: (propertyId: string, data: any) =>
-      apiFetch<any>(`/api/v1/organizations/${ORG_ID}/properties/${propertyId}/units`, {
+      apiFetch<any>(`/api/v1/organizations/${_orgId}/properties/${propertyId}/units`, {
         method: 'POST',
         body: JSON.stringify(data),
       }),
     update: (propertyId: string, unitId: string, data: any) =>
       apiFetch<any>(
-        `/api/v1/organizations/${ORG_ID}/properties/${propertyId}/units/${unitId}`,
+        `/api/v1/organizations/${_orgId}/properties/${propertyId}/units/${unitId}`,
         { method: 'PATCH', body: JSON.stringify(data) }
       ),
     delete: (propertyId: string, unitId: string) =>
       apiFetch<void>(
-        `/api/v1/organizations/${ORG_ID}/properties/${propertyId}/units/${unitId}`,
+        `/api/v1/organizations/${_orgId}/properties/${propertyId}/units/${unitId}`,
         { method: 'DELETE' }
       ),
   },
@@ -169,54 +237,88 @@ export const api = {
       if (params?.tenantId) query.set('tenantId', params.tenantId);
       if (params?.limit) query.set('limit', String(params.limit));
       const qs = query.toString();
-      return apiFetch<any[]>(`/api/v1/organizations/${ORG_ID}/work-orders${qs ? `?${qs}` : ''}`);
+      return apiFetch<any[]>(`/api/v1/organizations/${_orgId}/work-orders${qs ? `?${qs}` : ''}`);
     },
-    get: (id: string) => apiFetch<any>(`/api/v1/organizations/${ORG_ID}/work-orders/${id}`),
+    get: (id: string) => apiFetch<any>(`/api/v1/organizations/${_orgId}/work-orders/${id}`),
     create: (data: any) =>
-      apiFetch<any>(`/api/v1/organizations/${ORG_ID}/work-orders`, {
+      apiFetch<any>(`/api/v1/organizations/${_orgId}/work-orders`, {
         method: 'POST',
         body: JSON.stringify(data),
       }),
     update: (id: string, data: any) =>
-      apiFetch<any>(`/api/v1/organizations/${ORG_ID}/work-orders/${id}`, {
+      apiFetch<any>(`/api/v1/organizations/${_orgId}/work-orders/${id}`, {
         method: 'PATCH',
         body: JSON.stringify(data),
       }),
     delete: (id: string) =>
-      apiFetch<void>(`/api/v1/organizations/${ORG_ID}/work-orders/${id}`, {
+      apiFetch<void>(`/api/v1/organizations/${_orgId}/work-orders/${id}`, {
         method: 'DELETE',
       }),
   },
   messages: {
     threads: {
-      list: () => apiFetch<any[]>(`/api/v1/organizations/${ORG_ID}/messages/threads`),
-      get: (threadId: string) => apiFetch<any[]>(`/api/v1/organizations/${ORG_ID}/messages/threads/${threadId}`),
+      list: () => apiFetch<any[]>(`/api/v1/organizations/${_orgId}/messages/threads`),
+      get: (threadId: string) => apiFetch<any[]>(`/api/v1/organizations/${_orgId}/messages/threads/${threadId}`),
     },
     send: (data: { senderUserId: string; recipientTenantId: string; body: string; threadId?: string | null; subject?: string | null; unitId?: string | null; workOrderId?: string | null }) =>
-      apiFetch<any>(`/api/v1/organizations/${ORG_ID}/messages`, {
+      apiFetch<any>(`/api/v1/organizations/${_orgId}/messages`, {
         method: 'POST',
         body: JSON.stringify(data),
       }),
   },
   notifications: {
+    list: (params?: { userId?: string; unreadOnly?: boolean }) => {
+      const query = new URLSearchParams();
+      if (params?.userId) query.set('userId', params.userId);
+      if (params?.unreadOnly) query.set('unreadOnly', 'true');
+      const qs = query.toString();
+      return apiFetch<any[]>(`/api/v1/organizations/${_orgId}/notifications${qs ? `?${qs}` : ''}`);
+    },
+    markRead: (notifId: string) =>
+      apiFetch<any>(`/api/v1/organizations/${_orgId}/notifications/${notifId}/read`, {
+        method: 'PATCH',
+        body: JSON.stringify({ userId: _userId }),
+      }),
+    markAllRead: () =>
+      apiFetch<any>(`/api/v1/organizations/${_orgId}/notifications/read-all`, {
+        method: 'PATCH',
+        body: JSON.stringify({ userId: _userId }),
+      }),
     triggerLateFees: () =>
-      apiFetch<any>(`/api/v1/organizations/${ORG_ID}/notifications/jobs/late-fees`, { method: 'POST' }),
+      apiFetch<any>(`/api/v1/organizations/${_orgId}/notifications/jobs/late-fees`, { method: 'POST' }),
     triggerRentReminders: () =>
-      apiFetch<any>(`/api/v1/organizations/${ORG_ID}/notifications/jobs/rent-reminders`, { method: 'POST' }),
+      apiFetch<any>(`/api/v1/organizations/${_orgId}/notifications/jobs/rent-reminders`, { method: 'POST' }),
   },
   staff: {
-    list: () => apiFetch<any[]>(`/api/v1/organizations/${ORG_ID}/staff`),
+    list: (params?: { includeInactive?: boolean }) => {
+      const qs = params?.includeInactive ? '?includeInactive=true' : '';
+      return apiFetch<any[]>(`/api/v1/organizations/${_orgId}/staff${qs}`);
+    },
+    invite: (data: { email: string; name: string; role?: string }) =>
+      apiFetch<any>(`/api/v1/organizations/${_orgId}/staff/invite`, {
+        method: 'POST',
+        body: JSON.stringify(data),
+      }),
+    update: (userId: string, data: {
+      role?: string;
+      status?: string;
+      notifRentOverdue?: string;
+      notifWorkOrder?: string;
+      notifLeaseExpiry?: string;
+      notifNewMessage?: string;
+    }) =>
+      apiFetch<any>(`/api/v1/organizations/${_orgId}/staff/${userId}`, {
+        method: 'PATCH',
+        body: JSON.stringify(data),
+      }),
   },
   vendors: {
     list: (params?: { activeOnly?: boolean }) => {
       const qs = params?.activeOnly ? '?status=active' : '';
-      return apiFetch<any[]>(`/api/v1/organizations/${ORG_ID}/vendors${qs}`);
+      return apiFetch<any[]>(`/api/v1/organizations/${_orgId}/vendors${qs}`);
     },
   },
   documents: {
-    /**
-     * Request a presigned S3 upload URL. Returns { uploadUrl, s3Key }.
-     */
     requestUploadUrl: (data: {
       entityType: string;
       entityId: string;
@@ -228,14 +330,10 @@ export const api = {
       visibleToTenant?: boolean;
     }) =>
       apiFetch<{ uploadUrl: string; s3Key: string; expiresInSeconds: number }>(
-        `/api/v1/organizations/${ORG_ID}/documents/upload-url`,
+        `/api/v1/organizations/${_orgId}/documents/upload-url`,
         { method: 'POST', body: JSON.stringify(data) },
       ),
 
-    /**
-     * Upload a file directly to S3 using the presigned URL (bypasses the API).
-     * contentType must match the value used when requesting the presigned URL.
-     */
     uploadToS3: async (uploadUrl: string, file: File, contentType: string): Promise<void> => {
       const res = await fetch(uploadUrl, {
         method: 'PUT',
@@ -245,9 +343,6 @@ export const api = {
       if (!res.ok) throw new Error(`S3 upload failed: ${res.status}`);
     },
 
-    /**
-     * Confirm a successful upload and persist metadata in the DB.
-     */
     confirmUpload: (data: {
       s3Key: string;
       entityType: string;
@@ -260,7 +355,7 @@ export const api = {
       visibleToTenant?: boolean;
     }) =>
       apiFetch<any>(
-        `/api/v1/organizations/${ORG_ID}/documents`,
+        `/api/v1/organizations/${_orgId}/documents`,
         { method: 'POST', body: JSON.stringify(data) },
       ),
 
@@ -270,18 +365,18 @@ export const api = {
       if (params?.entityId) query.set('entityId', params.entityId);
       const qs = query.toString();
       return apiFetch<any[]>(
-        `/api/v1/organizations/${ORG_ID}/documents${qs ? `?${qs}` : ''}`,
+        `/api/v1/organizations/${_orgId}/documents${qs ? `?${qs}` : ''}`,
       );
     },
 
     getDownloadUrl: (docId: string) =>
       apiFetch<{ downloadUrl: string; document: any }>(
-        `/api/v1/organizations/${ORG_ID}/documents/${docId}/download-url`,
+        `/api/v1/organizations/${_orgId}/documents/${docId}/download-url`,
       ),
 
     delete: (docId: string) =>
       apiFetch<void>(
-        `/api/v1/organizations/${ORG_ID}/documents/${docId}`,
+        `/api/v1/organizations/${_orgId}/documents/${docId}`,
         { method: 'DELETE' },
       ),
   },
@@ -294,7 +389,7 @@ export const api = {
       if (params?.limit) query.set('limit', String(params.limit));
       if (params?.cursor) query.set('cursor', params.cursor);
       const qs = query.toString();
-      return apiFetch<any[]>(`/api/v1/organizations/${ORG_ID}/ledger${qs ? `?${qs}` : ''}`);
+      return apiFetch<any[]>(`/api/v1/organizations/${_orgId}/ledger${qs ? `?${qs}` : ''}`);
     },
   },
 
@@ -304,10 +399,10 @@ export const api = {
         stripeAccountId: string | null;
         stripeAccountStatus: 'not_connected' | 'pending' | 'active' | 'restricted';
         stripeAccountDetailsSubmitted: boolean;
-      }>(`/api/v1/organizations/${ORG_ID}/connect/status`),
+      }>(`/api/v1/organizations/${_orgId}/connect/status`),
 
     createAccountLink: () =>
-      apiFetch<{ url: string }>(`/api/v1/organizations/${ORG_ID}/connect/account-link`, {
+      apiFetch<{ url: string }>(`/api/v1/organizations/${_orgId}/connect/account-link`, {
         method: 'POST',
       }),
 
@@ -315,7 +410,7 @@ export const api = {
       apiFetch<{
         stripeAccountStatus: 'not_connected' | 'pending' | 'active' | 'restricted';
         stripeAccountDetailsSubmitted: boolean;
-      }>(`/api/v1/organizations/${ORG_ID}/connect/sync`, {
+      }>(`/api/v1/organizations/${_orgId}/connect/sync`, {
         method: 'POST',
       }),
   },

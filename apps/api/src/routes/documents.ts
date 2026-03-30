@@ -12,12 +12,14 @@ const router = Router({ mergeParams: true });
 
 /** Express Request extended with properties set by auth middleware. */
 interface AuthedRequest extends Request {
-  userId?: string;
+  user?: {
+    userId: string;
+  };
 }
 
 /** Resolve the calling user's ID from auth middleware or the x-user-id header. */
 function resolveUserId(req: AuthedRequest): string {
-  const userId = req.userId ?? (req.headers['x-user-id'] as string | undefined);
+  const userId = req.user?.userId ?? (req.headers['x-user-id'] as string | undefined);
   if (!userId) throw new AppError(401, 'UNAUTHORIZED', 'Missing user identity');
   return userId;
 }

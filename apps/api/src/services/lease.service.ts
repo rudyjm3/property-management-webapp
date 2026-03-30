@@ -64,10 +64,13 @@ export async function getLease(organizationId: string, leaseId: string) {
 interface CreateLeaseData {
   unitId: string;
   tenantIds: string[];
+  type?: string | null;
   rentAmount: number;
   depositAmount: number;
   startDate: string;
-  endDate: string;
+  endDate?: string | null;
+  noticePeriodDays?: number;
+  rentDueDay?: number;
   lateFeeAmount: number;
   lateFeeGraceDays: number;
   notes?: string | null;
@@ -105,15 +108,30 @@ export async function createLease(organizationId: string, data: CreateLeaseData)
 
   // Create lease + participants in a transaction, then update unit status
   const lease = await prisma.$transaction(async (tx) => {
+    const startDate = new Date(leaseFields.startDate);
+    const endDate = leaseFields.endDate ? new Date(leaseFields.endDate) : new Date(startDate);
+    if (!leaseFields.endDate) {
+      // Month-to-month compatibility: keep schema-required endDate populated.
+      endDate.setMonth(endDate.getMonth() + 1);
+    }
+
     const created = await tx.lease.create({
       data: {
         unit: { connect: { id: unitId } },
+        type: (leaseFields.type as LeaseType) ?? null,
         rentAmount: leaseFields.rentAmount,
         depositAmount: leaseFields.depositAmount,
-        startDate: new Date(leaseFields.startDate),
-        endDate: new Date(leaseFields.endDate),
+        startDate,
+        endDate,
+        noticePeriodDays: leaseFields.noticePeriodDays ?? 30,
+        rentDueDay: leaseFields.rentDueDay ?? 1,
         lateFeeAmount: leaseFields.lateFeeAmount,
         lateFeeGraceDays: leaseFields.lateFeeGraceDays,
+        utilitiesIncluded: [],
+        hasPetAddendum: false,
+        hasParkingAddendum: false,
+        occupantCount: 1,
+        occupantNames: [],
         notes: leaseFields.notes,
         participants: {
           create: tenantIds.map((tenantId, index) => ({

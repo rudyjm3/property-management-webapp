@@ -1,15 +1,15 @@
+// Must be first — loads .env before any other module reads process.env
+import './env';
+
 import express from 'express';
 import cors from 'cors';
 import helmet from 'helmet';
 import morgan from 'morgan';
-import dotenv from 'dotenv';
 import routes from './routes';
 import { errorHandler } from './middleware/error-handler';
 import { startSlaBreachJob } from './jobs/slaBreachCheck';
 import { startLateFeeJob } from './jobs/lateFeeJob';
 import stripeWebhookHandler from './webhooks/stripe';
-
-dotenv.config({ path: '../../.env' });
 
 const app = express();
 const PORT = process.env.PORT || 3001;
