@@ -86,7 +86,7 @@ const icons: Record<string, React.ReactNode> = {
 
 export default function Sidebar() {
   const pathname = usePathname();
-  const { profile } = useAuth();
+  const { profile, signOut } = useAuth();
   const [unreadCount, setUnreadCount] = useState(0);
 
   useEffect(() => {
@@ -103,6 +103,14 @@ export default function Sidebar() {
       return pathname.startsWith('/settings');
     }
     return pathname.startsWith(href);
+  }
+
+  async function handleSignOut() {
+    try {
+      await signOut();
+    } finally {
+      window.location.href = '/login';
+    }
   }
 
   return (
@@ -142,6 +150,43 @@ export default function Sidebar() {
           </Link>
         ))}
       </nav>
+      <div style={{ padding: '8px' }}>
+        <div
+          style={{
+            padding: '10px 12px',
+            marginBottom: '6px',
+            border: '1px solid var(--color-border)',
+            borderRadius: '6px',
+            background: 'var(--color-bg)',
+          }}
+        >
+          <div style={{ fontSize: '14px', fontWeight: 600, color: 'var(--color-text)' }}>
+            {profile?.name || 'Signed in'}
+          </div>
+          <div style={{ fontSize: '12px', color: 'var(--color-text-muted)', textTransform: 'capitalize' }}>
+            {profile?.role || 'user'}
+          </div>
+        </div>
+        <button
+          type="button"
+          className="sidebar-link"
+          onClick={handleSignOut}
+          style={{
+            width: '100%',
+            border: 'none',
+            background: 'transparent',
+            cursor: 'pointer',
+            justifyContent: 'flex-start',
+          }}
+        >
+          <svg className="sidebar-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+            <path d="M9 21H5a2 2 0 01-2-2V5a2 2 0 012-2h4" />
+            <polyline points="16 17 21 12 16 7" />
+            <line x1="21" y1="12" x2="9" y2="12" />
+          </svg>
+          Log out
+        </button>
+      </div>
     </aside>
   );
 }
