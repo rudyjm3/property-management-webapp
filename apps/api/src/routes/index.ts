@@ -2,6 +2,7 @@ import { Router } from 'express';
 import { requireAuth, requireOrg } from '../middleware/auth';
 import authRoutes from './auth';
 import organizationRoutes from './organizations';
+import notificationJobRoutes from './notificationJobs';
 import propertyRoutes from './properties';
 import tenantRoutes from './tenants';
 import leaseRoutes from './leases';
@@ -20,8 +21,11 @@ const router = Router();
 // Auth routes — no org scope
 router.use('/auth', authRoutes);
 
+// Cron-trigger notification jobs (CRON_SECRET only, no user JWT)
+router.use('/organizations/:orgId/notifications/jobs', notificationJobRoutes);
+
 // Organization settings
-router.use('/organizations/:orgId', requireAuth, requireOrg, organizationRoutes);
+router.use('/organizations/:orgId', organizationRoutes);
 
 // All org-scoped routes — protected by auth + org isolation
 router.use('/organizations/:orgId/properties', requireAuth, requireOrg, propertyRoutes);
