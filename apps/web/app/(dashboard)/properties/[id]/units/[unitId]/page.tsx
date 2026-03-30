@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { api } from '@/lib/api';
@@ -71,6 +71,7 @@ export default function UnitDetailPage() {
   const unitId = params.unitId as string;
   const [unit, setUnit] = useState<UnitDetail | null>(null);
   const [loading, setLoading] = useState(true);
+  const [showEditUnit, setShowEditUnit] = useState(false);
 
   // Work order modal
   const [showWOModal, setShowWOModal] = useState(false);
@@ -79,19 +80,20 @@ export default function UnitDetailPage() {
   const [woPriority, setWoPriority] = useState('routine');
   const [woSubmitting, setWoSubmitting] = useState(false);
 
-  useEffect(() => {
-    async function load() {
-      try {
-        const data = await api.units.get(propertyId, unitId);
-        setUnit(data);
-      } catch (err) {
-        console.error('Failed to load unit:', err);
-      } finally {
-        setLoading(false);
-      }
+  const loadUnit = useCallback(async () => {
+    try {
+      const data = await api.units.get(propertyId, unitId);
+      setUnit(data);
+    } catch (err) {
+      console.error('Failed to load unit:', err);
+    } finally {
+      setLoading(false);
     }
-    load();
   }, [propertyId, unitId]);
+
+  useEffect(() => {
+    loadUnit();
+  }, [loadUnit]);
 
   async function handleCreateWorkOrder(e: React.FormEvent) {
     e.preventDefault();
@@ -111,6 +113,34 @@ export default function UnitDetailPage() {
       console.error('Failed to create work order:', err);
     } finally {
       setWoSubmitting(false);
+    }
+  }
+
+  async function handleEditUnit(e: React.FormEvent<HTMLFormElement>) {
+    e.preventDefault();
+    const formData = new FormData(e.currentTarget);
+    try {
+      await api.units.update(propertyId, unitId, {
+        unitNumber: formData.get('unitNumber'),
+        floor: formData.get('floor') ? Number(formData.get('floor')) : null,
+        type: (formData.get('type') as string) || null,
+        bedrooms: Number(formData.get('bedrooms')),
+        bathrooms: Number(formData.get('bathrooms')),
+        sqFt: formData.get('sqFt') ? Number(formData.get('sqFt')) : null,
+        marketRent: formData.get('marketRent') ? Number(formData.get('marketRent')) : null,
+        rentAmount: Number(formData.get('rentAmount')),
+        depositAmount: Number(formData.get('depositAmount') || 0),
+        status: formData.get('status'),
+        address: (formData.get('unitAddress') as string) || null,
+        city: (formData.get('unitCity') as string) || null,
+        state: ((formData.get('unitState') as string) || '').toUpperCase() || null,
+        zip: (formData.get('unitZip') as string) || null,
+        notes: (formData.get('notes') as string) || null,
+      });
+      setShowEditUnit(false);
+      await loadUnit();
+    } catch (err) {
+      console.error('Failed to update unit:', err);
     }
   }
 
@@ -194,6 +224,9 @@ export default function UnitDetailPage() {
           )}
         </div>
         <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+          <button className="btn btn-secondary" onClick={() => setShowEditUnit(true)}>
+            Edit Unit
+          </button>
           <button className="btn btn-secondary" onClick={() => setShowWOModal(true)}>
             + Add Work Order
           </button>
@@ -328,6 +361,121 @@ export default function UnitDetailPage() {
           </div>
         </div>
       </div>
+
+      {showEditUnit && (
+        <div className="modal-overlay" onClick={() => setShowEditUnit(false)}>
+          <div className="modal" onClick={(e) => e.stopPropagation()}>
+            <div className="modal-header">
+              <h2>Edit Unit</h2>
+              <button className="btn btn-sm btn-secondary" onClick={() => setShowEditUnit(false)}>
+                X
+              </button>
+            </div>
+            <form onSubmit={handleEditUnit}>
+              <div className="modal-body">
+                <div className="form-row">
+                  <div className="form-group">
+                    <label>Unit Number</label>
+                    <input name="unitNumber" required defaultValue={unit.unitNumber} />
+                  </div>
+                  <div className="form-group">
+                    <label>Floor</label>
+                    <input name="floor" type="number" defaultValue={unit.floor ?? ''} />
+                  </div>
+                </div>
+                <div className="form-row">
+                  <div className="form-group">
+                    <label>Unit Type</label>
+                    <select name="type" defaultValue={unit.type ?? ''}>
+                      <option value="">-- Select --</option>
+                      <option value="studio">Studio</option>
+                      <option value="one_bed">1 Bed</option>
+                      <option value="two_bed">2 Bed</option>
+                      <option value="three_bed">3 Bed</option>
+                      <option value="four_plus_bed">4+ Bed</option>
+                      <option value="commercial">Commercial</option>
+                    </select>
+                  </div>
+                  <div className="form-group">
+                    <label>Status</label>
+                    <select name="status" defaultValue={unit.status}>
+                      <option value="vacant">vacant</option>
+                      <option value="occupied">occupied</option>
+                      <option value="notice">notice</option>
+                      <option value="maintenance">maintenance</option>
+                    </select>
+                  </div>
+                </div>
+                <div className="form-row">
+                  <div className="form-group">
+                    <label>Bedrooms</label>
+                    <input name="bedrooms" type="number" required min="0" defaultValue={unit.bedrooms} />
+                  </div>
+                  <div className="form-group">
+                    <label>Bathrooms</label>
+                    <input name="bathrooms" type="number" required min="0" step="0.5" defaultValue={unit.bathrooms} />
+                  </div>
+                </div>
+                <div className="form-row">
+                  <div className="form-group">
+                    <label>Sq Ft</label>
+                    <input name="sqFt" type="number" defaultValue={unit.sqFt ?? ''} />
+                  </div>
+                  <div className="form-group">
+                    <label>Market Rent ($)</label>
+                    <input name="marketRent" type="number" min="0" step="0.01" defaultValue={unit.marketRent ?? ''} />
+                  </div>
+                </div>
+                <div className="form-row">
+                  <div className="form-group">
+                    <label>Monthly Rent ($)</label>
+                    <input name="rentAmount" type="number" required min="0" step="0.01" defaultValue={unit.rentAmount} />
+                  </div>
+                  <div className="form-group">
+                    <label>Security Deposit ($)</label>
+                    <input name="depositAmount" type="number" min="0" step="0.01" defaultValue={unit.depositAmount} />
+                  </div>
+                </div>
+                <div style={{ marginTop: '16px', paddingTop: '16px', borderTop: '1px solid var(--color-border)' }}>
+                  <p style={{ fontSize: '12px', color: 'var(--color-text-muted)', marginBottom: '12px', fontWeight: 500, textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+                    Address Override <span style={{ fontWeight: 400, textTransform: 'none', letterSpacing: 'normal' }}>(leave blank to use property address)</span>
+                  </p>
+                  <div className="form-group">
+                    <label>Street Address</label>
+                    <input name="unitAddress" defaultValue={unit.address ?? ''} />
+                  </div>
+                  <div className="form-row">
+                    <div className="form-group">
+                      <label>City</label>
+                      <input name="unitCity" defaultValue={unit.city ?? ''} />
+                    </div>
+                    <div className="form-group">
+                      <label>State</label>
+                      <input name="unitState" maxLength={2} defaultValue={unit.state ?? ''} style={{ textTransform: 'uppercase' }} />
+                    </div>
+                    <div className="form-group">
+                      <label>ZIP</label>
+                      <input name="unitZip" defaultValue={unit.zip ?? ''} />
+                    </div>
+                  </div>
+                </div>
+                <div className="form-group">
+                  <label>Notes</label>
+                  <textarea name="notes" rows={3} defaultValue={unit.notes ?? ''} />
+                </div>
+              </div>
+              <div className="modal-footer">
+                <button type="button" className="btn btn-secondary" onClick={() => setShowEditUnit(false)}>
+                  Cancel
+                </button>
+                <button type="submit" className="btn btn-primary">
+                  Save Changes
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
 
       {/* Work Orders */}
       <div className="card" style={{ marginTop: '24px' }}>
