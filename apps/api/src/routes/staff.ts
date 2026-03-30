@@ -1,6 +1,7 @@
 import { Router, Request, Response, NextFunction } from 'express';
 import { prisma, UserStatus } from '@propflow/db';
 import { requireAuth, requireOrg } from '../middleware/auth';
+import { supabaseAdmin } from '../lib/supabase';
 
 const router = Router({ mergeParams: true });
 
@@ -75,19 +76,22 @@ router.post('/invite', requireAuth, requireOrg, async (req: Request, res: Respon
     });
 
     // Send Supabase invite email so they can set a password
-    const { data: { user: supabaseUser }, error } = await (await import('../lib/supabase')).supabaseAdmin.auth.admin.inviteUserByEmail(email, {
+    const { data: { user: supabaseUser }, error } = await supabaseAdmin.auth.admin.inviteUserByEmail(email, {
       redirectTo: `${process.env.APP_URL}/onboarding?invited=true`,
-      data: {
-        organizationId: req.params.orgId,
-        role,
-        name,
-      },
+      data: { organizationId: req.params.orgId, role, name },
     });
 
     if (error) {
       // Clean up the DB record if invite failed
       await prisma.user.delete({ where: { id: invitedUser.id } });
-      throw error;
+      console.error('Supabase invite error:', error);
+      res.status(400).json({
+        error: {
+          code: 'INVITE_FAILED',
+          message: error.message || 'Failed to send invite email. The address may already be registered.',
+        },
+      });
+      return;
     }
 
     // Link the Supabase user ID to our record
