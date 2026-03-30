@@ -95,9 +95,14 @@ export default function TenantsPage() {
             {tenants.length} tenants &middot; {activeTenants.length} with active leases
           </p>
         </div>
-        <button className="btn btn-primary" onClick={() => setShowForm(true)}>
-          + Add Tenant
-        </button>
+        <div style={{ display: 'flex', gap: '8px' }}>
+          <Link href="/tenants/invite" className="btn btn-secondary">
+            Invite Tenant
+          </Link>
+          <button className="btn btn-primary" onClick={() => setShowForm(true)}>
+            + Add Tenant
+          </button>
+        </div>
       </div>
 
       {tenants.length === 0 ? (

@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { useParams } from 'next/navigation';
+import { useParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { api } from '@/lib/api';
 import { formatPhone } from '@/lib/phone';
@@ -61,12 +61,23 @@ interface UnitDetail {
   }>;
 }
 
+const WO_CATEGORIES = ['plumbing','electrical','hvac','appliance','pest','structural','cosmetic','grounds','general','other'];
+const WO_PRIORITIES = ['routine','urgent','emergency'];
+
 export default function UnitDetailPage() {
   const params = useParams();
+  const router = useRouter();
   const propertyId = params.id as string;
   const unitId = params.unitId as string;
   const [unit, setUnit] = useState<UnitDetail | null>(null);
   const [loading, setLoading] = useState(true);
+
+  // Work order modal
+  const [showWOModal, setShowWOModal] = useState(false);
+  const [woDescription, setWoDescription] = useState('');
+  const [woCategory, setWoCategory] = useState('general');
+  const [woPriority, setWoPriority] = useState('routine');
+  const [woSubmitting, setWoSubmitting] = useState(false);
 
   useEffect(() => {
     async function load() {
@@ -82,6 +93,27 @@ export default function UnitDetailPage() {
     load();
   }, [propertyId, unitId]);
 
+  async function handleCreateWorkOrder(e: React.FormEvent) {
+    e.preventDefault();
+    if (!unit) return;
+    setWoSubmitting(true);
+    try {
+      const wo = await api.workOrders.create({
+        propertyId,
+        unitId,
+        description: woDescription,
+        category: woCategory,
+        priority: woPriority,
+        tenantId: unit.leases.find((l) => l.status === 'active')?.participants.find((p) => p.isPrimary)?.tenant.id ?? null,
+      });
+      router.push(`/work-orders/${wo.id}`);
+    } catch (err) {
+      console.error('Failed to create work order:', err);
+    } finally {
+      setWoSubmitting(false);
+    }
+  }
+
   if (loading) return <div className="loading">Loading unit...</div>;
   if (!unit) return <div className="loading">Unit not found</div>;
 
@@ -92,6 +124,57 @@ export default function UnitDetailPage() {
 
   return (
     <>
+      {/* Work Order Modal */}
+      {showWOModal && (
+        <div className="modal-overlay" onClick={() => setShowWOModal(false)}>
+          <div className="modal" onClick={(e) => e.stopPropagation()}>
+            <div className="modal-header">
+              <h2 className="modal-title">Create Work Order — Unit {unit.unitNumber}</h2>
+              <button className="modal-close" onClick={() => setShowWOModal(false)}>×</button>
+            </div>
+            <form onSubmit={handleCreateWorkOrder}>
+              <div className="modal-body">
+                <div className="form-row">
+                  <div className="form-group">
+                    <label>Category</label>
+                    <select value={woCategory} onChange={(e) => setWoCategory(e.target.value)}>
+                      {WO_CATEGORIES.map((c) => (
+                        <option key={c} value={c} style={{ textTransform: 'capitalize' }}>{c}</option>
+                      ))}
+                    </select>
+                  </div>
+                  <div className="form-group">
+                    <label>Priority</label>
+                    <select value={woPriority} onChange={(e) => setWoPriority(e.target.value)}>
+                      {WO_PRIORITIES.map((p) => (
+                        <option key={p} value={p} style={{ textTransform: 'capitalize' }}>{p}</option>
+                      ))}
+                    </select>
+                  </div>
+                </div>
+                <div className="form-group">
+                  <label>Description *</label>
+                  <textarea
+                    value={woDescription}
+                    onChange={(e) => setWoDescription(e.target.value)}
+                    placeholder="Describe the issue in detail…"
+                    rows={4}
+                    required
+                    style={{ width: '100%', resize: 'vertical' }}
+                  />
+                </div>
+              </div>
+              <div className="modal-footer">
+                <button type="button" className="btn btn-secondary" onClick={() => setShowWOModal(false)} disabled={woSubmitting}>Cancel</button>
+                <button type="submit" className="btn btn-primary" disabled={woSubmitting || !woDescription.trim()}>
+                  {woSubmitting ? 'Creating…' : 'Create work order'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
       <div className="breadcrumb">
         <Link href="/properties">Properties</Link>
         <span>/</span>
@@ -110,9 +193,27 @@ export default function UnitDetailPage() {
             </p>
           )}
         </div>
-        <span className={`badge badge-${unit.status}`} style={{ fontSize: '14px', padding: '4px 12px' }}>
-          {unit.status}
-        </span>
+        <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+          <button className="btn btn-secondary" onClick={() => setShowWOModal(true)}>
+            + Add Work Order
+          </button>
+          {primaryTenant && (
+            <Link
+              href={`/messages?tenantId=${primaryTenant.id}`}
+              className="btn btn-secondary"
+            >
+              Message Tenant
+            </Link>
+          )}
+          {activeLease && (
+            <Link href={`/leases/${activeLease.id}`} className="btn btn-secondary">
+              View Lease
+            </Link>
+          )}
+          <span className={`badge badge-${unit.status}`} style={{ fontSize: '14px', padding: '4px 12px' }}>
+            {unit.status}
+          </span>
+        </div>
       </div>
 
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '24px' }}>

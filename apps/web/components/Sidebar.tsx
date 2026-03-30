@@ -2,6 +2,9 @@
 
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
+import { useEffect, useState } from 'react';
+import { api } from '@/lib/api';
+import { useAuth } from '@/contexts/AuthContext';
 
 const navItems = [
   { href: '/dashboard', label: 'Dashboard', icon: 'grid' },
@@ -11,7 +14,9 @@ const navItems = [
   { href: '/payments', label: 'Payments', icon: 'dollar' },
   { href: '/work-orders', label: 'Work Orders', icon: 'wrench' },
   { href: '/messages', label: 'Messages', icon: 'mail' },
-  { href: '/settings', label: 'Settings', icon: 'settings' },
+  { href: '/documents', label: 'Documents', icon: 'folder' },
+  { href: '/notifications', label: 'Notifications', icon: 'bell' },
+  { href: '/settings/organization', label: 'Settings', icon: 'settings' },
 ];
 
 const icons: Record<string, React.ReactNode> = {
@@ -61,6 +66,16 @@ const icons: Record<string, React.ReactNode> = {
       <polyline points="22,6 12,13 2,6" />
     </svg>
   ),
+  folder: (
+    <svg className="sidebar-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+      <path d="M22 19a2 2 0 01-2 2H4a2 2 0 01-2-2V5a2 2 0 012-2h5l2 3h9a2 2 0 012 2z" />
+    </svg>
+  ),
+  bell: (
+    <svg className="sidebar-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+      <path d="M18 8A6 6 0 006 8c0 7-3 9-3 9h18s-3-2-3-9M13.73 21a2 2 0 01-3.46 0" />
+    </svg>
+  ),
   settings: (
     <svg className="sidebar-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
       <circle cx="12" cy="12" r="3" />
@@ -71,6 +86,24 @@ const icons: Record<string, React.ReactNode> = {
 
 export default function Sidebar() {
   const pathname = usePathname();
+  const { profile } = useAuth();
+  const [unreadCount, setUnreadCount] = useState(0);
+
+  useEffect(() => {
+    if (!profile?.userId) return;
+    api.notifications.list({ userId: profile.userId, limit: 50 })
+      .then((notifs: any[]) => {
+        setUnreadCount(notifs.filter((n) => !n.readAt).length);
+      })
+      .catch(() => {});
+  }, [profile?.userId]);
+
+  function isActive(href: string) {
+    if (href === '/settings/organization') {
+      return pathname.startsWith('/settings');
+    }
+    return pathname.startsWith(href);
+  }
 
   return (
     <aside className="sidebar">
@@ -80,10 +113,32 @@ export default function Sidebar() {
           <Link
             key={item.href}
             href={item.href}
-            className={`sidebar-link ${pathname.startsWith(item.href) ? 'active' : ''}`}
+            className={`sidebar-link ${isActive(item.href) ? 'active' : ''}`}
+            style={{ position: 'relative' }}
           >
             {icons[item.icon]}
             {item.label}
+            {item.icon === 'bell' && unreadCount > 0 && (
+              <span style={{
+                position: 'absolute',
+                right: '12px',
+                top: '50%',
+                transform: 'translateY(-50%)',
+                background: 'var(--color-danger)',
+                color: 'white',
+                borderRadius: '999px',
+                fontSize: '11px',
+                fontWeight: 600,
+                minWidth: '18px',
+                height: '18px',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                padding: '0 4px',
+              }}>
+                {unreadCount > 99 ? '99+' : unreadCount}
+              </span>
+            )}
           </Link>
         ))}
       </nav>

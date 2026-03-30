@@ -1,4 +1,7 @@
 import { Router } from 'express';
+import { requireAuth, requireOrg } from '../middleware/auth';
+import authRoutes from './auth';
+import organizationRoutes from './organizations';
 import propertyRoutes from './properties';
 import tenantRoutes from './tenants';
 import leaseRoutes from './leases';
@@ -14,18 +17,24 @@ import ledgerRoutes from './ledger';
 
 const router = Router();
 
-// All routes are scoped to an organization
-router.use('/organizations/:orgId/properties', propertyRoutes);
-router.use('/organizations/:orgId/tenants', tenantRoutes);
-router.use('/organizations/:orgId/leases', leaseRoutes);
-router.use('/organizations/:orgId/payments', paymentRoutes);
-router.use('/organizations/:orgId/documents', documentRoutes);
-router.use('/organizations/:orgId/notifications', notificationRoutes);
-router.use('/organizations/:orgId/work-orders', workOrderRoutes);
-router.use('/organizations/:orgId/staff', staffRoutes);
-router.use('/organizations/:orgId/vendors', vendorRoutes);
-router.use('/organizations/:orgId/messages', messageRoutes);
-router.use('/organizations/:orgId/connect', connectRoutes);
-router.use('/organizations/:orgId/ledger', ledgerRoutes);
+// Auth routes — no org scope
+router.use('/auth', authRoutes);
+
+// Organization settings
+router.use('/organizations/:orgId', requireAuth, requireOrg, organizationRoutes);
+
+// All org-scoped routes — protected by auth + org isolation
+router.use('/organizations/:orgId/properties', requireAuth, requireOrg, propertyRoutes);
+router.use('/organizations/:orgId/tenants', requireAuth, requireOrg, tenantRoutes);
+router.use('/organizations/:orgId/leases', requireAuth, requireOrg, leaseRoutes);
+router.use('/organizations/:orgId/payments', requireAuth, requireOrg, paymentRoutes);
+router.use('/organizations/:orgId/documents', requireAuth, requireOrg, documentRoutes);
+router.use('/organizations/:orgId/notifications', requireAuth, requireOrg, notificationRoutes);
+router.use('/organizations/:orgId/work-orders', requireAuth, requireOrg, workOrderRoutes);
+router.use('/organizations/:orgId/staff', requireAuth, requireOrg, staffRoutes);
+router.use('/organizations/:orgId/vendors', requireAuth, requireOrg, vendorRoutes);
+router.use('/organizations/:orgId/messages', requireAuth, requireOrg, messageRoutes);
+router.use('/organizations/:orgId/connect', requireAuth, requireOrg, connectRoutes);
+router.use('/organizations/:orgId/ledger', requireAuth, requireOrg, ledgerRoutes);
 
 export default router;

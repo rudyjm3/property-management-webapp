@@ -82,11 +82,16 @@ export default function PaymentsPage() {
   const [loading, setLoading] = useState(true);
   const [filterStatus, setFilterStatus] = useState(searchParams.get('status') ?? '');
   const [filterType, setFilterType] = useState(searchParams.get('type') ?? '');
+  const [filterPropertyId, setFilterPropertyId] = useState('');
+  const [filterTenantId, setFilterTenantId] = useState('');
+  const [propertiesForFilter, setPropertiesForFilter] = useState<Array<{ id: string; name: string }>>([]);
+  const [tenantsForFilter, setTenantsForFilter] = useState<Array<{ id: string; name: string }>>([]);
   const [showForm, setShowForm] = useState(false);
   const [formError, setFormError] = useState('');
   const [submitting, setSubmitting] = useState(false);
   const [runningLateFeeJob, setRunningLateFeeJob] = useState(false);
   const [lateFeeJobResult, setLateFeeJobResult] = useState<string | null>(null);
+  const [runningRentReminders, setRunningRentReminders] = useState(false);
 
   // Tab state
   const [activeTab, setActiveTab] = useState<'payments' | 'ledger'>('payments');
@@ -143,6 +148,15 @@ export default function PaymentsPage() {
   useEffect(() => {
     api.connect.getStatus()
       .then((s) => setConnectStatus(s.stripeAccountStatus))
+      .catch(() => {});
+  }, []);
+
+  useEffect(() => {
+    Promise.all([api.properties.list(), api.tenants.list()])
+      .then(([props, tenants]) => {
+        setPropertiesForFilter(props.map((p: any) => ({ id: p.id, name: p.name })));
+        setTenantsForFilter(tenants.map((t: any) => ({ id: t.id, name: t.name })));
+      })
       .catch(() => {});
   }, []);
 
@@ -323,6 +337,23 @@ export default function PaymentsPage() {
           )}
           <button
             className="btn btn-secondary"
+            onClick={async () => {
+              setRunningRentReminders(true);
+              try {
+                await api.notifications.triggerRentReminders();
+                alert('Rent reminders sent.');
+              } catch (err: any) {
+                alert(err.message || 'Failed to send reminders.');
+              } finally {
+                setRunningRentReminders(false);
+              }
+            }}
+            disabled={runningRentReminders}
+          >
+            {runningRentReminders ? 'Sending…' : 'Send Rent Reminders'}
+          </button>
+          <button
+            className="btn btn-secondary"
             onClick={handleRunLateFeeJob}
             disabled={runningLateFeeJob}
           >
@@ -387,10 +418,32 @@ export default function PaymentsPage() {
               ))}
             </select>
 
-            {(filterStatus || filterType) && (
+            <select
+              value={filterPropertyId}
+              onChange={(e) => setFilterPropertyId(e.target.value)}
+              style={{ padding: '6px 12px', border: '1px solid var(--color-border)', borderRadius: 'var(--radius)', fontSize: '14px', background: 'white' }}
+            >
+              <option value="">All Properties</option>
+              {propertiesForFilter.map((p) => (
+                <option key={p.id} value={p.id}>{p.name}</option>
+              ))}
+            </select>
+
+            <select
+              value={filterTenantId}
+              onChange={(e) => setFilterTenantId(e.target.value)}
+              style={{ padding: '6px 12px', border: '1px solid var(--color-border)', borderRadius: 'var(--radius)', fontSize: '14px', background: 'white' }}
+            >
+              <option value="">All Tenants</option>
+              {tenantsForFilter.map((t) => (
+                <option key={t.id} value={t.id}>{t.name}</option>
+              ))}
+            </select>
+
+            {(filterStatus || filterType || filterPropertyId || filterTenantId) && (
               <button
                 className="btn btn-sm btn-secondary"
-                onClick={() => { setFilterStatus(''); setFilterType(''); }}
+                onClick={() => { setFilterStatus(''); setFilterType(''); setFilterPropertyId(''); setFilterTenantId(''); }}
               >
                 Clear Filters
               </button>
@@ -399,10 +452,13 @@ export default function PaymentsPage() {
 
           {loading ? (
             <div className="loading">Loading payments...</div>
-          ) : payments.length === 0 ? (
+          ) : payments.filter((p) =>
+              (!filterPropertyId || p.lease.unit.property.id === filterPropertyId) &&
+              (!filterTenantId || p.tenant.id === filterTenantId)
+            ).length === 0 ? (
             <div className="empty-state">
               <h3>No payments found</h3>
-              <p>{filterStatus || filterType ? 'Try adjusting your filters.' : 'Log the first payment to get started.'}</p>
+              <p>{filterStatus || filterType || filterPropertyId || filterTenantId ? 'Try adjusting your filters.' : 'Log the first payment to get started.'}</p>
             </div>
           ) : (
             <div className="table-container">
@@ -421,7 +477,10 @@ export default function PaymentsPage() {
                   </tr>
                 </thead>
                 <tbody>
-                  {payments.map((payment) => (
+                  {payments.filter((p) =>
+                    (!filterPropertyId || p.lease.unit.property.id === filterPropertyId) &&
+                    (!filterTenantId || p.tenant.id === filterTenantId)
+                  ).map((payment) => (
                     <tr key={payment.id}>
                       <td>
                         <Link href={`/tenants/${payment.tenant.id}`} style={{ fontWeight: 500 }}>

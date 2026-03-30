@@ -1,15 +1,90 @@
 import { Request, Response, NextFunction } from 'express';
+import { supabaseAdmin } from '../lib/supabase';
+import { prisma } from '@propflow/db';
+
+export interface AuthUser {
+  userId: string;
+  orgId: string;
+  role: string;
+  supabaseUserId: string;
+}
+
+// Extend Express Request to carry auth context
+declare global {
+  namespace Express {
+    interface Request {
+      user?: AuthUser;
+    }
+  }
+}
+
+/**
+ * Lightweight auth middleware — only verifies the Supabase JWT.
+ * Does NOT require a DB user record. Use for endpoints called before
+ * the user has completed onboarding (e.g. /auth/register).
+ */
+export async function requireSupabaseAuth(req: Request, res: Response, next: NextFunction): Promise<void> {
+  const authHeader = req.headers.authorization;
+  if (!authHeader?.startsWith('Bearer ')) {
+    res.status(401).json({ error: { code: 'UNAUTHORIZED', message: 'Missing or invalid Authorization header.' } });
+    return;
+  }
+
+  const token = authHeader.slice(7);
+  const { data: { user: supabaseUser }, error } = await supabaseAdmin.auth.getUser(token);
+  if (error || !supabaseUser) {
+    res.status(401).json({ error: { code: 'INVALID_TOKEN', message: 'Invalid or expired token.' } });
+    return;
+  }
+
+  // Attach only the Supabase identity — no DB lookup
+  req.user = {
+    userId: '',
+    orgId: '',
+    role: '',
+    supabaseUserId: supabaseUser.id,
+  };
+
+  next();
+}
 
 /**
  * Auth middleware — verifies Supabase JWT and attaches user context.
- * Will be implemented when Supabase Auth is configured.
  */
-export function requireAuth(req: Request, res: Response, next: NextFunction): void {
-  // TODO: Phase 1 — Verify Supabase JWT from Authorization header
-  // 1. Extract Bearer token
-  // 2. Verify with Supabase
-  // 3. Look up user + organization from DB
-  // 4. Attach to req (via custom type extension)
+export async function requireAuth(req: Request, res: Response, next: NextFunction): Promise<void> {
+  const authHeader = req.headers.authorization;
+  if (!authHeader?.startsWith('Bearer ')) {
+    res.status(401).json({ error: { code: 'UNAUTHORIZED', message: 'Missing or invalid Authorization header.' } });
+    return;
+  }
+
+  const token = authHeader.slice(7);
+
+  // Verify token with Supabase
+  const { data: { user: supabaseUser }, error } = await supabaseAdmin.auth.getUser(token);
+  if (error || !supabaseUser) {
+    res.status(401).json({ error: { code: 'INVALID_TOKEN', message: 'Invalid or expired token.' } });
+    return;
+  }
+
+  // Look up our User record by supabaseUserId
+  const dbUser = await prisma.user.findUnique({
+    where: { supabaseUserId: supabaseUser.id },
+    select: { id: true, organizationId: true, role: true, supabaseUserId: true },
+  });
+
+  if (!dbUser) {
+    res.status(401).json({ error: { code: 'USER_NOT_FOUND', message: 'User account not found. Complete onboarding first.' } });
+    return;
+  }
+
+  req.user = {
+    userId: dbUser.id,
+    orgId: dbUser.organizationId,
+    role: dbUser.role,
+    supabaseUserId: dbUser.supabaseUserId!,
+  };
+
   next();
 }
 
@@ -18,6 +93,16 @@ export function requireAuth(req: Request, res: Response, next: NextFunction): vo
  * to the authenticated user's organization.
  */
 export function requireOrg(req: Request, res: Response, next: NextFunction): void {
-  // TODO: Phase 1 — Verify orgId param matches authenticated user's org
+  if (!req.user) {
+    res.status(401).json({ error: { code: 'UNAUTHORIZED', message: 'Authentication required.' } });
+    return;
+  }
+
+  const requestedOrgId = req.params.orgId;
+  if (requestedOrgId && requestedOrgId !== req.user.orgId) {
+    res.status(403).json({ error: { code: 'FORBIDDEN', message: 'Access denied to this organization.' } });
+    return;
+  }
+
   next();
 }
