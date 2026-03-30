@@ -111,6 +111,9 @@ export async function createPaymentIntent(
 ): Promise<Stripe.PaymentIntent> {
   const stripe = getStripe();
 
+  // Creates the server-side PaymentIntent. The tenant must then supply their bank
+  // account via Stripe.js / Financial Connections on the client to move the PI out
+  // of `requires_payment_method` and trigger the ACH debit.
   return stripe.paymentIntents.create({
     amount: Math.round(opts.amount * 100),
     currency: 'usd',

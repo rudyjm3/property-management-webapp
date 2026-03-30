@@ -21,14 +21,9 @@ export async function createLedgerEntry(input: CreateLedgerEntryInput) {
       if (existing) return existing;
     }
 
-    // Lock the latest entry to read current balance atomically
-    await tx.$queryRaw`
-      SELECT id FROM ledger_entries
-      WHERE organization_id = ${input.organizationId}
-      ORDER BY created_at DESC
-      LIMIT 1
-      FOR UPDATE
-    `;
+    // Serialize all writes per org — advisory lock covers the empty-table case
+    // where SELECT FOR UPDATE would lock nothing and allow duplicate zero-balance reads.
+    await tx.$queryRaw`SELECT pg_advisory_xact_lock(hashtext(${input.organizationId})::bigint)`;
 
     const latest = await tx.ledgerEntry.findFirst({
       where: { organizationId: input.organizationId },
@@ -73,7 +68,9 @@ export async function listLedgerEntries(
       organizationId,
       ...(paymentId ? { paymentId } : {}),
       ...(type ? { type: type as 'credit' | 'debit' } : {}),
-      ...(cursor ? { id: { lt: cursor } } : {}),
+      // Cursor is a createdAt ISO string — must match the orderBy key to avoid
+      // skipping or duplicating entries across pages (UUIDs are not time-ordered).
+      ...(cursor ? { createdAt: { lt: new Date(cursor) } } : {}),
     },
     orderBy: { createdAt: 'desc' },
     take: limit,
@@ -81,6 +78,9 @@ export async function listLedgerEntries(
 
   return {
     data: entries,
-    nextCursor: entries.length === limit ? entries[entries.length - 1].id : null,
+    nextCursor:
+      entries.length === limit
+        ? entries[entries.length - 1].createdAt.toISOString()
+        : null,
   };
 }

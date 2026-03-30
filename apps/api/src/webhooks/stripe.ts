@@ -138,7 +138,13 @@ export default async function stripeWebhookHandler(req: Request, res: Response):
         if (!payment) break;
 
         const orgId = payment.lease.unit.property.organizationId;
-        const refundAmount = charge.amount_refunded / 100;
+        // Use the incremental amount for this event only — charge.amount_refunded is
+        // cumulative, so subtracting the previous value gives the per-event delta.
+        const prevAmountRefunded =
+          ((event.data.previous_attributes as Record<string, number> | undefined)
+            ?.amount_refunded ?? 0);
+        const refundAmount = (charge.amount_refunded - prevAmountRefunded) / 100;
+        if (refundAmount <= 0) break;
 
         await prisma.$transaction(async (tx) => {
           await tx.payment.updateMany({
@@ -156,6 +162,50 @@ export default async function stripeWebhookHandler(req: Request, res: Response):
         });
 
         console.log(`[stripe-webhook] Charge refunded for payment ${payment.id}`);
+        break;
+      }
+
+      // refund.updated fires in newer API versions where Stripe uses refund-centric
+      // events instead of charge-centric ones. Handles the same logic as charge.refunded.
+      case 'refund.updated': {
+        const refund = event.data.object as Stripe.Refund;
+        if (refund.status !== 'succeeded') break;
+
+        const piId = typeof refund.payment_intent === 'string' ? refund.payment_intent : null;
+        if (!piId) break;
+
+        const payment = await prisma.payment.findFirst({
+          where: { stripePaymentIntentId: piId },
+          include: {
+            lease: {
+              select: {
+                id: true,
+                unit: { select: { property: { select: { organizationId: true } } } },
+              },
+            },
+          },
+        });
+        if (!payment) break;
+
+        const orgId = payment.lease.unit.property.organizationId;
+        const refundAmount = refund.amount / 100;
+
+        await prisma.$transaction(async (tx) => {
+          await tx.payment.updateMany({
+            where: { id: payment.id, status: { not: 'refunded' } },
+            data: { status: 'refunded' },
+          });
+          await ledgerService.createLedgerEntry({
+            organizationId: orgId,
+            paymentId: payment.id,
+            type: 'debit',
+            amount: refundAmount,
+            description: `Refund issued for payment ${payment.id}`,
+            stripeEventId: event.id,
+          });
+        });
+
+        console.log(`[stripe-webhook] Refund succeeded for payment ${payment.id}`);
         break;
       }
 
