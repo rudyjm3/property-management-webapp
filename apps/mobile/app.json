@@ -1,0 +1,42 @@
+{
+  "expo": {
+    "name": "PropFlow",
+    "slug": "propflow-tenant",
+    "version": "1.0.0",
+    "scheme": "propflow",
+    "orientation": "portrait",
+    "icon": "./assets/icon.png",
+    "userInterfaceStyle": "light",
+    "newArchEnabled": true,
+    "splash": {
+      "image": "./assets/splash-icon.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#6366f1"
+    },
+    "ios": {
+      "supportsTablet": false,
+      "bundleIdentifier": "com.propflow.tenant"
+    },
+    "android": {
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/adaptive-icon.png",
+        "backgroundColor": "#6366f1"
+      },
+      "package": "com.propflow.tenant"
+    },
+    "plugins": [
+      "expo-router",
+      "expo-secure-store",
+      [
+        "@stripe/stripe-react-native",
+        {
+          "merchantIdentifier": "merchant.com.propflow.tenant",
+          "enableGooglePay": false
+        }
+      ]
+    ],
+    "experiments": {
+      "typedRoutes": true
+    }
+  }
+}
