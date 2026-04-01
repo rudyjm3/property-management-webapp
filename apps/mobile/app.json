@@ -37,9 +37,6 @@
     ],
     "experiments": {
       "typedRoutes": true
-    },
-    "install": {
-      "exclude": ["typescript"]
     }
   }
 }
