@@ -21,4 +21,10 @@ config.resolver.extraNodeModules = {
   '@propflow/shared': path.resolve(workspaceRoot, 'packages/shared/src'),
 };
 
+// Block nativewind and its deps from being watched — they're incompatible with RN 0.76
+config.resolver.blockList = [
+  /node_modules\/nativewind\/.*/,
+  /node_modules\/react-native-css-interop\/.*/,
+];
+
 module.exports = config;

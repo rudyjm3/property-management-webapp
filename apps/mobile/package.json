@@ -3,13 +3,6 @@
   "version": "0.1.0",
   "private": true,
   "main": "expo-router/entry",
-  "expo": {
-    "install": {
-      "exclude": [
-        "react-native-worklets"
-      ]
-    }
-  },
   "scripts": {
     "dev": "expo start",
     "build": "expo export",
@@ -26,7 +19,6 @@
     "expo-router": "~4.0.0",
     "expo-secure-store": "~14.0.0",
     "expo-status-bar": "~2.0.0",
-    "nativewind": "^4.0.0",
     "react": "18.3.1",
     "react-native": "0.76.9",
     "react-native-safe-area-context": "4.12.0",
@@ -35,7 +27,6 @@
   "devDependencies": {
     "@babel/core": "^7.20.0",
     "@types/react": "~18.3.12",
-    "tailwindcss": "^3.4.0",
     "typescript": "^5.3.3"
   }
 }
