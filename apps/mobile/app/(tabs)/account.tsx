@@ -1,4 +1,4 @@
-import { View, Text, Alert } from 'react-native';
+import { View, Text, Alert, StyleSheet } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useAuth } from '@/contexts/AuthContext';
 import { Card } from '@/components/ui/Card';
@@ -15,71 +15,57 @@ export default function AccountScreen() {
   }
 
   return (
-    <SafeAreaView className="flex-1 bg-gray-50">
-      <View className="px-4 pt-4 pb-2">
-        <Text className="text-2xl font-bold text-gray-900">Account</Text>
-      </View>
-
-      <View className="px-4 gap-4">
-        {/* Profile card */}
+    <SafeAreaView style={styles.container}>
+      <Text style={styles.heading}>Account</Text>
+      <View style={styles.content}>
         <Card>
-          <View className="flex-row items-center gap-4">
-            <View className="w-14 h-14 rounded-full bg-primary-100 items-center justify-center">
-              <Text className="text-2xl font-bold text-primary-600">
-                {profile?.name?.charAt(0).toUpperCase() ?? '?'}
-              </Text>
+          <View style={styles.profileRow}>
+            <View style={styles.avatar}>
+              <Text style={styles.avatarText}>{profile?.name?.charAt(0).toUpperCase() ?? '?'}</Text>
             </View>
-            <View className="flex-1">
-              <Text className="text-base font-semibold text-gray-900">{profile?.name ?? '—'}</Text>
-              <Text className="text-sm text-gray-500">{profile?.email ?? '—'}</Text>
-              {profile?.phone && (
-                <Text className="text-sm text-gray-500">{profile.phone}</Text>
-              )}
+            <View style={styles.profileInfo}>
+              <Text style={styles.name}>{profile?.name ?? '—'}</Text>
+              <Text style={styles.email}>{profile?.email ?? '—'}</Text>
+              {profile?.phone && <Text style={styles.email}>{profile.phone}</Text>}
             </View>
           </View>
         </Card>
 
-        {/* Lease info */}
         {profile?.activeLease && (
-          <Card>
-            <Text className="text-xs text-gray-400 uppercase font-semibold tracking-wide mb-3">
-              Current Lease
-            </Text>
-            <View className="gap-2">
-              <View className="flex-row justify-between">
-                <Text className="text-sm text-gray-500">Unit</Text>
-                <Text className="text-sm font-medium text-gray-900">
-                  {profile.activeLease.unit.unitNumber}
-                </Text>
+          <Card style={{ marginTop: 12 }}>
+            <Text style={styles.sectionLabel}>Current Lease</Text>
+            {[
+              ['Unit', profile.activeLease.unit.unitNumber],
+              ['Property', profile.activeLease.unit.property.name],
+              ['Monthly rent', new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(Number(profile.activeLease.rentAmount))],
+              ['Lease ends', new Date(profile.activeLease.endDate).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })],
+            ].map(([label, value]) => (
+              <View key={label} style={styles.leaseRow}>
+                <Text style={styles.leaseLabel}>{label}</Text>
+                <Text style={styles.leaseValue}>{value}</Text>
               </View>
-              <View className="flex-row justify-between">
-                <Text className="text-sm text-gray-500">Property</Text>
-                <Text className="text-sm font-medium text-gray-900">
-                  {profile.activeLease.unit.property.name}
-                </Text>
-              </View>
-              <View className="flex-row justify-between">
-                <Text className="text-sm text-gray-500">Monthly rent</Text>
-                <Text className="text-sm font-medium text-gray-900">
-                  {new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(
-                    Number(profile.activeLease.rentAmount)
-                  )}
-                </Text>
-              </View>
-              <View className="flex-row justify-between">
-                <Text className="text-sm text-gray-500">Lease ends</Text>
-                <Text className="text-sm font-medium text-gray-900">
-                  {new Date(profile.activeLease.endDate).toLocaleDateString('en-US', {
-                    month: 'short', day: 'numeric', year: 'numeric',
-                  })}
-                </Text>
-              </View>
-            </View>
+            ))}
           </Card>
         )}
 
-        <Button title="Sign Out" onPress={handleSignOut} variant="secondary" />
+        <Button title="Sign Out" onPress={handleSignOut} variant="secondary" style={{ marginTop: 16 }} />
       </View>
     </SafeAreaView>
   );
 }
+
+const styles = StyleSheet.create({
+  container: { flex: 1, backgroundColor: '#f9fafb' },
+  heading: { fontSize: 24, fontWeight: '700', color: '#111827', paddingHorizontal: 16, paddingTop: 16, paddingBottom: 8 },
+  content: { padding: 16 },
+  profileRow: { flexDirection: 'row', alignItems: 'center', gap: 16 },
+  avatar: { width: 56, height: 56, borderRadius: 28, backgroundColor: '#e0e7ff', alignItems: 'center', justifyContent: 'center' },
+  avatarText: { fontSize: 24, fontWeight: '700', color: '#4338ca' },
+  profileInfo: { flex: 1 },
+  name: { fontSize: 16, fontWeight: '600', color: '#111827' },
+  email: { fontSize: 14, color: '#6b7280', marginTop: 2 },
+  sectionLabel: { fontSize: 11, fontWeight: '600', color: '#9ca3af', textTransform: 'uppercase', letterSpacing: 0.8, marginBottom: 12 },
+  leaseRow: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 8 },
+  leaseLabel: { fontSize: 14, color: '#6b7280' },
+  leaseValue: { fontSize: 14, fontWeight: '500', color: '#111827' },
+});

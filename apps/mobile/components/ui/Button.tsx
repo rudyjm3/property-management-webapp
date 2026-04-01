@@ -1,4 +1,4 @@
-import { TouchableOpacity, Text, ActivityIndicator } from 'react-native';
+import { TouchableOpacity, Text, ActivityIndicator, StyleSheet } from 'react-native';
 
 interface ButtonProps {
   onPress: () => void;
@@ -6,42 +6,34 @@ interface ButtonProps {
   loading?: boolean;
   disabled?: boolean;
   variant?: 'primary' | 'secondary' | 'ghost';
-  className?: string;
+  style?: object;
 }
 
-export function Button({
-  onPress,
-  title,
-  loading = false,
-  disabled = false,
-  variant = 'primary',
-  className = '',
-}: ButtonProps) {
-  const base = 'flex-row items-center justify-center rounded-xl py-3 px-6';
-  const variants = {
-    primary: 'bg-primary-500',
-    secondary: 'bg-gray-100',
-    ghost: 'bg-transparent',
-  };
-  const textVariants = {
-    primary: 'text-white font-semibold text-base',
-    secondary: 'text-gray-900 font-semibold text-base',
-    ghost: 'text-primary-500 font-semibold text-base',
-  };
+export function Button({ onPress, title, loading = false, disabled = false, variant = 'primary', style }: ButtonProps) {
   const isDisabled = disabled || loading;
-
   return (
     <TouchableOpacity
       onPress={onPress}
       disabled={isDisabled}
-      className={`${base} ${variants[variant]} ${isDisabled ? 'opacity-50' : ''} ${className}`}
+      style={[styles.base, styles[variant], isDisabled && styles.disabled, style]}
       activeOpacity={0.8}
     >
-      {loading ? (
-        <ActivityIndicator color={variant === 'primary' ? '#fff' : '#6366f1'} />
-      ) : (
-        <Text className={textVariants[variant]}>{title}</Text>
-      )}
+      {loading
+        ? <ActivityIndicator color={variant === 'primary' ? '#fff' : '#6366f1'} />
+        : <Text style={[styles.text, styles[`${variant}Text` as keyof typeof styles] as object]}>{title}</Text>
+      }
     </TouchableOpacity>
   );
 }
+
+const styles = StyleSheet.create({
+  base: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', borderRadius: 12, paddingVertical: 12, paddingHorizontal: 24 },
+  primary: { backgroundColor: '#6366f1' },
+  secondary: { backgroundColor: '#f3f4f6' },
+  ghost: { backgroundColor: 'transparent' },
+  disabled: { opacity: 0.5 },
+  text: { fontSize: 16, fontWeight: '600' },
+  primaryText: { color: '#fff' },
+  secondaryText: { color: '#111827' },
+  ghostText: { color: '#6366f1' },
+});

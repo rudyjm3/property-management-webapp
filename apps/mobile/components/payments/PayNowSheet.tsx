@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { View, Text, Modal, TouchableOpacity, Alert, ActivityIndicator } from 'react-native';
+import { View, Text, Modal, TouchableOpacity, ActivityIndicator, StyleSheet } from 'react-native';
 import { useStripe } from '@stripe/stripe-react-native';
 import { useInitiatePayment } from '@/hooks/useInitiatePayment';
 import { Button } from '@/components/ui/Button';
@@ -29,11 +29,9 @@ export function PayNowSheet({ visible, payment, onClose, onSuccess }: PayNowShee
     setErrorMessage(null);
 
     try {
-      // Step 1: Get client secret from our API
       const { clientSecret } = await initiateMutation.mutateAsync(payment.id);
 
-      // Step 2: Collect bank account via Stripe Financial Connections
-      const { paymentIntent, error: collectError } = await collectBankAccountForPayment({
+      const { error: collectError } = await collectBankAccountForPayment({
         clientSecret,
         params: {
           paymentMethodType: 'USBankAccount',
@@ -47,7 +45,6 @@ export function PayNowSheet({ visible, payment, onClose, onSuccess }: PayNowShee
         return;
       }
 
-      // Step 3: Confirm the ACH payment
       const { error: confirmError } = await confirmPayment(clientSecret, {
         paymentMethodType: 'USBankAccount',
       });
@@ -84,24 +81,22 @@ export function PayNowSheet({ visible, payment, onClose, onSuccess }: PayNowShee
       presentationStyle="pageSheet"
       onRequestClose={handleClose}
     >
-      <View className="flex-1 bg-white">
-        <View className="flex-row items-center justify-between px-6 pt-6 pb-4 border-b border-gray-100">
-          <Text className="text-xl font-bold text-gray-900">Pay Rent</Text>
+      <View style={styles.container}>
+        <View style={styles.header}>
+          <Text style={styles.headerTitle}>Pay Rent</Text>
           <TouchableOpacity onPress={handleClose}>
-            <Text className="text-gray-400 text-2xl">×</Text>
+            <Text style={styles.closeButton}>×</Text>
           </TouchableOpacity>
         </View>
 
-        <View className="flex-1 px-6 pt-6">
+        <View style={styles.body}>
           {step === 'confirm' && (
-            <View className="gap-6">
-              <View className="bg-gray-50 rounded-2xl p-5">
-                <Text className="text-sm text-gray-500 mb-1">Amount due</Text>
-                <Text className="text-4xl font-bold text-gray-900">
-                  {formatCurrency(payment.amount)}
-                </Text>
+            <View style={styles.confirmContainer}>
+              <View style={styles.amountBox}>
+                <Text style={styles.amountLabel}>Amount due</Text>
+                <Text style={styles.amountValue}>{formatCurrency(payment.amount)}</Text>
                 {payment.dueDate && (
-                  <Text className="text-sm text-gray-500 mt-2">
+                  <Text style={styles.amountDate}>
                     Due {new Date(payment.dueDate).toLocaleDateString('en-US', {
                       month: 'long',
                       day: 'numeric',
@@ -111,47 +106,40 @@ export function PayNowSheet({ visible, payment, onClose, onSuccess }: PayNowShee
                 )}
               </View>
 
-              <View className="bg-blue-50 rounded-xl p-4">
-                <Text className="text-sm text-blue-700 font-medium">ACH Bank Transfer</Text>
-                <Text className="text-xs text-blue-600 mt-1">
+              <View style={styles.infoBox}>
+                <Text style={styles.infoTitle}>ACH Bank Transfer</Text>
+                <Text style={styles.infoBody}>
                   You'll be asked to securely link your bank account. ACH transfers typically settle in 2-4 business days.
                 </Text>
               </View>
 
-              <Button
-                title="Link Bank & Pay"
-                onPress={handlePay}
-              />
-              <Button
-                title="Cancel"
-                onPress={handleClose}
-                variant="ghost"
-              />
+              <Button title="Link Bank & Pay" onPress={handlePay} />
+              <Button title="Cancel" onPress={handleClose} variant="ghost" />
             </View>
           )}
 
           {step === 'processing' && (
-            <View className="flex-1 items-center justify-center gap-4">
+            <View style={styles.centeredState}>
               <ActivityIndicator size="large" color="#6366f1" />
-              <Text className="text-gray-600 text-base">Processing your payment…</Text>
+              <Text style={styles.processingText}>Processing your payment…</Text>
             </View>
           )}
 
           {step === 'success' && (
-            <View className="flex-1 items-center justify-center gap-4">
-              <Text className="text-5xl">✅</Text>
-              <Text className="text-xl font-bold text-gray-900">Payment initiated!</Text>
-              <Text className="text-gray-500 text-center">
+            <View style={styles.centeredState}>
+              <Text style={styles.successEmoji}>✅</Text>
+              <Text style={styles.successTitle}>Payment initiated!</Text>
+              <Text style={styles.successBody}>
                 Your ACH payment is processing. It typically settles in 2-4 business days.
               </Text>
             </View>
           )}
 
           {step === 'error' && (
-            <View className="gap-6">
-              <View className="bg-red-50 rounded-xl p-4">
-                <Text className="text-red-700 font-medium">Payment failed</Text>
-                <Text className="text-red-600 text-sm mt-1">{errorMessage}</Text>
+            <View style={styles.confirmContainer}>
+              <View style={styles.errorBox}>
+                <Text style={styles.errorTitle}>Payment failed</Text>
+                <Text style={styles.errorBody}>{errorMessage}</Text>
               </View>
               <Button title="Try Again" onPress={() => setStep('confirm')} />
               <Button title="Cancel" onPress={handleClose} variant="ghost" />
@@ -162,3 +150,27 @@ export function PayNowSheet({ visible, payment, onClose, onSuccess }: PayNowShee
     </Modal>
   );
 }
+
+const styles = StyleSheet.create({
+  container: { flex: 1, backgroundColor: '#ffffff' },
+  header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 24, paddingTop: 24, paddingBottom: 16, borderBottomWidth: 1, borderBottomColor: '#f3f4f6' },
+  headerTitle: { fontSize: 20, fontWeight: '700', color: '#111827' },
+  closeButton: { fontSize: 28, color: '#9ca3af', lineHeight: 32 },
+  body: { flex: 1, paddingHorizontal: 24, paddingTop: 24 },
+  confirmContainer: { gap: 16 },
+  amountBox: { backgroundColor: '#f9fafb', borderRadius: 16, padding: 20 },
+  amountLabel: { fontSize: 14, color: '#6b7280', marginBottom: 4 },
+  amountValue: { fontSize: 40, fontWeight: '700', color: '#111827' },
+  amountDate: { fontSize: 14, color: '#6b7280', marginTop: 8 },
+  infoBox: { backgroundColor: '#eff6ff', borderRadius: 12, padding: 16 },
+  infoTitle: { fontSize: 14, fontWeight: '500', color: '#1d4ed8' },
+  infoBody: { fontSize: 12, color: '#2563eb', marginTop: 4 },
+  centeredState: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: 16 },
+  processingText: { fontSize: 16, color: '#6b7280' },
+  successEmoji: { fontSize: 48 },
+  successTitle: { fontSize: 20, fontWeight: '700', color: '#111827' },
+  successBody: { fontSize: 14, color: '#6b7280', textAlign: 'center' },
+  errorBox: { backgroundColor: '#fef2f2', borderRadius: 12, padding: 16 },
+  errorTitle: { fontSize: 14, fontWeight: '500', color: '#b91c1c' },
+  errorBody: { fontSize: 12, color: '#dc2626', marginTop: 4 },
+});

@@ -1,32 +1,34 @@
-import { View, Text, Image } from 'react-native';
+import { View, Text, StyleSheet } from 'react-native';
 import { useRouter } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Button } from '@/components/ui/Button';
 
 export default function WelcomeScreen() {
   const router = useRouter();
-
   return (
-    <SafeAreaView className="flex-1 bg-primary-500">
-      <View className="flex-1 items-center justify-between px-6 py-12">
-        <View className="flex-1 items-center justify-center gap-4">
-          <View className="w-20 h-20 bg-white/20 rounded-3xl items-center justify-center">
-            <Text className="text-4xl">🏠</Text>
+    <SafeAreaView style={styles.container}>
+      <View style={styles.inner}>
+        <View style={styles.hero}>
+          <View style={styles.iconBox}>
+            <Text style={styles.iconEmoji}>🏠</Text>
           </View>
-          <Text className="text-4xl font-bold text-white tracking-tight">PropFlow</Text>
-          <Text className="text-lg text-white/80 text-center max-w-xs">
+          <Text style={styles.title}>PropFlow</Text>
+          <Text style={styles.subtitle}>
             Your home, simplified. Pay rent, submit requests, and stay connected with your property manager.
           </Text>
         </View>
-
-        <View className="w-full gap-3">
-          <Button
-            title="Sign In"
-            onPress={() => router.push('/(auth)/login')}
-            variant="secondary"
-          />
-        </View>
+        <Button title="Sign In" onPress={() => router.push('/(auth)/login')} variant="secondary" />
       </View>
     </SafeAreaView>
   );
 }
+
+const styles = StyleSheet.create({
+  container: { flex: 1, backgroundColor: '#6366f1' },
+  inner: { flex: 1, paddingHorizontal: 24, paddingVertical: 48, justifyContent: 'space-between' },
+  hero: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: 16 },
+  iconBox: { width: 80, height: 80, backgroundColor: 'rgba(255,255,255,0.2)', borderRadius: 24, alignItems: 'center', justifyContent: 'center' },
+  iconEmoji: { fontSize: 36 },
+  title: { fontSize: 36, fontWeight: '700', color: '#fff', letterSpacing: -0.5 },
+  subtitle: { fontSize: 17, color: 'rgba(255,255,255,0.8)', textAlign: 'center', maxWidth: 280 },
+});

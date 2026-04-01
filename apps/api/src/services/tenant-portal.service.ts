@@ -1,5 +1,5 @@
 import { prisma } from '@propflow/db';
-import { AppError } from '../lib/errors';
+import { AppError } from '../middleware/error-handler';
 import * as stripeService from './stripe.service';
 
 // ─── Profile ──────────────────────────────────────────────────────────────────
