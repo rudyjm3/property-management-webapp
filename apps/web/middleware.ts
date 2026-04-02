@@ -44,7 +44,8 @@ export async function middleware(request: NextRequest) {
   }
 
   // Logged in on a public auth page → redirect to dashboard
-  if (user && isPublicPath) {
+  // Exception: /reset-password must stay accessible during recovery/invite flows
+  if (user && isPublicPath && !pathname.startsWith('/reset-password')) {
     const url = request.nextUrl.clone();
     url.pathname = '/dashboard';
     return NextResponse.redirect(url);

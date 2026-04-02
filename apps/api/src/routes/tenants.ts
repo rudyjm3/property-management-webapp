@@ -65,7 +65,7 @@ router.post('/:tenantId/invite-portal', async (req: Request, res: Response, next
     }
 
     const { data: { user }, error } = await supabaseAdmin.auth.admin.inviteUserByEmail(tenant.email, {
-      redirectTo: `${process.env.APP_URL}/portal-setup`,
+      redirectTo: `${process.env.APP_URL}/reset-password`,
       data: { tenantId: tenant.id, name: tenant.name },
     });
 

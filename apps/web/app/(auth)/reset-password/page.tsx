@@ -12,6 +12,7 @@ export default function ResetPasswordPage() {
   const [loading, setLoading] = useState(false);
   const [ready, setReady] = useState(false);
   const [success, setSuccess] = useState(false);
+  const [isTenantAccount, setIsTenantAccount] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
@@ -21,6 +22,7 @@ export default function ResetPasswordPage() {
       if (!session) {
         setError('Reset link is invalid or expired. Request a new password reset email.');
       } else {
+        setIsTenantAccount(!!session.user.user_metadata?.tenantId);
         setReady(true);
       }
     });
@@ -50,6 +52,7 @@ export default function ResetPasswordPage() {
       return;
     }
 
+    await supabase.auth.signOut();
     setSuccess(true);
     setLoading(false);
     setTimeout(() => router.push('/login'), 1200);
@@ -73,8 +76,19 @@ export default function ResetPasswordPage() {
 
         {success ? (
           <div style={{ textAlign: 'center' }}>
-            <p style={{ color: 'var(--color-success)', marginBottom: '12px' }}>Password updated successfully.</p>
-            <Link href="/login" style={{ color: 'var(--color-primary)' }}>Continue to sign in</Link>
+            {isTenantAccount ? (
+              <>
+                <p style={{ color: 'var(--color-success)', marginBottom: '12px' }}>Password set successfully!</p>
+                <p style={{ fontSize: '14px', color: 'var(--color-text-muted)' }}>
+                  Open the <strong>PropFlow</strong> mobile app and sign in with your email and new password.
+                </p>
+              </>
+            ) : (
+              <>
+                <p style={{ color: 'var(--color-success)', marginBottom: '12px' }}>Password updated successfully.</p>
+                <Link href="/login" style={{ color: 'var(--color-primary)' }}>Continue to sign in</Link>
+              </>
+            )}
           </div>
         ) : (
           <form onSubmit={handleSubmit}>
