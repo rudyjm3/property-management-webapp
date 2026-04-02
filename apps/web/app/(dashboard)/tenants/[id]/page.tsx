@@ -167,9 +167,9 @@ export default function TenantDetailPage() {
           </p>
         </div>
         <div style={{ display: 'flex', gap: '8px' }}>
-          {tenant.portalStatus === 'never_logged_in' && (
+          {(tenant.portalStatus === 'never_logged_in' || tenant.portalStatus === 'invited') && (
             <button className="btn btn-primary" onClick={handleInvitePortal} disabled={inviting}>
-              {inviting ? 'Sending…' : 'Invite to Portal'}
+              {inviting ? 'Sending…' : tenant.portalStatus === 'invited' ? 'Resend Invite' : 'Invite to Portal'}
             </button>
           )}
           <button className="btn btn-secondary" onClick={() => setEditing(true)}>
