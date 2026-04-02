@@ -76,6 +76,7 @@ export default function TenantDetailPage() {
   const [loading, setLoading] = useState(true);
   const [editing, setEditing] = useState(false);
   const [error, setError] = useState('');
+  const [inviting, setInviting] = useState(false);
 
   useEffect(() => {
     async function load() {
@@ -111,6 +112,20 @@ export default function TenantDetailPage() {
       setEditing(false);
     } catch (err: any) {
       setError(err.message || 'Failed to update tenant');
+    }
+  }
+
+  async function handleInvitePortal() {
+    if (!confirm(`Send a portal invite email to ${tenant!.email}?`)) return;
+    setInviting(true);
+    try {
+      await api.tenants.invitePortal(tenantId);
+      setTenant((prev) => prev ? { ...prev, portalStatus: 'invited' } : prev);
+      alert('Invite sent! The tenant will receive an email to set their password.');
+    } catch (err: any) {
+      alert(err.message || 'Failed to send invite');
+    } finally {
+      setInviting(false);
     }
   }
 
@@ -152,6 +167,11 @@ export default function TenantDetailPage() {
           </p>
         </div>
         <div style={{ display: 'flex', gap: '8px' }}>
+          {tenant.portalStatus === 'never_logged_in' && (
+            <button className="btn btn-primary" onClick={handleInvitePortal} disabled={inviting}>
+              {inviting ? 'Sending…' : 'Invite to Portal'}
+            </button>
+          )}
           <button className="btn btn-secondary" onClick={() => setEditing(true)}>
             Edit
           </button>
