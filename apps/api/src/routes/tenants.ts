@@ -64,21 +64,35 @@ router.post('/:tenantId/invite-portal', async (req: Request, res: Response, next
       return;
     }
 
-    const { data: { user }, error } = await supabaseAdmin.auth.admin.inviteUserByEmail(tenant.email, {
-      redirectTo: `${process.env.APP_URL}/reset-password`,
-      data: { tenantId: tenant.id, name: tenant.name },
-    });
+    const redirectTo = `${process.env.APP_URL}/reset-password`;
 
-    if (error) {
-      res.status(400).json({ error: { code: 'INVITE_FAILED', message: error.message } });
-      return;
-    }
-
-    if (user) {
-      await prisma.tenant.update({
-        where: { id: tenant.id },
-        data: { supabaseUserId: user.id, portalStatus: 'invited' },
+    if (tenant.supabaseUserId) {
+      // Already registered — send a password recovery link instead
+      const { error } = await supabaseAdmin.auth.admin.generateLink({
+        type: 'recovery',
+        email: tenant.email,
+        options: { redirectTo },
       });
+      if (error) {
+        res.status(400).json({ error: { code: 'INVITE_FAILED', message: error.message } });
+        return;
+      }
+    } else {
+      // First invite — create the Supabase auth account
+      const { data: { user }, error } = await supabaseAdmin.auth.admin.inviteUserByEmail(tenant.email, {
+        redirectTo,
+        data: { tenantId: tenant.id, name: tenant.name },
+      });
+      if (error) {
+        res.status(400).json({ error: { code: 'INVITE_FAILED', message: error.message } });
+        return;
+      }
+      if (user) {
+        await prisma.tenant.update({
+          where: { id: tenant.id },
+          data: { supabaseUserId: user.id, portalStatus: 'invited' },
+        });
+      }
     }
 
     res.json({ data: { message: 'Invite sent', email: tenant.email } });
