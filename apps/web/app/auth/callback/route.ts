@@ -1,5 +1,4 @@
 import { createServerClient } from '@supabase/ssr';
-import { cookies } from 'next/headers';
 import { NextRequest, NextResponse } from 'next/server';
 
 export async function GET(request: NextRequest) {
@@ -11,7 +10,8 @@ export async function GET(request: NextRequest) {
     return NextResponse.redirect(new URL('/login', request.url));
   }
 
-  const cookieStore = await cookies();
+  // Build the redirect response first so we can attach cookies to it
+  const response = NextResponse.redirect(new URL(next, request.url));
 
   const supabase = createServerClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -19,11 +19,12 @@ export async function GET(request: NextRequest) {
     {
       cookies: {
         getAll() {
-          return cookieStore.getAll();
+          return request.cookies.getAll();
         },
         setAll(cookiesToSet) {
+          // Set cookies on the redirect response so they reach the browser
           cookiesToSet.forEach(({ name, value, options }) =>
-            cookieStore.set(name, value, options)
+            response.cookies.set(name, value, options)
           );
         },
       },
@@ -37,5 +38,5 @@ export async function GET(request: NextRequest) {
     return NextResponse.redirect(new URL('/login?error=link_expired', request.url));
   }
 
-  return NextResponse.redirect(new URL(next, request.url));
+  return response;
 }
