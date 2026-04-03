@@ -67,12 +67,8 @@ router.post('/:tenantId/invite-portal', async (req: Request, res: Response, next
     const redirectTo = `${process.env.APP_URL}/reset-password`;
 
     if (tenant.supabaseUserId) {
-      // Already registered — send a password recovery link instead
-      const { error } = await supabaseAdmin.auth.admin.generateLink({
-        type: 'recovery',
-        email: tenant.email,
-        options: { redirectTo },
-      });
+      // Already registered — send a password reset email (actually delivers the email)
+      const { error } = await supabaseAdmin.auth.resetPasswordForEmail(tenant.email, { redirectTo });
       if (error) {
         res.status(400).json({ error: { code: 'INVITE_FAILED', message: error.message } });
         return;
