@@ -396,3 +396,72 @@ export interface Notification {
   actionUrl: string | null;
   createdAt: Date;
 }
+
+// ─── Tenant Portal API Response Types ─────────────────────────────────────────
+
+export interface TenantPortalProfile {
+  id: string;
+  email: string;
+  name: string;
+  phone: string | null;
+  avatarUrl: string | null;
+  portalStatus: PortalStatus;
+  activeLease: {
+    id: string;
+    startDate: Date;
+    endDate: Date;
+    rentAmount: number;
+    unit: {
+      id: string;
+      unitNumber: string;
+      property: {
+        id: string;
+        name: string;
+        address: string;
+      };
+    };
+  } | null;
+  organization: {
+    id: string;
+    name: string;
+    phone: string | null;
+  };
+}
+
+export interface TenantDashboard {
+  nextPayment: {
+    id: string;
+    amount: number;
+    dueDate: Date;
+    status: PaymentStatus;
+    stripePaymentIntentId: string | null;
+  } | null;
+  openWorkOrdersCount: number;
+  unreadMessagesCount: number;
+  activeLease: {
+    id: string;
+    endDate: Date;
+    rentAmount: number;
+    unit: {
+      unitNumber: string;
+      property: { name: string };
+    };
+  } | null;
+}
+
+export interface TenantPaymentListItem {
+  id: string;
+  amount: number;
+  type: PaymentType;
+  status: PaymentStatus;
+  method: PaymentMethod | null;
+  dueDate: Date | null;
+  paidAt: Date | null;
+  createdAt: Date;
+}
+
+export interface InitiatePaymentResponse {
+  clientSecret: string;
+  paymentIntentId: string;
+  status: string;
+}

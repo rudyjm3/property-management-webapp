@@ -2,6 +2,8 @@ import { Router, Request, Response, NextFunction } from 'express';
 import { createTenantSchema, updateTenantSchema } from '@propflow/shared';
 import { validate } from '../middleware/validate';
 import * as tenantService from '../services/tenant.service';
+import { supabaseAdmin } from '../lib/supabase';
+import { prisma } from '@propflow/db';
 
 const router = Router({ mergeParams: true });
 
@@ -44,6 +46,52 @@ router.patch('/:tenantId', validate(updateTenantSchema), async (req: Request, re
       req.body
     );
     res.json({ data: tenant });
+  } catch (err) {
+    next(err);
+  }
+});
+
+// POST /api/v1/organizations/:orgId/tenants/:tenantId/invite-portal
+router.post('/:tenantId/invite-portal', async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const tenant = await prisma.tenant.findFirst({
+      where: { id: req.params.tenantId, organizationId: req.params.orgId, deletedAt: null },
+      select: { id: true, email: true, name: true, supabaseUserId: true },
+    });
+
+    if (!tenant) {
+      res.status(404).json({ error: { code: 'NOT_FOUND', message: 'Tenant not found' } });
+      return;
+    }
+
+    const redirectTo = `${process.env.APP_URL}/auth/callback?next=/reset-password`;
+
+    if (tenant.supabaseUserId) {
+      // Already registered — send a password reset email (actually delivers the email)
+      const { error } = await supabaseAdmin.auth.resetPasswordForEmail(tenant.email, { redirectTo });
+      if (error) {
+        res.status(400).json({ error: { code: 'INVITE_FAILED', message: error.message } });
+        return;
+      }
+    } else {
+      // First invite — create the Supabase auth account
+      const { data: { user }, error } = await supabaseAdmin.auth.admin.inviteUserByEmail(tenant.email, {
+        redirectTo,
+        data: { tenantId: tenant.id, name: tenant.name },
+      });
+      if (error) {
+        res.status(400).json({ error: { code: 'INVITE_FAILED', message: error.message } });
+        return;
+      }
+      if (user) {
+        await prisma.tenant.update({
+          where: { id: tenant.id },
+          data: { supabaseUserId: user.id, portalStatus: 'invited' },
+        });
+      }
+    }
+
+    res.json({ data: { message: 'Invite sent', email: tenant.email } });
   } catch (err) {
     next(err);
   }

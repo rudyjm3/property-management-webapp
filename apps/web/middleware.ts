@@ -1,7 +1,7 @@
 import { createServerClient } from '@supabase/ssr';
 import { NextRequest, NextResponse } from 'next/server';
 
-const PUBLIC_PATHS = ['/login', '/signup', '/forgot-password', '/reset-password'];
+const PUBLIC_PATHS = ['/login', '/signup', '/forgot-password', '/reset-password', '/auth/callback'];
 const ONBOARDING_PATH = '/onboarding';
 
 export async function middleware(request: NextRequest) {
@@ -44,7 +44,8 @@ export async function middleware(request: NextRequest) {
   }
 
   // Logged in on a public auth page → redirect to dashboard
-  if (user && isPublicPath) {
+  // Exception: /reset-password and /auth/callback must stay accessible during recovery/invite flows
+  if (user && isPublicPath && !pathname.startsWith('/reset-password') && !pathname.startsWith('/auth/callback')) {
     const url = request.nextUrl.clone();
     url.pathname = '/dashboard';
     return NextResponse.redirect(url);

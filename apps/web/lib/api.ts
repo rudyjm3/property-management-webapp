@@ -127,6 +127,10 @@ export const api = {
       apiFetch<void>(`/api/v1/organizations/${_orgId}/tenants/${id}`, {
         method: 'DELETE',
       }),
+    invitePortal: (id: string) =>
+      apiFetch<{ message: string; email: string }>(`/api/v1/organizations/${_orgId}/tenants/${id}/invite-portal`, {
+        method: 'POST',
+      }),
   },
   leases: {
     list: () => apiFetch<any[]>(`/api/v1/organizations/${_orgId}/leases`),
