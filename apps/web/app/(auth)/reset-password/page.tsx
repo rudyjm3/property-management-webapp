@@ -18,14 +18,33 @@ export default function ResetPasswordPage() {
   useEffect(() => {
     const supabase = createClient();
 
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      if (!session) {
-        setError('Reset link is invalid or expired. Request a new password reset email.');
-      } else {
-        setIsTenantAccount(!!session.user.user_metadata?.tenantId);
-        setReady(true);
+    // Recovery links deliver tokens in the URL hash. Supabase processes the hash
+    // and fires PASSWORD_RECOVERY (or SIGNED_IN for invite links) via onAuthStateChange.
+    // getSession() alone won't see the token on first load.
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
+      if (event === 'PASSWORD_RECOVERY' || event === 'SIGNED_IN') {
+        if (session) {
+          setIsTenantAccount(!!session.user.user_metadata?.tenantId);
+          setReady(true);
+          setError(null);
+        }
       }
     });
+
+    // Also check if there's already a valid session (e.g. page refresh after hash processed)
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      if (session) {
+        setIsTenantAccount(!!session.user.user_metadata?.tenantId);
+        setReady(true);
+      } else {
+        // Show error only after a short delay to give onAuthStateChange time to fire first
+        setTimeout(() => {
+          setError((prev) => prev ?? 'Reset link is invalid or expired. Request a new password reset email.');
+        }, 1500);
+      }
+    });
+
+    return () => subscription.unsubscribe();
   }, []);
 
   async function handleSubmit(e: React.FormEvent) {
