@@ -19,6 +19,7 @@
     "db:seed": "npm run seed --workspace=@propflow/db",
     "db:reset": "npm run reset --workspace=@propflow/db",
     "db:studio": "npm run studio --workspace=@propflow/db",
+    "seed:meadows": "npm run seed:meadows --workspace=@propflow/db",
     "clean": "turbo run clean && rm -rf node_modules"
   },
   "devDependencies": {

@@ -11,6 +11,9 @@
     "migrate:dev": "prisma migrate dev",
     "reset": "prisma migrate reset",
     "seed": "tsx prisma/seed.ts",
+    "seed:meadows": "tsx prisma/seed-meadows-units.ts",
+    "seed:test-tenant": "tsx prisma/seed-test-tenant.ts",
+    "seed:demo-manager": "tsx prisma/seed-demo-manager.ts",
     "studio": "prisma studio",
     "clean": "rm -rf dist"
   },
