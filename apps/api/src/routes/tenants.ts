@@ -64,7 +64,7 @@ router.post('/:tenantId/invite-portal', async (req: Request, res: Response, next
       return;
     }
 
-    const redirectTo = `${process.env.APP_URL}/reset-password`;
+    const redirectTo = `${process.env.APP_URL}/auth/callback?next=/reset-password`;
 
     if (tenant.supabaseUserId) {
       // Already registered — send a password reset email (actually delivers the email)
