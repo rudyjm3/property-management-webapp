@@ -160,7 +160,7 @@ export async function getTenantPayments(
     where: {
       tenantId,
       deletedAt: null,
-      ...(opts.cursor ? { id: { lt: opts.cursor } } : {}),
+      ...(opts.cursor ? { createdAt: { lt: new Date(opts.cursor) } } : {}),
     },
     orderBy: { createdAt: 'desc' },
     take: limit,
@@ -178,7 +178,7 @@ export async function getTenantPayments(
 
   return {
     data: payments.map((p) => ({ ...p, amount: Number(p.amount) })),
-    nextCursor: payments.length === limit ? payments[payments.length - 1].id : null,
+    nextCursor: payments.length === limit ? payments[payments.length - 1].createdAt.toISOString() : null,
   };
 }
 

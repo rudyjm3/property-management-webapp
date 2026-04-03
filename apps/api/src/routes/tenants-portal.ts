@@ -32,7 +32,7 @@ router.get('/payments', async (req: Request, res: Response, next: NextFunction) 
     const cursor = req.query.cursor as string | undefined;
     const limit = req.query.limit ? parseInt(req.query.limit as string, 10) : undefined;
     const result = await tenantPortalService.getTenantPayments(tenantId, { cursor, limit });
-    res.json(result);
+    res.json({ data: result });
   } catch (err) {
     next(err);
   }

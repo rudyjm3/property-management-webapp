@@ -115,8 +115,8 @@ export async function requireTenantAuth(req: Request, res: Response, next: NextF
     return;
   }
 
-  const dbTenant = await prisma.tenant.findUnique({
-    where: { supabaseUserId: supabaseUser.id },
+  const dbTenant = await prisma.tenant.findFirst({
+    where: { supabaseUserId: supabaseUser.id, deletedAt: null },
     select: { id: true, organizationId: true, portalStatus: true, supabaseUserId: true },
   });
 
