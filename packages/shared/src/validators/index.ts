@@ -336,3 +336,19 @@ export const paginationSchema = z.object({
   cursor: z.string().optional(),
   limit: z.coerce.number().int().min(1).max(100).default(25),
 });
+
+// --- Tenant Portal ---
+
+export const updateTenantProfileSchema = z.object({
+  phone: z.string().max(20).nullable().optional(),
+  preferredContact: z.enum(PREFERRED_CONTACTS).nullable().optional(),
+  languagePreference: z.string().max(10).nullable().optional(),
+  avatarUrl: z.string().url().max(1000).nullable().optional(),
+  emergencyContactName: z.string().max(200).nullable().optional(),
+  emergencyContactPhone: z.string().max(20).nullable().optional(),
+  emergencyContact1Relationship: z.string().max(100).nullable().optional(),
+  emergencyContact1Email: z.string().email().nullable().optional(),
+  emergencyContact2Name: z.string().max(200).nullable().optional(),
+  emergencyContact2Phone: z.string().max(20).nullable().optional(),
+  emergencyContact2Relationship: z.string().max(100).nullable().optional(),
+}).strict();

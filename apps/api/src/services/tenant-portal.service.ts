@@ -2,7 +2,7 @@ import { prisma } from '@propflow/db';
 import { AppError } from '../middleware/error-handler';
 import * as stripeService from './stripe.service';
 import * as s3Service from './s3.service';
-import type { SubmitWorkOrderInput } from '@propflow/shared';
+import type { SubmitWorkOrderInput, UpdateTenantProfileInput } from '@propflow/shared';
 
 const SLA_HOURS: Record<string, number> = {
   emergency: 1,
@@ -15,9 +15,36 @@ function computeSlaDeadline(priority: string): Date {
   return new Date(Date.now() + hours * 60 * 60 * 1000);
 }
 
-// ─── Profile ──────────────────────────────────────────────────────────────────
+async function getTenantDocumentScope(tenantId: string) {
+  const tenant = await prisma.tenant.findFirst({
+    where: { id: tenantId, deletedAt: null },
+    select: {
+      id: true,
+      organizationId: true,
+      leaseParticipants: {
+        where: {
+          lease: {
+            status: { in: ['active', 'month_to_month'] },
+            deletedAt: null,
+          },
+        },
+        select: { leaseId: true },
+      },
+    },
+  });
 
-export async function getTenantProfile(tenantId: string) {
+  if (!tenant) {
+    throw new AppError(404, 'TENANT_NOT_FOUND', 'Tenant not found.');
+  }
+
+  return {
+    tenantId: tenant.id,
+    organizationId: tenant.organizationId,
+    activeLeaseIds: tenant.leaseParticipants.map((p) => p.leaseId),
+  };
+}
+
+async function loadTenantProfile(tenantId: string) {
   const tenant = await prisma.tenant.findUnique({
     where: { id: tenantId },
     select: {
@@ -26,6 +53,15 @@ export async function getTenantProfile(tenantId: string) {
       name: true,
       phone: true,
       avatarUrl: true,
+      preferredContact: true,
+      languagePreference: true,
+      emergencyContactName: true,
+      emergencyContactPhone: true,
+      emergencyContact1Relationship: true,
+      emergencyContact1Email: true,
+      emergencyContact2Name: true,
+      emergencyContact2Phone: true,
+      emergencyContact2Relationship: true,
       portalStatus: true,
       organizationId: true,
       organization: {
@@ -74,10 +110,46 @@ export async function getTenantProfile(tenantId: string) {
     name: tenant.name,
     phone: tenant.phone,
     avatarUrl: tenant.avatarUrl,
+    preferredContact: tenant.preferredContact,
+    languagePreference: tenant.languagePreference,
+    emergencyContactName: tenant.emergencyContactName,
+    emergencyContactPhone: tenant.emergencyContactPhone,
+    emergencyContact1Relationship: tenant.emergencyContact1Relationship,
+    emergencyContact1Email: tenant.emergencyContact1Email,
+    emergencyContact2Name: tenant.emergencyContact2Name,
+    emergencyContact2Phone: tenant.emergencyContact2Phone,
+    emergencyContact2Relationship: tenant.emergencyContact2Relationship,
     portalStatus: tenant.portalStatus,
     activeLease,
     organization: tenant.organization,
   };
+}
+
+// ─── Profile ──────────────────────────────────────────────────────────────────
+
+export async function getTenantProfile(tenantId: string) {
+  return loadTenantProfile(tenantId);
+}
+
+export async function updateTenantProfile(tenantId: string, input: UpdateTenantProfileInput) {
+  await prisma.tenant.update({
+    where: { id: tenantId },
+    data: {
+      ...(input.phone !== undefined ? { phone: input.phone } : {}),
+      ...(input.preferredContact !== undefined ? { preferredContact: input.preferredContact } : {}),
+      ...(input.languagePreference !== undefined ? { languagePreference: input.languagePreference } : {}),
+      ...(input.avatarUrl !== undefined ? { avatarUrl: input.avatarUrl } : {}),
+      ...(input.emergencyContactName !== undefined ? { emergencyContactName: input.emergencyContactName } : {}),
+      ...(input.emergencyContactPhone !== undefined ? { emergencyContactPhone: input.emergencyContactPhone } : {}),
+      ...(input.emergencyContact1Relationship !== undefined ? { emergencyContact1Relationship: input.emergencyContact1Relationship } : {}),
+      ...(input.emergencyContact1Email !== undefined ? { emergencyContact1Email: input.emergencyContact1Email } : {}),
+      ...(input.emergencyContact2Name !== undefined ? { emergencyContact2Name: input.emergencyContact2Name } : {}),
+      ...(input.emergencyContact2Phone !== undefined ? { emergencyContact2Phone: input.emergencyContact2Phone } : {}),
+      ...(input.emergencyContact2Relationship !== undefined ? { emergencyContact2Relationship: input.emergencyContact2Relationship } : {}),
+    },
+  });
+
+  return loadTenantProfile(tenantId);
 }
 
 // ─── Dashboard ────────────────────────────────────────────────────────────────
@@ -183,6 +255,8 @@ export async function getTenantPayments(
       type: true,
       status: true,
       method: true,
+      referenceNote: true,
+      notes: true,
       dueDate: true,
       paidAt: true,
       createdAt: true,
@@ -193,6 +267,59 @@ export async function getTenantPayments(
     data: payments.map((p) => ({ ...p, amount: Number(p.amount) })),
     nextCursor: payments.length === limit ? payments[payments.length - 1].createdAt.toISOString() : null,
   };
+}
+
+export async function getTenantDocuments(tenantId: string) {
+  const scope = await getTenantDocumentScope(tenantId);
+
+  return prisma.document.findMany({
+    where: {
+      organizationId: scope.organizationId,
+      visibleToTenant: true,
+      OR: [
+        { entityType: 'tenant', entityId: scope.tenantId },
+        ...(scope.activeLeaseIds.length > 0
+          ? [{ entityType: 'lease' as const, entityId: { in: scope.activeLeaseIds } }]
+          : []),
+      ],
+    },
+    select: {
+      id: true,
+      name: true,
+      mimeType: true,
+      sizeBytes: true,
+      docCategory: true,
+      label: true,
+      createdAt: true,
+    },
+    orderBy: { createdAt: 'desc' },
+  });
+}
+
+export async function getTenantDocumentDownloadUrl(tenantId: string, documentId: string) {
+  const scope = await getTenantDocumentScope(tenantId);
+
+  const document = await prisma.document.findFirst({
+    where: {
+      id: documentId,
+      organizationId: scope.organizationId,
+      visibleToTenant: true,
+      OR: [
+        { entityType: 'tenant', entityId: scope.tenantId },
+        ...(scope.activeLeaseIds.length > 0
+          ? [{ entityType: 'lease' as const, entityId: { in: scope.activeLeaseIds } }]
+          : []),
+      ],
+    },
+    select: { s3Key: true },
+  });
+
+  if (!document) {
+    throw new AppError(404, 'DOCUMENT_NOT_FOUND', 'Document not found.');
+  }
+
+  const downloadUrl = await s3Service.generateDownloadPresignedUrl(document.s3Key);
+  return { downloadUrl };
 }
 
 // ─── Initiate Payment ─────────────────────────────────────────────────────────

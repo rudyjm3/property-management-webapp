@@ -405,6 +405,15 @@ export interface TenantPortalProfile {
   name: string;
   phone: string | null;
   avatarUrl: string | null;
+  preferredContact: PreferredContact | null;
+  languagePreference: string | null;
+  emergencyContactName: string | null;
+  emergencyContactPhone: string | null;
+  emergencyContact1Relationship: string | null;
+  emergencyContact1Email: string | null;
+  emergencyContact2Name: string | null;
+  emergencyContact2Phone: string | null;
+  emergencyContact2Relationship: string | null;
   portalStatus: PortalStatus;
   activeLease: {
     id: string;
@@ -455,6 +464,8 @@ export interface TenantPaymentListItem {
   type: PaymentType;
   status: PaymentStatus;
   method: PaymentMethod | null;
+  referenceNote: string | null;
+  notes: string | null;
   dueDate: Date | null;
   paidAt: Date | null;
   createdAt: Date;
@@ -494,6 +505,36 @@ export interface SubmitWorkOrderInput {
 export interface TenantUploadUrlResponse {
   uploadUrl: string;
   s3Key: string;
+}
+
+// --- Tenant Documents ---
+
+export interface TenantDocumentListItem {
+  id: string;
+  name: string;
+  mimeType: string;
+  sizeBytes: number;
+  docCategory: DocumentCategory | null;
+  label: string | null;
+  createdAt: Date;
+}
+
+export interface TenantDocumentDownloadResponse {
+  downloadUrl: string;
+}
+
+export interface UpdateTenantProfileInput {
+  phone?: string | null;
+  preferredContact?: PreferredContact | null;
+  languagePreference?: string | null;
+  avatarUrl?: string | null;
+  emergencyContactName?: string | null;
+  emergencyContactPhone?: string | null;
+  emergencyContact1Relationship?: string | null;
+  emergencyContact1Email?: string | null;
+  emergencyContact2Name?: string | null;
+  emergencyContact2Phone?: string | null;
+  emergencyContact2Relationship?: string | null;
 }
 
 // ─── Tenant Messaging ─────────────────────────────────────────────────────────

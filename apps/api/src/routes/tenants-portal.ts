@@ -1,9 +1,11 @@
 import { Router, Request, Response, NextFunction } from 'express';
 import { prisma } from '@propflow/db';
 import * as tenantPortalService from '../services/tenant-portal.service';
+import { validate } from '../middleware/validate';
 
 import * as messageService from '../services/message.service';
-import type { SubmitWorkOrderInput } from '@propflow/shared';
+import type { SubmitWorkOrderInput, UpdateTenantProfileInput } from '@propflow/shared';
+import { updateTenantProfileSchema } from '@propflow/shared';
 
 const router = Router();
 
@@ -12,6 +14,17 @@ router.get('/me', async (req: Request, res: Response, next: NextFunction) => {
   try {
     const { tenantId } = req.tenant!;
     const profile = await tenantPortalService.getTenantProfile(tenantId);
+    res.json({ data: profile });
+  } catch (err) {
+    next(err);
+  }
+});
+
+// PATCH /api/v1/tenant/me
+router.patch('/me', validate(updateTenantProfileSchema), async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const { tenantId } = req.tenant!;
+    const profile = await tenantPortalService.updateTenantProfile(tenantId, req.body as UpdateTenantProfileInput);
     res.json({ data: profile });
   } catch (err) {
     next(err);
@@ -166,6 +179,30 @@ router.post('/push-token', async (req: Request, res: Response, next: NextFunctio
     }
     await prisma.tenant.update({ where: { id: tenantId }, data: { expoPushToken: token } });
     res.json({ data: { ok: true } });
+  } catch (err) {
+    next(err);
+  }
+});
+
+// --- Documents ---
+
+// GET /api/v1/tenant/documents
+router.get('/documents', async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const { tenantId } = req.tenant!;
+    const documents = await tenantPortalService.getTenantDocuments(tenantId);
+    res.json({ data: documents });
+  } catch (err) {
+    next(err);
+  }
+});
+
+// GET /api/v1/tenant/documents/:docId/download-url
+router.get('/documents/:docId/download-url', async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const { tenantId } = req.tenant!;
+    const result = await tenantPortalService.getTenantDocumentDownloadUrl(tenantId, req.params.docId as string);
+    res.json({ data: result });
   } catch (err) {
     next(err);
   }
