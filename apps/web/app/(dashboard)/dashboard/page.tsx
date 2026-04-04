@@ -37,6 +37,8 @@ interface PaymentStats {
 interface WorkOrderSummary {
   open: number;
   slaBreaches: number;
+  emergency: number;
+  urgent: number;
 }
 
 interface LeaseSummary {
@@ -54,7 +56,7 @@ interface MessageThread {
 export default function DashboardPage() {
   const [portfolio, setPortfolio] = useState<PortfolioStats | null>(null);
   const [paymentStats, setPaymentStats] = useState<PaymentStats | null>(null);
-  const [workOrderSummary, setWorkOrderSummary] = useState<WorkOrderSummary>({ open: 0, slaBreaches: 0 });
+  const [workOrderSummary, setWorkOrderSummary] = useState<WorkOrderSummary>({ open: 0, slaBreaches: 0, emergency: 0, urgent: 0 });
   const [leaseSummary, setLeaseSummary] = useState<LeaseSummary>({ expiring30: 0, expiring60: 0 });
   const [recentThreads, setRecentThreads] = useState<MessageThread[]>([]);
   const [loading, setLoading] = useState(true);
@@ -86,9 +88,12 @@ export default function DashboardPage() {
 
         // Work order summary
         const openStatuses = ['new_order', 'assigned', 'in_progress', 'pending_parts'];
-        const open = workOrders.filter((wo: any) => openStatuses.includes(wo.status)).length;
+        const openOrders = workOrders.filter((wo: any) => openStatuses.includes(wo.status));
+        const open = openOrders.length;
         const slaBreaches = workOrders.filter((wo: any) => wo.slaBreached).length;
-        setWorkOrderSummary({ open, slaBreaches });
+        const emergency = openOrders.filter((wo: any) => wo.priority === 'emergency').length;
+        const urgent = openOrders.filter((wo: any) => wo.priority === 'urgent').length;
+        setWorkOrderSummary({ open, slaBreaches, emergency, urgent });
 
         // Lease expiry summary
         const now = new Date();
@@ -235,11 +240,27 @@ export default function DashboardPage() {
       </div>
       <div className="stats-grid" style={{ marginBottom: '32px' }}>
         <Link href="/work-orders" style={{ textDecoration: 'none' }}>
-          <div className="stat-card" style={{ cursor: 'pointer' }}>
+          <div className="stat-card" style={{ cursor: 'pointer', borderColor: workOrderSummary.emergency > 0 ? 'var(--color-danger)' : undefined }}>
             <div className="stat-label">Open Work Orders</div>
             <div className="stat-value" style={{ color: workOrderSummary.open > 0 ? 'var(--color-warning)' : 'var(--color-success)' }}>
               {workOrderSummary.open}
             </div>
+            {(workOrderSummary.emergency > 0 || workOrderSummary.urgent > 0) && (
+              <div style={{ marginTop: '8px', display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                {workOrderSummary.emergency > 0 && (
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '12px', fontWeight: 600, color: '#991b1b' }}>
+                    <span style={{ width: '8px', height: '8px', borderRadius: '50%', backgroundColor: '#ef4444', display: 'inline-block' }} />
+                    {workOrderSummary.emergency} Emergency
+                  </div>
+                )}
+                {workOrderSummary.urgent > 0 && (
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '12px', fontWeight: 600, color: '#92400e' }}>
+                    <span style={{ width: '8px', height: '8px', borderRadius: '50%', backgroundColor: '#f59e0b', display: 'inline-block' }} />
+                    {workOrderSummary.urgent} Urgent
+                  </div>
+                )}
+              </div>
+            )}
           </div>
         </Link>
         <Link href="/work-orders" style={{ textDecoration: 'none' }}>

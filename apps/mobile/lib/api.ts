@@ -4,6 +4,9 @@ import type {
   TenantDashboard,
   TenantPaymentListItem,
   InitiatePaymentResponse,
+  TenantWorkOrderListItem,
+  SubmitWorkOrderInput,
+  TenantUploadUrlResponse,
 } from '@propflow/shared';
 
 const API_URL = process.env.EXPO_PUBLIC_API_URL ?? 'http://localhost:3001';
@@ -49,5 +52,20 @@ export const tenantApi = {
     apiFetch('/api/v1/tenant/payments/initiate', {
       method: 'POST',
       body: JSON.stringify({ paymentId }),
+    }),
+
+  workOrders: (cursor?: string): Promise<{ data: TenantWorkOrderListItem[]; nextCursor: string | null }> =>
+    apiFetch(`/api/v1/tenant/work-orders${cursor ? `?cursor=${encodeURIComponent(cursor)}` : ''}`),
+
+  submitWorkOrder: (input: SubmitWorkOrderInput): Promise<{ id: string }> =>
+    apiFetch('/api/v1/tenant/work-orders', {
+      method: 'POST',
+      body: JSON.stringify(input),
+    }),
+
+  requestUploadUrl: (fileName: string, contentType: string): Promise<TenantUploadUrlResponse> =>
+    apiFetch('/api/v1/tenant/upload-url', {
+      method: 'POST',
+      body: JSON.stringify({ fileName, contentType }),
     }),
 };

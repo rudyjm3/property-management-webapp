@@ -465,3 +465,31 @@ export interface InitiatePaymentResponse {
   paymentIntentId: string;
   status: string;
 }
+
+export interface TenantWorkOrderListItem {
+  id: string;
+  title: string | null;
+  category: WorkOrderCategory;
+  priority: WorkOrderPriority;
+  status: WorkOrderStatus;
+  description: string;
+  entryPermissionGranted: boolean;
+  scheduledAt: Date | null;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+export interface SubmitWorkOrderInput {
+  title?: string | null;
+  category: WorkOrderCategory;
+  priority?: WorkOrderPriority;
+  description: string;
+  entryPermissionGranted: boolean;
+  preferredContactWindow?: string | null;
+  photoKeys?: string[];
+}
+
+export interface TenantUploadUrlResponse {
+  uploadUrl: string;
+  s3Key: string;
+}

@@ -1,6 +1,19 @@
 import { prisma } from '@propflow/db';
 import { AppError } from '../middleware/error-handler';
 import * as stripeService from './stripe.service';
+import * as s3Service from './s3.service';
+import type { SubmitWorkOrderInput } from '@propflow/shared';
+
+const SLA_HOURS: Record<string, number> = {
+  emergency: 1,
+  urgent: 24,
+  routine: 7 * 24,
+};
+
+function computeSlaDeadline(priority: string): Date {
+  const hours = SLA_HOURS[priority] ?? SLA_HOURS.routine;
+  return new Date(Date.now() + hours * 60 * 60 * 1000);
+}
 
 // ─── Profile ──────────────────────────────────────────────────────────────────
 
@@ -93,7 +106,6 @@ export async function getTenantDashboard(tenantId: string) {
       where: {
         tenantId,
         status: { in: ['new_order', 'assigned', 'in_progress'] },
-        deletedAt: null,
       },
     }),
 
@@ -240,4 +252,114 @@ export async function initiateTenantPayment(
   });
 
   return { clientSecret: pi.client_secret!, paymentIntentId: pi.id, status: pi.status };
+}
+
+// ─── Work Orders ──────────────────────────────────────────────────────────────
+
+export async function getTenantWorkOrders(
+  tenantId: string,
+  opts: { cursor?: string; limit?: number }
+) {
+  const limit = opts.limit ?? 20;
+
+  const workOrders = await prisma.workOrder.findMany({
+    where: {
+      tenantId,
+      ...(opts.cursor ? { createdAt: { lt: new Date(opts.cursor) } } : {}),
+    },
+    orderBy: { createdAt: 'desc' },
+    take: limit,
+    select: {
+      id: true,
+      title: true,
+      category: true,
+      priority: true,
+      status: true,
+      description: true,
+      entryPermissionGranted: true,
+      scheduledAt: true,
+      createdAt: true,
+      updatedAt: true,
+    },
+  });
+
+  return {
+    data: workOrders,
+    nextCursor:
+      workOrders.length === limit
+        ? workOrders[workOrders.length - 1].createdAt.toISOString()
+        : null,
+  };
+}
+
+export async function createTenantWorkOrder(
+  tenantId: string,
+  orgId: string,
+  data: SubmitWorkOrderInput
+) {
+  // Resolve unit from the tenant's active lease
+  const leaseParticipant = await prisma.leaseParticipant.findFirst({
+    where: {
+      tenantId,
+      lease: {
+        status: { in: ['active', 'month_to_month'] },
+        deletedAt: null,
+      },
+    },
+    select: {
+      lease: {
+        select: {
+          unit: { select: { id: true, propertyId: true } },
+        },
+      },
+    },
+  });
+
+  if (!leaseParticipant?.lease) {
+    throw new AppError(400, 'NO_ACTIVE_LEASE', 'No active lease found. Cannot submit a work order.');
+  }
+
+  const { id: unitId, propertyId } = leaseParticipant.lease.unit;
+
+  const workOrder = await prisma.workOrder.create({
+    data: {
+      unitId,
+      propertyId,
+      tenantId,
+      title: data.title ?? null,
+      category: data.category,
+      priority: data.priority ?? 'routine',
+      status: 'new_order',
+      description: data.description,
+      entryPermissionGranted: data.entryPermissionGranted,
+      preferredContactWindow: data.preferredContactWindow ?? null,
+      slaDeadlineAt: computeSlaDeadline(data.priority ?? 'routine'),
+      photosBefore: data.photoKeys ?? [],
+      photosAfter: [],
+    },
+    select: {
+      id: true,
+      title: true,
+      category: true,
+      priority: true,
+      status: true,
+      description: true,
+      entryPermissionGranted: true,
+      createdAt: true,
+    },
+  });
+
+  return workOrder;
+}
+
+// ─── Photo Upload ─────────────────────────────────────────────────────────────
+
+export async function requestTenantUploadUrl(
+  orgId: string,
+  fileName: string,
+  contentType: string
+) {
+  const s3Key = s3Service.buildS3Key(orgId, 'work_order', 'pending', fileName);
+  const { uploadUrl } = await s3Service.generateUploadPresignedUrl(s3Key, contentType);
+  return { uploadUrl, s3Key };
 }
