@@ -14,6 +14,7 @@
     "seed:meadows": "tsx prisma/seed-meadows-units.ts",
     "seed:test-tenant": "tsx prisma/seed-test-tenant.ts",
     "seed:demo-manager": "tsx prisma/seed-demo-manager.ts",
+    "seed:demo-maintenance": "tsx prisma/seed-demo-maintenance.ts",
     "studio": "prisma studio",
     "clean": "rm -rf dist"
   },
