@@ -1,7 +1,7 @@
-import { useEffect } from 'react';
+import { useEffect, useRef } from 'react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { StripeProvider } from '@stripe/stripe-react-native';
-import { AuthProvider } from '@/contexts/AuthContext';
+import { AuthProvider, useAuth } from '@/contexts/AuthContext';
 import { Stack } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import * as Device from 'expo-device';
@@ -47,15 +47,26 @@ async function registerForPushNotificationsAsync(): Promise<void> {
   }
 }
 
-export default function RootLayout() {
-  useEffect(() => {
-    registerForPushNotificationsAsync();
-  }, []);
+function PushRegistrar() {
+  const { profile } = useAuth();
+  const registeredForRef = useRef<string | null>(null);
 
+  useEffect(() => {
+    if (profile?.userId && registeredForRef.current !== profile.userId) {
+      registeredForRef.current = profile.userId;
+      registerForPushNotificationsAsync();
+    }
+  }, [profile?.userId]);
+
+  return null;
+}
+
+export default function RootLayout() {
   return (
     <QueryClientProvider client={queryClient}>
       <StripeProvider publishableKey={process.env.EXPO_PUBLIC_STRIPE_PUBLISHABLE_KEY!}>
         <AuthProvider>
+          <PushRegistrar />
           <StatusBar style="auto" />
           <Stack screenOptions={{ headerShown: false }}>
             <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
