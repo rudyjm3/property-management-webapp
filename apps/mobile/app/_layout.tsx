@@ -52,11 +52,11 @@ function PushRegistrar() {
   const registeredForRef = useRef<string | null>(null);
 
   useEffect(() => {
-    if (profile?.userId && registeredForRef.current !== profile.userId) {
-      registeredForRef.current = profile.userId;
+    if (profile?.id && registeredForRef.current !== profile.id) {
+      registeredForRef.current = profile.id;
       registerForPushNotificationsAsync();
     }
-  }, [profile?.userId]);
+  }, [profile?.id]);
 
   return null;
 }

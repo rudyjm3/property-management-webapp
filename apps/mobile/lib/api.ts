@@ -9,6 +9,9 @@ import type {
   TenantUploadUrlResponse,
   TenantThread,
   TenantMessage,
+  TenantDocumentListItem,
+  TenantDocumentDownloadResponse,
+  UpdateTenantProfileInput,
 } from '@propflow/shared';
 
 const API_URL = process.env.EXPO_PUBLIC_API_URL ?? 'http://localhost:3001';
@@ -30,19 +33,25 @@ async function apiFetch<T>(path: string, options?: RequestInit): Promise<T> {
   });
 
   if (!res.ok) {
-    const body = await res.json().catch(() => ({ error: { message: res.statusText } }));
+    const body: any = await res.json().catch(() => ({ error: { message: res.statusText } }));
     throw new Error(body?.error?.message ?? `API error ${res.status}`);
   }
 
   if (res.status === 204) return undefined as T;
 
-  const json = await res.json();
+  const json: any = await res.json();
   return json.data;
 }
 
 export const tenantApi = {
   me: (): Promise<TenantPortalProfile> =>
     apiFetch('/api/v1/tenant/me'),
+
+  updateMe: (input: UpdateTenantProfileInput): Promise<TenantPortalProfile> =>
+    apiFetch('/api/v1/tenant/me', {
+      method: 'PATCH',
+      body: JSON.stringify(input),
+    }),
 
   dashboard: (): Promise<TenantDashboard> =>
     apiFetch('/api/v1/tenant/dashboard'),
@@ -90,4 +99,12 @@ export const tenantApi = {
       method: 'POST',
       body: JSON.stringify({ token }),
     }),
+
+  documents: {
+    list: (): Promise<TenantDocumentListItem[]> =>
+      apiFetch('/api/v1/tenant/documents'),
+
+    downloadUrl: (documentId: string): Promise<TenantDocumentDownloadResponse> =>
+      apiFetch(`/api/v1/tenant/documents/${documentId}/download-url`),
+  },
 };

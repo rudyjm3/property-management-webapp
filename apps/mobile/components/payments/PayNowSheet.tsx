@@ -31,12 +31,9 @@ export function PayNowSheet({ visible, payment, onClose, onSuccess }: PayNowShee
     try {
       const { clientSecret } = await initiateMutation.mutateAsync(payment.id);
 
-      const { error: collectError } = await collectBankAccountForPayment({
-        clientSecret,
-        params: {
-          paymentMethodType: 'USBankAccount',
-          paymentMethodData: { billingDetails: { name: '' } },
-        },
+      const { error: collectError } = await collectBankAccountForPayment(clientSecret, {
+        paymentMethodType: 'USBankAccount',
+        paymentMethodData: { billingDetails: { name: '' } },
       });
 
       if (collectError) {

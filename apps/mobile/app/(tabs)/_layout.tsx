@@ -10,11 +10,12 @@ export default function TabLayout() {
 
   return (
     <Tabs screenOptions={{ tabBarActiveTintColor: '#6366f1', tabBarInactiveTintColor: '#9ca3af', headerShown: false }}>
-      <Tabs.Screen name="index" options={{ title: 'Home', tabBarIcon: () => <Text style={{ fontSize: 20 }}>🏠</Text> }} />
-      <Tabs.Screen name="payments" options={{ title: 'Payments', tabBarIcon: () => <Text style={{ fontSize: 20 }}>💳</Text> }} />
-      <Tabs.Screen name="maintenance" options={{ title: 'Maintenance', tabBarIcon: () => <Text style={{ fontSize: 20 }}>🔧</Text> }} />
-      <Tabs.Screen name="messages" options={{ title: 'Messages', tabBarIcon: () => <Text style={{ fontSize: 20 }}>💬</Text> }} />
-      <Tabs.Screen name="account" options={{ title: 'Account', tabBarIcon: () => <Text style={{ fontSize: 20 }}>👤</Text> }} />
+      <Tabs.Screen name="index" options={{ title: 'Home', tabBarIcon: () => <Text style={{ fontSize: 18 }}>H</Text> }} />
+      <Tabs.Screen name="payments" options={{ title: 'Payments', tabBarIcon: () => <Text style={{ fontSize: 18 }}>$</Text> }} />
+      <Tabs.Screen name="maintenance" options={{ title: 'Maintenance', tabBarIcon: () => <Text style={{ fontSize: 18 }}>W</Text> }} />
+      <Tabs.Screen name="messages" options={{ title: 'Messages', tabBarIcon: () => <Text style={{ fontSize: 18 }}>M</Text> }} />
+      <Tabs.Screen name="documents" options={{ title: 'Documents', tabBarIcon: () => <Text style={{ fontSize: 18 }}>D</Text> }} />
+      <Tabs.Screen name="account" options={{ title: 'Account', tabBarIcon: () => <Text style={{ fontSize: 18 }}>A</Text> }} />
     </Tabs>
   );
 }
