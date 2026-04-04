@@ -109,10 +109,11 @@ export async function getTenantDashboard(tenantId: string) {
       },
     }),
 
-    // Unread messages count
+    // Unread messages count — only manager-sent messages (senderUserId not null) not yet read
     prisma.message.count({
       where: {
         recipientTenantId: tenantId,
+        senderUserId: { not: null },
         readAt: null,
       },
     }),

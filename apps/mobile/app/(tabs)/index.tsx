@@ -1,13 +1,15 @@
-import { useState } from 'react';
+import { useState, useCallback } from 'react';
 import { View, Text, ScrollView, TouchableOpacity, RefreshControl, StyleSheet } from 'react-native';
 import { useRouter } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { useFocusEffect } from '@react-navigation/native';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useDashboard } from '@/hooks/useDashboard';
 import { useAuth } from '@/contexts/AuthContext';
 import { Card } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
 import { PayNowSheet } from '@/components/payments/PayNowSheet';
-import type { TenantDashboard } from '@propflow/shared';
+import { tenantApi } from '@/lib/api';
 
 function formatCurrency(amount: number) {
   return new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(amount);
@@ -19,13 +21,27 @@ function daysUntil(date: Date | string) {
 export default function HomeScreen() {
   const router = useRouter();
   const { profile } = useAuth();
+  const queryClient = useQueryClient();
   const { data, isLoading, refetch, isRefetching } = useDashboard();
+  const { data: threads = [], refetch: refetchThreads } = useQuery({ queryKey: ['threads'], queryFn: tenantApi.messages.threads, staleTime: 0 });
   const [paySheetVisible, setPaySheetVisible] = useState(false);
   const firstName = profile?.name?.split(' ')[0] ?? 'Tenant';
+  const unreadMessagesCount = threads.reduce((sum, t) => sum + t.unreadCount, 0);
+
+  // Refetch both dashboard and threads whenever this tab comes into focus
+  useFocusEffect(useCallback(() => {
+    refetch();
+    refetchThreads();
+  }, [refetch, refetchThreads]));
+
+  function handleRefresh() {
+    refetch();
+    refetchThreads();
+  }
 
   return (
     <SafeAreaView style={styles.container}>
-      <ScrollView contentContainerStyle={styles.scroll} refreshControl={<RefreshControl refreshing={isRefetching} onRefresh={refetch} tintColor="#6366f1" />}>
+      <ScrollView contentContainerStyle={styles.scroll} refreshControl={<RefreshControl refreshing={isRefetching} onRefresh={handleRefresh} tintColor="#6366f1" />}>
         <View style={styles.header}>
           <Text style={styles.greeting}>Good morning, {firstName}</Text>
           {profile?.activeLease && (
@@ -85,7 +101,7 @@ export default function HomeScreen() {
             <View style={styles.row}>
               <View>
                 <Text style={styles.muted}>Unread messages</Text>
-                <Text style={styles.countNum}>{isLoading ? '—' : data?.unreadMessagesCount ?? 0}</Text>
+                <Text style={styles.countNum}>{unreadMessagesCount}</Text>
               </View>
               <Text style={{ fontSize: 32 }}>💬</Text>
             </View>

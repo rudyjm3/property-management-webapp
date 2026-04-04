@@ -7,6 +7,8 @@ import type {
   TenantWorkOrderListItem,
   SubmitWorkOrderInput,
   TenantUploadUrlResponse,
+  TenantThread,
+  TenantMessage,
 } from '@propflow/shared';
 
 const API_URL = process.env.EXPO_PUBLIC_API_URL ?? 'http://localhost:3001';
@@ -67,5 +69,25 @@ export const tenantApi = {
     apiFetch('/api/v1/tenant/upload-url', {
       method: 'POST',
       body: JSON.stringify({ fileName, contentType }),
+    }),
+
+  messages: {
+    threads: (): Promise<TenantThread[]> =>
+      apiFetch('/api/v1/tenant/messages/threads'),
+
+    thread: (threadId: string): Promise<TenantMessage[]> =>
+      apiFetch(`/api/v1/tenant/messages/threads/${threadId}`),
+
+    reply: (threadId: string, body: string): Promise<TenantMessage> =>
+      apiFetch(`/api/v1/tenant/messages/${threadId}/reply`, {
+        method: 'POST',
+        body: JSON.stringify({ body }),
+      }),
+  },
+
+  registerPushToken: (token: string): Promise<{ ok: boolean }> =>
+    apiFetch('/api/v1/tenant/push-token', {
+      method: 'POST',
+      body: JSON.stringify({ token }),
     }),
 };

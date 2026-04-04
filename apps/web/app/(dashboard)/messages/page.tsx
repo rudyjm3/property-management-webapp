@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from 'react';
 import { api } from '@/lib/api';
+import { useAuth } from '@/contexts/AuthContext';
 
 interface Thread {
   threadId: string;
@@ -26,6 +27,9 @@ interface Message {
 }
 
 export default function MessagesPage() {
+  const { profile } = useAuth();
+  const currentUserId = profile?.userId ?? null;
+
   const [threads, setThreads] = useState<Thread[]>([]);
   const [activeThreadId, setActiveThreadId] = useState<string | null>(null);
   const [threadMessages, setThreadMessages] = useState<Message[]>([]);
@@ -43,10 +47,9 @@ export default function MessagesPage() {
   const [composeError, setComposeError] = useState('');
   const [composeSubmitting, setComposeSubmitting] = useState(false);
 
-  // Pre-auth: use first staff member as current user
-  const [currentUserId, setCurrentUserId] = useState<string | null>(null);
-
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const activeThreadPollRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const shouldAutoScrollRef = useRef(false);
 
   async function loadThreads() {
     try {
@@ -59,22 +62,49 @@ export default function MessagesPage() {
     }
   }
 
-  async function loadThread(threadId: string) {
-    setLoadingMessages(true);
+  async function loadThread(threadId: string, silent = false) {
+    if (!silent) setLoadingMessages(true);
+    if (!silent) shouldAutoScrollRef.current = true;
     setActiveThreadId(threadId);
     try {
       const data = await api.messages.threads.get(threadId);
       setThreadMessages(data);
-      // Clear unread badge for this thread
+      // Clear unread badge for this thread in the thread list
       setThreads((prev) =>
         prev.map((t) => (t.threadId === threadId ? { ...t, unreadCount: 0 } : t))
       );
+      // Mark any new_message in-app notifications as read so the sidebar badge clears
+      if (!silent && currentUserId) {
+        api.notifications.list({ userId: currentUserId, limit: 50 })
+          .then((notifs: any[]) => {
+            const unread = notifs.filter((n) => n.type === 'new_message' && !n.readAt);
+            return Promise.all(unread.map((n) => api.notifications.markRead(n.id)));
+          })
+          .then(() => {
+            window.dispatchEvent(new Event('notif-badge-update'));
+          })
+          .catch(() => {});
+      }
     } catch (err) {
       console.error('Failed to load thread:', err);
     } finally {
-      setLoadingMessages(false);
+      if (!silent) setLoadingMessages(false);
     }
   }
+
+  // Poll the active thread every 5 s so tenant replies appear without a manual refresh
+  useEffect(() => {
+    if (activeThreadPollRef.current) clearInterval(activeThreadPollRef.current);
+    if (!activeThreadId) return;
+    activeThreadPollRef.current = setInterval(
+      () => loadThread(activeThreadId, true),
+      5_000
+    );
+    return () => {
+      if (activeThreadPollRef.current) clearInterval(activeThreadPollRef.current);
+    };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeThreadId]);
 
   async function handleSendReply(e: React.FormEvent) {
     e.preventDefault();
@@ -91,6 +121,7 @@ export default function MessagesPage() {
         body: replyBody.trim(),
         threadId: activeThreadId,
       });
+      shouldAutoScrollRef.current = true;
       setThreadMessages((prev) => [...prev, msg]);
       setReplyBody('');
       await loadThreads();
@@ -142,26 +173,17 @@ export default function MessagesPage() {
     }
   }
 
-  // Scroll to bottom of messages on update
+  // Scroll to bottom only on initial thread load and after sending — not on silent polls
   useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+    if (shouldAutoScrollRef.current) {
+      messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+      shouldAutoScrollRef.current = false;
+    }
   }, [threadMessages]);
 
-  // Load staff (pre-auth current user) + threads on mount
+  // Load threads on mount and poll every 30 seconds
   useEffect(() => {
-    async function init() {
-      try {
-        // TODO: replace with auth session user ID once auth is wired
-        const staff = await api.staff.list();
-        if (staff.length > 0) setCurrentUserId(staff[0].id);
-      } catch (err) {
-        console.error('Failed to load staff:', err);
-      }
-      await loadThreads();
-    }
-    init();
-
-    // Poll for new threads every 30 seconds
+    loadThreads();
     const interval = setInterval(loadThreads, 30_000);
     return () => clearInterval(interval);
   }, []);
@@ -241,7 +263,7 @@ export default function MessagesPage() {
         </div>
 
         {/* Conversation panel */}
-        <div style={{ display: 'flex', flexDirection: 'column', background: '#fff' }}>
+        <div style={{ display: 'flex', flexDirection: 'column', background: '#fff', height: '100%', overflow: 'hidden' }}>
           {!activeThreadId ? (
             <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--color-text-muted)', fontSize: '14px' }}>
               Select a conversation or start a new one

@@ -1,82 +1,52 @@
 import { createClient } from '@supabase/supabase-js';
 import * as SecureStore from 'expo-secure-store';
 
-// SecureStore has a 2048-byte limit per key.
-// Supabase sessions easily exceed this (JWT + refresh token + user metadata).
-// This adapter chunks large values across multiple keys transparently.
+// SecureStore has a 2048-byte limit per key. Supabase session tokens exceed this,
+// so we chunk large values across multiple keys.
+const CHUNK_SIZE = 1800;
 
-const CHUNK_SIZE = 1800; // safely under the 2048-byte limit
-
-const ExpoSecureStoreAdapter = {
+const ChunkedSecureStoreAdapter = {
   getItem: async (key: string): Promise<string | null> => {
-    const metaStr = await SecureStore.getItemAsync(key);
-    if (!metaStr) return null;
-    try {
-      const meta = JSON.parse(metaStr);
-      if (typeof meta.chunks === 'number') {
-        const parts = await Promise.all(
-          Array.from({ length: meta.chunks }, (_, i) =>
-            SecureStore.getItemAsync(`${key}_chunk_${i}`)
-          )
-        );
-        if (parts.some((p) => p === null)) return null;
-        return parts.join('');
-      }
-    } catch {
-      // Not a chunk-meta value — return as-is (plain string stored directly)
+    const metaRaw = await SecureStore.getItemAsync(`${key}__meta`);
+    if (!metaRaw) {
+      // No chunked value — fall back to plain key (handles legacy single-chunk items)
+      return SecureStore.getItemAsync(key);
     }
-    return metaStr;
+    const { chunks } = JSON.parse(metaRaw) as { chunks: number };
+    const parts: string[] = [];
+    for (let i = 0; i < chunks; i++) {
+      const part = await SecureStore.getItemAsync(`${key}__${i}`);
+      if (part === null) return null;
+      parts.push(part);
+    }
+    return parts.join('');
   },
 
   setItem: async (key: string, value: string): Promise<void> => {
-    // Before writing, clean up any previously stored chunks for this key
-    // so stale fragment keys don't accumulate when data shrinks.
-    const existing = await SecureStore.getItemAsync(key);
-    if (existing) {
-      try {
-        const meta = JSON.parse(existing);
-        if (typeof meta.chunks === 'number') {
-          await Promise.all(
-            Array.from({ length: meta.chunks }, (_, i) =>
-              SecureStore.deleteItemAsync(`${key}_chunk_${i}`)
-            )
-          );
-        }
-      } catch {
-        // Not chunked metadata — nothing to clean up
-      }
-    }
-
     if (value.length <= CHUNK_SIZE) {
+      // Small enough to store directly; clear any previous chunks
+      await SecureStore.deleteItemAsync(`${key}__meta`);
       await SecureStore.setItemAsync(key, value);
       return;
     }
-    // Split into chunks and store each, then store metadata at the primary key
     const chunks: string[] = [];
     for (let i = 0; i < value.length; i += CHUNK_SIZE) {
       chunks.push(value.slice(i, i + CHUNK_SIZE));
     }
-    await Promise.all(
-      chunks.map((chunk, i) => SecureStore.setItemAsync(`${key}_chunk_${i}`, chunk))
-    );
-    await SecureStore.setItemAsync(key, JSON.stringify({ chunks: chunks.length }));
+    await SecureStore.setItemAsync(`${key}__meta`, JSON.stringify({ chunks: chunks.length }));
+    await Promise.all(chunks.map((chunk, i) => SecureStore.setItemAsync(`${key}__${i}`, chunk)));
+    // Remove the plain key in case it existed before
+    await SecureStore.deleteItemAsync(key);
   },
 
   removeItem: async (key: string): Promise<void> => {
-    const metaStr = await SecureStore.getItemAsync(key);
-    if (metaStr) {
-      try {
-        const meta = JSON.parse(metaStr);
-        if (typeof meta.chunks === 'number') {
-          await Promise.all(
-            Array.from({ length: meta.chunks }, (_, i) =>
-              SecureStore.deleteItemAsync(`${key}_chunk_${i}`)
-            )
-          );
-        }
-      } catch {
-        // Not chunked — nothing extra to clean up
-      }
+    const metaRaw = await SecureStore.getItemAsync(`${key}__meta`);
+    if (metaRaw) {
+      const { chunks } = JSON.parse(metaRaw) as { chunks: number };
+      await SecureStore.deleteItemAsync(`${key}__meta`);
+      await Promise.all(
+        Array.from({ length: chunks }, (_, i) => SecureStore.deleteItemAsync(`${key}__${i}`))
+      );
     }
     await SecureStore.deleteItemAsync(key);
   },
@@ -87,7 +57,7 @@ export const supabase = createClient(
   process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY!,
   {
     auth: {
-      storage: ExpoSecureStoreAdapter,
+      storage: ChunkedSecureStoreAdapter,
       autoRefreshToken: true,
       persistSession: true,
       // Must be false for React Native — no window.location to parse

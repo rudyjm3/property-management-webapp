@@ -466,6 +466,8 @@ export interface InitiatePaymentResponse {
   status: string;
 }
 
+// ─── Tenant Work Orders ───────────────────────────────────────────────────────
+
 export interface TenantWorkOrderListItem {
   id: string;
   title: string | null;
@@ -492,4 +494,21 @@ export interface SubmitWorkOrderInput {
 export interface TenantUploadUrlResponse {
   uploadUrl: string;
   s3Key: string;
+}
+
+// ─── Tenant Messaging ─────────────────────────────────────────────────────────
+
+export interface TenantThread {
+  threadId: string;
+  subject: string | null;
+  latestBody: string;
+  latestAt: Date;
+  unreadCount: number;
+}
+
+export interface TenantMessage {
+  id: string;
+  body: string;
+  isFromTenant: boolean;
+  createdAt: Date;
 }

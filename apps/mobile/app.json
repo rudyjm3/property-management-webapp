@@ -27,6 +27,7 @@
     "plugins": [
       "expo-router",
       "expo-secure-store",
+      "expo-notifications",
       [
         "@stripe/stripe-react-native",
         {

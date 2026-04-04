@@ -2,13 +2,14 @@ import { PrismaClient } from '@prisma/client';
 
 const prisma = new PrismaClient();
 
-// Stable IDs — never change these so .env.local never needs updating
-const SEED_ORG_ID = 'a1b2c3d4-0000-4000-8000-seed00000001';
+// Stable IDs — matches the real org so Supabase auth links are preserved after reset
+const ORG_ID      = '006b3fc1-6cfa-422a-8563-df9fe72623bd';
+const PROPERTY_ID = '1b389569-cf78-4017-9903-8523f57b7419';
 
 async function main() {
   console.log('Seeding database...');
 
-  // Clear existing seed data in dependency order
+  // Clear existing data in dependency order
   await prisma.notification.deleteMany();
   await prisma.document.deleteMany();
   await prisma.message.deleteMany();
@@ -23,94 +24,117 @@ async function main() {
   await prisma.user.deleteMany();
   await prisma.organization.deleteMany();
 
-  // Create demo organization
+  // ─── Organization ────────────────────────────────────────────────────────────
+
   const org = await prisma.organization.create({
     data: {
-      id: SEED_ORG_ID,
-      name: 'Sunset Property Management',
-      slug: 'sunset-pm',
-      email: 'manager@sunset-pm.com',
-      phone: '512-555-0100',
-      timezone: 'America/Chicago',
+      id: ORG_ID,
+      name: 'PropFlow Demo',
+      slug: 'propflow-demo-xna67',
+      email: 'rudyjm3@gmail.com',
+      phone: '(240) 3467896',
+      timezone: 'America/New_York',
       planTier: 'starter',
       subscriptionStatus: 'trialing',
+      stripeAccountId: 'acct_1TGWXXAh5KW4KUAc',
+      stripeAccountStatus: 'active',
+      stripeAccountDetailsSubmitted: true,
       lateFeeAmount: 50,
       gracePeriodDays: 5,
       rentDueDay: 1,
     },
   });
 
-  // Create demo manager user
-  const manager = await prisma.user.create({
-    data: {
-      organizationId: org.id,
-      email: 'manager@demo.propflow.com',
-      name: 'Alex Rivera',
-      role: 'owner',
-      status: 'active',
-    },
+  // ─── Staff ───────────────────────────────────────────────────────────────────
+
+  await prisma.user.createMany({
+    data: [
+      {
+        organizationId: org.id,
+        supabaseUserId: '8097f094-f9cd-4082-88e7-a30aa7e10041',
+        email: 'rudyjm3@gmail.com',
+        name: 'Rudolph Mims',
+        role: 'owner',
+        status: 'active',
+      },
+      {
+        organizationId: org.id,
+        supabaseUserId: '5e75753c-6850-4540-98e6-9a2674965269',
+        email: 'rudyjm3@yahoo.com',
+        name: 'John Smith',
+        role: 'maintenance',
+        status: 'active',
+      },
+    ],
   });
 
-  // Create a property
+  // ─── Property ────────────────────────────────────────────────────────────────
+
   const property = await prisma.property.create({
     data: {
+      id: PROPERTY_ID,
       organizationId: org.id,
-      name: 'Sunset Gardens',
+      name: 'PropFlow Demo Property',
       type: 'multifamily',
-      address: '1200 Sunset Blvd',
-      city: 'Austin',
-      state: 'TX',
-      zip: '78701',
+      address: '1291 Walter Webb Dr',
+      city: 'Sevierville',
+      state: 'TN',
+      zip: '37862',
       country: 'US',
-      yearBuilt: 2018,
-      unitCount: 10,
+      unitCount: 128,
+      amenities: [],
     },
   });
 
-  // Create 10 units — 8 occupied (with tenants), 2 vacant
-  const unitConfigs = [
-    { unitNumber: '101', floor: 1, type: 'one_bed',  bedrooms: 1, bathrooms: 1,   sqFt: 650,  rentAmount: 1200, depositAmount: 1200 },
-    { unitNumber: '102', floor: 1, type: 'one_bed',  bedrooms: 1, bathrooms: 1,   sqFt: 650,  rentAmount: 1200, depositAmount: 1200 },
-    { unitNumber: '103', floor: 1, type: 'one_bed',  bedrooms: 1, bathrooms: 1,   sqFt: 650,  rentAmount: 1200, depositAmount: 1200 },
-    { unitNumber: '104', floor: 1, type: 'one_bed',  bedrooms: 1, bathrooms: 1,   sqFt: 650,  rentAmount: 1200, depositAmount: 1200 },
-    { unitNumber: '201', floor: 2, type: 'two_bed',  bedrooms: 2, bathrooms: 2,   sqFt: 900,  rentAmount: 1600, depositAmount: 1600 },
-    { unitNumber: '202', floor: 2, type: 'two_bed',  bedrooms: 2, bathrooms: 2,   sqFt: 900,  rentAmount: 1600, depositAmount: 1600 },
-    { unitNumber: '203', floor: 2, type: 'two_bed',  bedrooms: 2, bathrooms: 2,   sqFt: 900,  rentAmount: 1600, depositAmount: 1600 },
-    { unitNumber: '204', floor: 2, type: 'two_bed',  bedrooms: 2, bathrooms: 2,   sqFt: 900,  rentAmount: 1600, depositAmount: 1600 },
-    { unitNumber: '301', floor: 3, type: 'three_bed', bedrooms: 3, bathrooms: 2,  sqFt: 1200, rentAmount: 2100, depositAmount: 2100 },
-    { unitNumber: '302', floor: 3, type: 'three_bed', bedrooms: 3, bathrooms: 2,  sqFt: 1200, rentAmount: 2100, depositAmount: 2100 },
-  ] as const;
+  // ─── Units ───────────────────────────────────────────────────────────────────
+  //
+  // 16 buildings × 8 units = 128 units.
+  // Buildings 1–9  → unit numbers  1xx (101–108)
+  // Buildings 10–16 → unit numbers 10xx–16xx (1001–1608)
+  // Within each building: units xx01–xx04 = floor 1, units xx05–xx08 = floor 2
+  //
+  const buildings = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16];
 
-  const units = await Promise.all(
-    unitConfigs.map((cfg, i) =>
-      prisma.unit.create({
-        data: {
-          propertyId: property.id,
-          unitNumber: cfg.unitNumber,
-          floor: cfg.floor,
-          type: cfg.type,
-          bedrooms: cfg.bedrooms,
-          bathrooms: cfg.bathrooms,
-          sqFt: cfg.sqFt,
-          marketRent: cfg.rentAmount,
-          rentAmount: cfg.rentAmount,
-          depositAmount: cfg.depositAmount,
-          status: i < 8 ? 'occupied' : 'vacant',
-        },
-      })
-    )
+  const unitRows = buildings.flatMap((b) =>
+    [1, 2, 3, 4, 5, 6, 7, 8].map((u) => ({
+      propertyId: property.id,
+      unitNumber: `${b}0${u}`,
+      floor: u <= 4 ? 1 : 2,
+      type: 'two_bed' as const,
+      bedrooms: 2,
+      bathrooms: 1,
+      sqFt: 850,
+      marketRent: 1250,
+      rentAmount: 1050,
+      depositAmount: 800,
+      status: 'vacant' as const,
+      parkingSpaces: [],
+      address: '1298 Walter Webb Dr',
+      city: 'Sevierville',
+      state: 'TN',
+      zip: '37862',
+    }))
   );
 
-  // Demo tenants — one for each occupied unit
+  await prisma.unit.createMany({ data: unitRows });
+
+  // Fetch units in a stable order so we can assign tenants to the first 8
+  const units = await prisma.unit.findMany({
+    where: { propertyId: property.id },
+    orderBy: { unitNumber: 'asc' },
+  });
+
+  // ─── Demo Tenants ─────────────────────────────────────────────────────────────
+
   const tenantData = [
-    { name: 'Jordan Chen',    email: 'jordan.chen@demo.propflow.com',    phone: '512-555-0101', fullLegalName: 'Jordan Chen',    currentAddress: '1200 Sunset Blvd #101, Austin TX 78701' },
-    { name: 'Sam Patel',      email: 'sam.patel@demo.propflow.com',      phone: '512-555-0102', fullLegalName: 'Samantha Patel',  currentAddress: '1200 Sunset Blvd #102, Austin TX 78701' },
-    { name: 'Maria Garcia',   email: 'maria.garcia@demo.propflow.com',   phone: '512-555-0103', fullLegalName: 'Maria Garcia',   currentAddress: '1200 Sunset Blvd #103, Austin TX 78701' },
-    { name: 'David Kim',      email: 'david.kim@demo.propflow.com',      phone: '512-555-0104', fullLegalName: 'David Kim',      currentAddress: '1200 Sunset Blvd #104, Austin TX 78701' },
-    { name: 'Lisa Thompson',  email: 'lisa.thompson@demo.propflow.com',  phone: '512-555-0105', fullLegalName: 'Lisa Thompson',  currentAddress: '1200 Sunset Blvd #201, Austin TX 78701' },
-    { name: 'James Wilson',   email: 'james.wilson@demo.propflow.com',   phone: '512-555-0106', fullLegalName: 'James Wilson',   currentAddress: '1200 Sunset Blvd #202, Austin TX 78701' },
-    { name: 'Ashley Brown',   email: 'ashley.brown@demo.propflow.com',   phone: '512-555-0107', fullLegalName: 'Ashley Brown',   currentAddress: '1200 Sunset Blvd #203, Austin TX 78701' },
-    { name: 'Michael Davis',  email: 'michael.davis@demo.propflow.com',  phone: '512-555-0108', fullLegalName: 'Michael Davis',  currentAddress: '1200 Sunset Blvd #204, Austin TX 78701' },
+    { name: 'Jordan Chen',   email: 'jordan.chen@demo.propflow.com',   phone: '512-555-0101', fullLegalName: 'Jordan Chen'   },
+    { name: 'Sam Patel',     email: 'sam.patel@demo.propflow.com',     phone: '512-555-0102', fullLegalName: 'Samantha Patel' },
+    { name: 'Maria Garcia',  email: 'maria.garcia@demo.propflow.com',  phone: '512-555-0103', fullLegalName: 'Maria Garcia'  },
+    { name: 'David Kim',     email: 'david.kim@demo.propflow.com',     phone: '512-555-0104', fullLegalName: 'David Kim'     },
+    { name: 'Lisa Thompson', email: 'lisa.thompson@demo.propflow.com', phone: '512-555-0105', fullLegalName: 'Lisa Thompson' },
+    { name: 'James Wilson',  email: 'james.wilson@demo.propflow.com',  phone: '512-555-0106', fullLegalName: 'James Wilson'  },
+    { name: 'Ashley Brown',  email: 'ashley.brown@demo.propflow.com',  phone: '512-555-0107', fullLegalName: 'Ashley Brown'  },
+    { name: 'Michael Davis', email: 'michael.davis@demo.propflow.com', phone: '512-555-0108', fullLegalName: 'Michael Davis' },
   ];
 
   const tenants = await Promise.all(
@@ -125,7 +149,8 @@ async function main() {
     )
   );
 
-  // Create a lease for each occupied unit (first 8 units)
+  // ─── Leases (8 tenants → first 8 units) ──────────────────────────────────────
+
   const leases = await Promise.all(
     tenants.map((tenant, i) =>
       prisma.lease.create({
@@ -145,6 +170,8 @@ async function main() {
           securityDepositStatus: 'held',
           esignatureStatus: 'completed',
           occupantCount: 1,
+          utilitiesIncluded: [],
+          occupantNames: [],
           participants: {
             create: { tenantId: tenant.id, isPrimary: true },
           },
@@ -153,22 +180,22 @@ async function main() {
     )
   );
 
+  // Mark the 8 occupied units
+  await prisma.unit.updateMany({
+    where: { id: { in: units.slice(0, 8).map((u) => u.id) } },
+    data: { status: 'occupied' },
+  });
+
   console.log('Seed complete:');
   console.log(`  Organization: ${org.name} (${org.id})`);
-  console.log(`  Manager: ${manager.name}`);
   console.log(`  Property: ${property.name} — ${units.length} units`);
-  console.log(`  Tenants: ${tenants.length} tenants created`);
-  console.log(`  Leases: ${leases.length} active leases created`);
+  console.log(`  Tenants: ${tenants.length} demo tenants`);
+  console.log(`  Leases:  ${leases.length} active leases`);
   console.log('');
-  console.log(`  ORG_ID (stable): ${org.id}`);
+  console.log('  Login: rudyjm3@gmail.com (Supabase session preserved)');
+  console.log('  Mobile test tenant: jordan.chen@demo.propflow.com — run npm run seed:test-tenant');
 }
 
 main()
-  .then(async () => {
-    await prisma.$disconnect();
-  })
-  .catch(async (e) => {
-    console.error(e);
-    await prisma.$disconnect();
-    process.exit(1);
-  });
+  .then(async () => { await prisma.$disconnect(); })
+  .catch(async (e) => { console.error(e); await prisma.$disconnect(); process.exit(1); });
