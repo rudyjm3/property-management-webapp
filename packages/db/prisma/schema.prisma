@@ -260,6 +260,7 @@ model Tenant {
   notifPaymentConfirm           String?          @map("notif_payment_confirm") @db.VarChar(20)
   notifWorkOrderUpdate          String?          @map("notif_work_order_update") @db.VarChar(20)
   notifMessage                  String?          @map("notif_message") @db.VarChar(20)
+  expoPushToken                 String?          @map("expo_push_token") @db.VarChar(200)
   createdAt                     DateTime         @default(now()) @map("created_at")
   updatedAt                     DateTime         @updatedAt @map("updated_at")
   deletedAt                     DateTime?        @map("deleted_at")

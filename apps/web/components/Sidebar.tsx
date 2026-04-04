@@ -89,13 +89,23 @@ export default function Sidebar() {
   const { profile, signOut } = useAuth();
   const [unreadCount, setUnreadCount] = useState(0);
 
+  function refreshBadge(userId: string) {
+    api.notifications.list({ userId, limit: 50 })
+      .then((notifs: any[]) => setUnreadCount(notifs.filter((n) => !n.readAt).length))
+      .catch(() => {});
+  }
+
   useEffect(() => {
     if (!profile?.userId) return;
-    api.notifications.list({ userId: profile.userId, limit: 50 })
-      .then((notifs: any[]) => {
-        setUnreadCount(notifs.filter((n) => !n.readAt).length);
-      })
-      .catch(() => {});
+    refreshBadge(profile.userId);
+  }, [profile?.userId, pathname]);
+
+  // Also refresh immediately when messages page marks notifications read
+  useEffect(() => {
+    if (!profile?.userId) return;
+    const handler = () => refreshBadge(profile.userId);
+    window.addEventListener('notif-badge-update', handler);
+    return () => window.removeEventListener('notif-badge-update', handler);
   }, [profile?.userId]);
 
   function isActive(href: string) {

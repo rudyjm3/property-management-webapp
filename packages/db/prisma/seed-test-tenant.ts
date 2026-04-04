@@ -41,10 +41,19 @@ async function main() {
     process.exit(1);
   }
 
-  // Delete existing Supabase auth user if one exists (idempotent re-runs)
+  // Delete existing Supabase auth user if one exists (idempotent re-runs).
+  // Also handles the case where the DB was reset but the Supabase user survived.
   if (tenant.supabaseUserId) {
-    console.log('Removing existing Supabase auth user...');
+    console.log('Removing existing Supabase auth user (by ID)...');
     await supabaseAdmin.auth.admin.deleteUser(tenant.supabaseUserId);
+  } else {
+    // No supabaseUserId in DB — check Supabase directly by email
+    const { data: list } = await supabaseAdmin.auth.admin.listUsers();
+    const existing = list?.users?.find((u) => u.email === TEST_EMAIL);
+    if (existing) {
+      console.log('Removing orphaned Supabase auth user (by email)...');
+      await supabaseAdmin.auth.admin.deleteUser(existing.id);
+    }
   }
 
   // Create a fresh Supabase auth user with a known password
