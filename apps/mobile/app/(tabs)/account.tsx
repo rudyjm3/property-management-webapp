@@ -13,7 +13,6 @@ const PROFILE_UPDATE_KEYS: Array<keyof UpdateTenantProfileInput> = [
   'phone',
   'preferredContact',
   'languagePreference',
-  'avatarUrl',
   'emergencyContactName',
   'emergencyContactPhone',
   'emergencyContact1Relationship',
@@ -38,7 +37,6 @@ export default function AccountScreen() {
     phone: profile?.phone ?? null,
     preferredContact: profile?.preferredContact ?? null,
     languagePreference: profile?.languagePreference ?? null,
-    avatarUrl: profile?.avatarUrl ?? null,
     emergencyContactName: profile?.emergencyContactName ?? null,
     emergencyContactPhone: profile?.emergencyContactPhone ?? null,
     emergencyContact1Relationship: profile?.emergencyContact1Relationship ?? null,
@@ -54,7 +52,6 @@ export default function AccountScreen() {
       phone: profile?.phone ?? null,
       preferredContact: profile?.preferredContact ?? null,
       languagePreference: profile?.languagePreference ?? null,
-      avatarUrl: profile?.avatarUrl ?? null,
       emergencyContactName: profile?.emergencyContactName ?? null,
       emergencyContactPhone: profile?.emergencyContactPhone ?? null,
       emergencyContact1Relationship: profile?.emergencyContact1Relationship ?? null,
@@ -93,7 +90,6 @@ export default function AccountScreen() {
       phone: profile?.phone ?? null,
       preferredContact: profile?.preferredContact ?? null,
       languagePreference: profile?.languagePreference ?? null,
-      avatarUrl: profile?.avatarUrl ?? null,
       emergencyContactName: profile?.emergencyContactName ?? null,
       emergencyContactPhone: profile?.emergencyContactPhone ?? null,
       emergencyContact1Relationship: profile?.emergencyContact1Relationship ?? null,
@@ -115,7 +111,6 @@ export default function AccountScreen() {
       phone: normalize(form.phone ?? ''),
       preferredContact: form.preferredContact ?? null,
       languagePreference: normalize(form.languagePreference ?? ''),
-      avatarUrl: normalize(form.avatarUrl ?? ''),
       emergencyContactName: normalize(form.emergencyContactName ?? ''),
       emergencyContactPhone: normalize(form.emergencyContactPhone ?? ''),
       emergencyContact1Relationship: normalize(form.emergencyContact1Relationship ?? ''),
@@ -129,7 +124,6 @@ export default function AccountScreen() {
       phone: normalize(profile.phone ?? ''),
       preferredContact: profile.preferredContact ?? null,
       languagePreference: normalize(profile.languagePreference ?? ''),
-      avatarUrl: normalize(profile.avatarUrl ?? ''),
       emergencyContactName: normalize(profile.emergencyContactName ?? ''),
       emergencyContactPhone: normalize(profile.emergencyContactPhone ?? ''),
       emergencyContact1Relationship: normalize(profile.emergencyContact1Relationship ?? ''),
@@ -240,16 +234,6 @@ export default function AccountScreen() {
             autoCapitalize="none"
           />
 
-          <Text style={styles.inputLabel}>Avatar URL</Text>
-          <TextInput
-            editable={editing}
-            value={form.avatarUrl ?? ''}
-            onChangeText={(v) => setField('avatarUrl', v)}
-            style={[styles.input, !editing && styles.inputDisabled]}
-            placeholder="https://..."
-            autoCapitalize="none"
-            autoCorrect={false}
-          />
         </Card>
 
         <Card style={{ marginTop: 12 }}>

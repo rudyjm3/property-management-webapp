@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { useParams, useRouter } from 'next/navigation';
+import { useParams, useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import { api } from '@/lib/api';
 import DocumentPanel from '@/components/DocumentPanel';
@@ -28,7 +28,22 @@ interface LeaseDetail {
   parkingFee: string | null;
   documentUrl: string | null;
   notes: string | null;
+  renewalOfLeaseId: string | null;
+  createdLeaseId?: string;
+  previousLeaseStatus?: string;
   createdAt: string;
+  renewalOf: {
+    id: string;
+    status: string;
+    startDate: string;
+    endDate: string;
+  } | null;
+  renewals: Array<{
+    id: string;
+    status: string;
+    startDate: string;
+    endDate: string;
+  }>;
   unit: {
     id: string;
     unitNumber: string;
@@ -97,6 +112,7 @@ const SECURITY_DEPOSIT_STATUS_LABELS: Record<string, string> = {
 export default function LeaseDetailPage() {
   const params = useParams();
   const router = useRouter();
+  const searchParams = useSearchParams();
   const leaseId = params.id as string;
 
   const [lease, setLease] = useState<LeaseDetail | null>(null);
@@ -105,6 +121,7 @@ export default function LeaseDetailPage() {
   const [showRenewModal, setShowRenewModal] = useState(false);
   const [showAddTenantModal, setShowAddTenantModal] = useState(false);
   const [error, setError] = useState('');
+  const [renewalSuccessMessage, setRenewalSuccessMessage] = useState('');
 
   // Add tenant state
   const [allTenants, setAllTenants] = useState<TenantListItem[]>([]);
@@ -141,6 +158,23 @@ export default function LeaseDetailPage() {
     }
     load();
   }, [leaseId]);
+
+  useEffect(() => {
+    if (!lease) return;
+
+    const renewedFrom = searchParams.get('renewedFrom');
+    if (renewedFrom) {
+      setRenewalSuccessMessage('Renewal created successfully. This is the new lease record.');
+    }
+
+    const shouldOpenRenew = searchParams.get('openRenew') === '1';
+    if (shouldOpenRenew) {
+      const isCurrent = ['active', 'month_to_month', 'notice_given'].includes(lease.status);
+      if (isCurrent) {
+        openRenewModal();
+      }
+    }
+  }, [lease, searchParams]);
 
   function openEditModal() {
     if (!lease) return;
@@ -197,15 +231,47 @@ export default function LeaseDetailPage() {
   async function handleRenew(e: React.FormEvent) {
     e.preventDefault();
     setError('');
+    if (!lease) return;
+
+    const parsedRent = parseFloat(renewRentAmount);
+    const start = new Date(renewStartDate);
+    const end = new Date(renewEndDate);
+    const currentEnd = new Date(lease.endDate);
+
+    if (!renewLeaseType) {
+      setError('Select a lease type before renewing.');
+      return;
+    }
+
+    if (Number.isNaN(parsedRent) || parsedRent <= 0) {
+      setError('Monthly rent must be greater than 0.');
+      return;
+    }
+
+    if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime())) {
+      setError('Start and end dates are required.');
+      return;
+    }
+
+    if (end <= start) {
+      setError('Renewal end date must be after the renewal start date.');
+      return;
+    }
+
+    if (start <= currentEnd) {
+      setError('Renewal start date must be after the current lease end date.');
+      return;
+    }
+
     try {
       const newLease = await api.leases.renew(leaseId, {
         startDate: renewStartDate,
         endDate: renewEndDate,
-        rentAmount: parseFloat(renewRentAmount),
+        rentAmount: parsedRent,
         type: renewLeaseType || null,
       });
       // Navigate to the new lease
-      router.push(`/leases/${newLease.id}`);
+      router.push(`/leases/${newLease.id}?renewedFrom=${leaseId}`);
     } catch (err: any) {
       setError(err.message || 'Failed to renew lease');
     }
@@ -350,6 +416,12 @@ export default function LeaseDetailPage() {
         </div>
       </div>
 
+      {renewalSuccessMessage && (
+        <div style={{ background: '#f0fdf4', border: '1px solid #86efac', borderRadius: '8px', padding: '12px', color: '#166534', marginBottom: '16px' }}>
+          {renewalSuccessMessage}
+        </div>
+      )}
+
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '24px' }}>
         {/* Lease Terms */}
         <div className="card">
@@ -439,6 +511,26 @@ export default function LeaseDetailPage() {
               <div style={{ marginTop: '16px', paddingTop: '16px', borderTop: '1px solid var(--color-border)' }}>
                 <label style={{ fontSize: '12px', color: '#6b7280', display: 'block', marginBottom: '4px' }}>Notes</label>
                 <p style={{ fontSize: '14px', margin: 0 }}>{lease.notes}</p>
+              </div>
+            )}
+            {(lease.renewalOf || lease.renewals.length > 0) && (
+              <div style={{ marginTop: '16px', paddingTop: '16px', borderTop: '1px solid var(--color-border)', display: 'grid', gap: '8px' }}>
+                {lease.renewalOf && (
+                  <div style={{ fontSize: '14px' }}>
+                    <strong>Renewed from:</strong>{' '}
+                    <Link href={`/leases/${lease.renewalOf.id}`} style={{ color: 'var(--color-primary)', textDecoration: 'none' }}>
+                      Lease {new Date(lease.renewalOf.startDate).toLocaleDateString()} - {new Date(lease.renewalOf.endDate).toLocaleDateString()}
+                    </Link>
+                  </div>
+                )}
+                {lease.renewals[0] && (
+                  <div style={{ fontSize: '14px' }}>
+                    <strong>Renewed to:</strong>{' '}
+                    <Link href={`/leases/${lease.renewals[0].id}`} style={{ color: 'var(--color-primary)', textDecoration: 'none' }}>
+                      Lease {new Date(lease.renewals[0].startDate).toLocaleDateString()} - {new Date(lease.renewals[0].endDate).toLocaleDateString()}
+                    </Link>
+                  </div>
+                )}
               </div>
             )}
           </div>

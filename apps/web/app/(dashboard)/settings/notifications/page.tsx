@@ -1,9 +1,9 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import Link from 'next/link';
 import { api } from '@/lib/api';
 import { useAuth } from '@/contexts/AuthContext';
+import SettingsShell from '@/components/settings/SettingsShell';
 
 type NotifPref = 'email' | 'in_app' | 'both' | 'none';
 
@@ -79,99 +79,66 @@ export default function NotificationSettingsPage() {
     }
   }
 
-  const settingsNav = [
-    { href: '/settings/organization', label: 'Organization' },
-    { href: '/settings/team', label: 'Team' },
-    { href: '/settings/notifications', label: 'Notifications' },
-    { href: '/settings', label: 'Stripe Connect' },
-  ];
-
   return (
-    <>
-      <div className="page-header">
-        <h1 className="page-title">Settings</h1>
-      </div>
+    <SettingsShell activeHref="/settings/notifications">
+      <div className="card">
+        <div className="card-body">
+          <h2 style={{ fontSize: '16px', fontWeight: 600, marginBottom: '4px' }}>Notification Preferences</h2>
+          <p style={{ fontSize: '13px', color: 'var(--color-text-muted)', marginBottom: '24px' }}>
+            Choose how you want to be notified for each event type.
+          </p>
 
-      <div style={{ display: 'grid', gridTemplateColumns: '200px 1fr', gap: '24px', alignItems: 'start' }}>
-        <div className="card">
-          <nav>
-            {settingsNav.map((item) => (
-              <Link
-                key={item.href}
-                href={item.href}
-                style={{
-                  display: 'block', padding: '10px 16px', fontSize: '14px',
-                  fontWeight: item.href === '/settings/notifications' ? 600 : 400,
-                  color: item.href === '/settings/notifications' ? 'var(--color-primary)' : 'inherit',
-                  borderLeft: item.href === '/settings/notifications' ? '3px solid var(--color-primary)' : '3px solid transparent',
-                  textDecoration: 'none',
-                }}
-              >
-                {item.label}
-              </Link>
-            ))}
-          </nav>
-        </div>
+          {error && (
+            <div style={{ background: '#fef2f2', border: '1px solid #fecaca', borderRadius: '6px', padding: '12px', marginBottom: '16px', color: '#dc2626', fontSize: '14px' }}>
+              {error}
+            </div>
+          )}
+          {saved && (
+            <div style={{ background: '#f0fdf4', border: '1px solid #86efac', borderRadius: '6px', padding: '12px', marginBottom: '16px', color: '#16a34a', fontSize: '14px' }}>
+              Preferences saved.
+            </div>
+          )}
 
-        <div className="card">
-          <div className="card-body">
-            <h2 style={{ fontSize: '16px', fontWeight: 600, marginBottom: '4px' }}>Notification Preferences</h2>
-            <p style={{ fontSize: '13px', color: 'var(--color-text-muted)', marginBottom: '24px' }}>
-              Choose how you want to be notified for each event type.
-            </p>
-
-            {error && (
-              <div style={{ background: '#fef2f2', border: '1px solid #fecaca', borderRadius: '6px', padding: '12px', marginBottom: '16px', color: '#dc2626', fontSize: '14px' }}>
-                {error}
-              </div>
-            )}
-            {saved && (
-              <div style={{ background: '#f0fdf4', border: '1px solid #86efac', borderRadius: '6px', padding: '12px', marginBottom: '16px', color: '#16a34a', fontSize: '14px' }}>
-                Preferences saved.
-              </div>
-            )}
-
-            {loading ? (
-              <div className="loading">Loading preferences…</div>
-            ) : (
-              <div>
-                {NOTIF_TYPES.map((type) => (
-                  <div
-                    key={type.key}
-                    style={{
-                      display: 'flex',
-                      justifyContent: 'space-between',
-                      alignItems: 'center',
-                      padding: '16px 0',
-                      borderBottom: '1px solid var(--color-border)',
-                    }}
-                  >
-                    <div>
-                      <div style={{ fontWeight: 500, fontSize: '14px' }}>{type.label}</div>
-                      <div style={{ fontSize: '12px', color: 'var(--color-text-muted)', marginTop: '2px' }}>{type.description}</div>
-                    </div>
-                    <select
-                      value={settings[type.key]}
-                      onChange={(e) => setSettings((prev) => ({ ...prev, [type.key]: e.target.value as NotifPref }))}
-                      style={{ minWidth: '160px' }}
-                    >
-                      {PREF_OPTIONS.map((opt) => (
-                        <option key={opt.value} value={opt.value}>{opt.label}</option>
-                      ))}
-                    </select>
+          {loading ? (
+            <div className="loading">Loading preferences...</div>
+          ) : (
+            <div>
+              {NOTIF_TYPES.map((type) => (
+                <div
+                  key={type.key}
+                  style={{
+                    display: 'flex',
+                    justifyContent: 'space-between',
+                    alignItems: 'center',
+                    padding: '16px 0',
+                    borderBottom: '1px solid var(--color-border)',
+                  }}
+                >
+                  <div>
+                    <div style={{ fontWeight: 500, fontSize: '14px' }}>{type.label}</div>
+                    <div style={{ fontSize: '12px', color: 'var(--color-text-muted)', marginTop: '2px' }}>{type.description}</div>
                   </div>
-                ))}
-
-                <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: '20px' }}>
-                  <button className="btn btn-primary" onClick={handleSave} disabled={saving}>
-                    {saving ? 'Saving…' : 'Save preferences'}
-                  </button>
+                  <select
+                    value={settings[type.key]}
+                    onChange={(e) => setSettings((prev) => ({ ...prev, [type.key]: e.target.value as NotifPref }))}
+                    style={{ minWidth: '160px' }}
+                  >
+                    {PREF_OPTIONS.map((opt) => (
+                      <option key={opt.value} value={opt.value}>{opt.label}</option>
+                    ))}
+                  </select>
                 </div>
+              ))}
+
+              <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: '20px' }}>
+                <button className="btn btn-primary" onClick={handleSave} disabled={saving}>
+                  {saving ? 'Saving...' : 'Save preferences'}
+                </button>
               </div>
-            )}
-          </div>
+            </div>
+          )}
         </div>
       </div>
-    </>
+    </SettingsShell>
   );
 }

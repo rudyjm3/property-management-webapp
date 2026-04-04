@@ -160,3 +160,22 @@ export function requireOrg(req: Request, res: Response, next: NextFunction): voi
 
   next();
 }
+
+/**
+ * Role-gate middleware for manager-facing routes.
+ */
+export function requireRoles(allowedRoles: string[]) {
+  return (req: Request, res: Response, next: NextFunction): void => {
+    if (!req.user) {
+      res.status(401).json({ error: { code: 'UNAUTHORIZED', message: 'Authentication required.' } });
+      return;
+    }
+
+    if (!allowedRoles.includes(req.user.role)) {
+      res.status(403).json({ error: { code: 'FORBIDDEN', message: 'You do not have permission to perform this action.' } });
+      return;
+    }
+
+    next();
+  };
+}

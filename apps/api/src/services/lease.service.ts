@@ -25,6 +25,24 @@ const leaseInclude = {
     orderBy: { dueDate: 'desc' as const },
     take: 12,
   },
+  renewalOf: {
+    select: {
+      id: true,
+      status: true,
+      startDate: true,
+      endDate: true,
+    },
+  },
+  renewals: {
+    orderBy: { startDate: 'desc' as const },
+    take: 1,
+    select: {
+      id: true,
+      status: true,
+      startDate: true,
+      endDate: true,
+    },
+  },
 };
 
 // ─── List ─────────────────────────────────────────────────────────────────────
@@ -248,8 +266,28 @@ export async function renewLease(
     throw new AppError(404, 'LEASE_NOT_FOUND', 'No lease found with that ID in your organization.');
   }
 
-  if (!['active', 'month_to_month', 'notice_given'].includes(existing.status)) {
+  if (!CURRENT_LEASE_STATUSES.includes(existing.status as typeof CURRENT_LEASE_STATUSES[number])) {
     throw new AppError(400, 'LEASE_NOT_RENEWABLE', 'Only active or notice-given leases can be renewed.');
+  }
+
+  const parsedStartDate = new Date(data.startDate);
+  const parsedEndDate = new Date(data.endDate);
+  const previousEndDate = new Date(existing.endDate);
+
+  if (Number.isNaN(parsedStartDate.getTime()) || Number.isNaN(parsedEndDate.getTime())) {
+    throw new AppError(400, 'INVALID_DATES', 'Start date and end date must be valid dates.');
+  }
+
+  if (parsedEndDate <= parsedStartDate) {
+    throw new AppError(400, 'INVALID_DATE_RANGE', 'Renewal end date must be after the renewal start date.');
+  }
+
+  if (parsedStartDate <= previousEndDate) {
+    throw new AppError(
+      400,
+      'LEASE_RENEWAL_OVERLAP',
+      'Renewal start date must be after the current lease end date to avoid overlap.'
+    );
   }
 
   const participants = existing.participants;
@@ -264,14 +302,14 @@ export async function renewLease(
         unit: { connect: { id: existing.unitId } },
         rentAmount: data.rentAmount,
         depositAmount: existing.depositAmount,
-        startDate: new Date(data.startDate),
-        endDate: new Date(data.endDate),
+        startDate: parsedStartDate,
+        endDate: parsedEndDate,
         type: (data.type as LeaseType) ?? existing.type,
         lateFeeAmount: existing.lateFeeAmount,
         lateFeeGraceDays: existing.lateFeeGraceDays,
         rentDueDay: existing.rentDueDay,
         noticePeriodDays: data.noticePeriodDays ?? existing.noticePeriodDays,
-        renewalOfLeaseId: leaseId,
+        renewalOf: { connect: { id: leaseId } },
         status: 'active',
         participants: {
           create: participants.map((p) => ({
@@ -289,7 +327,11 @@ export async function renewLease(
     return created;
   });
 
-  return newLease;
+  return {
+    ...newLease,
+    createdLeaseId: newLease.id,
+    previousLeaseStatus: existing.status,
+  };
 }
 
 // ─── Add Participant ──────────────────────────────────────────────────────────

@@ -27,15 +27,24 @@ async function getAuthToken(): Promise<string | null> {
 
 async function apiFetch<T>(path: string, options?: RequestInit): Promise<T> {
   const token = await getAuthToken();
+  const requestUrl = `${API_URL}${path}`;
 
-  const res = await fetch(`${API_URL}${path}`, {
-    headers: {
-      'Content-Type': 'application/json',
-      ...(token ? { Authorization: `Bearer ${token}` } : {}),
-      ...options?.headers,
-    },
-    ...options,
-  });
+  let res: Response;
+  try {
+    res = await fetch(requestUrl, {
+      headers: {
+        'Content-Type': 'application/json',
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        ...options?.headers,
+      },
+      ...options,
+    });
+  } catch (err: any) {
+    const baseMessage = err?.message || 'Network request failed';
+    throw new Error(
+      `Network error contacting API at ${requestUrl}. Ensure the API server is running and reachable. ${baseMessage}`
+    );
+  }
 
   if (!res.ok) {
     const error = await res.json().catch(() => ({ error: { message: res.statusText } }));

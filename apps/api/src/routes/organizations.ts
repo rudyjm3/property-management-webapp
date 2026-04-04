@@ -1,15 +1,17 @@
 import { Router, Request, Response, NextFunction } from 'express';
 import { prisma } from '@propflow/db';
-import { requireAuth, requireOrg } from '../middleware/auth';
+import { requireAuth, requireOrg, requireRoles } from '../middleware/auth';
 
 const router = Router({ mergeParams: true });
+const requireSettingsAccess = requireRoles(['owner', 'manager']);
 
 /**
  * PATCH /api/v1/organizations/:orgId
  * Update organization settings (name, phone, email, timezone, rent defaults, etc.)
  */
-router.patch('/', requireAuth, requireOrg, async (req: Request, res: Response, next: NextFunction) => {
+router.patch('/', requireAuth, requireOrg, requireSettingsAccess, async (req: Request, res: Response, next: NextFunction) => {
   try {
+    const orgId = req.params.orgId as string;
     const {
       name,
       phone,
@@ -31,7 +33,7 @@ router.patch('/', requireAuth, requireOrg, async (req: Request, res: Response, n
     };
 
     const org = await prisma.organization.update({
-      where: { id: req.params.orgId },
+      where: { id: orgId },
       data: {
         ...(name !== undefined && { name }),
         ...(phone !== undefined && { phone }),
@@ -55,6 +57,11 @@ router.patch('/', requireAuth, requireOrg, async (req: Request, res: Response, n
         lateFeeAmount: true,
         planTier: true,
         subscriptionStatus: true,
+        trialEndsAt: true,
+        stripeCustomerId: true,
+        stripeSubscriptionId: true,
+        stripeAccountId: true,
+        stripeAccountStatus: true,
       },
     });
 
@@ -68,10 +75,11 @@ router.patch('/', requireAuth, requireOrg, async (req: Request, res: Response, n
  * GET /api/v1/organizations/:orgId
  * Get organization details.
  */
-router.get('/', requireAuth, requireOrg, async (req: Request, res: Response, next: NextFunction) => {
+router.get('/', requireAuth, requireOrg, requireSettingsAccess, async (req: Request, res: Response, next: NextFunction) => {
   try {
+    const orgId = req.params.orgId as string;
     const org = await prisma.organization.findUnique({
-      where: { id: req.params.orgId },
+      where: { id: orgId },
       select: {
         id: true,
         name: true,
@@ -85,6 +93,10 @@ router.get('/', requireAuth, requireOrg, async (req: Request, res: Response, nex
         lateFeeAmount: true,
         planTier: true,
         subscriptionStatus: true,
+        trialEndsAt: true,
+        stripeCustomerId: true,
+        stripeSubscriptionId: true,
+        stripeAccountId: true,
         stripeAccountStatus: true,
       },
     });
