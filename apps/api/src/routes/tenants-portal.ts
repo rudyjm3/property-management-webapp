@@ -1,5 +1,6 @@
 import { Router, Request, Response, NextFunction } from 'express';
 import * as tenantPortalService from '../services/tenant-portal.service';
+import type { SubmitWorkOrderInput } from '@propflow/shared';
 
 const router = Router();
 
@@ -50,6 +51,55 @@ router.post('/payments/initiate', async (req: Request, res: Response, next: Next
     }
 
     const result = await tenantPortalService.initiateTenantPayment(tenantId, orgId, paymentId);
+    res.json({ data: result });
+  } catch (err) {
+    next(err);
+  }
+});
+
+// GET /api/v1/tenant/work-orders
+router.get('/work-orders', async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const { tenantId } = req.tenant!;
+    const cursor = req.query.cursor as string | undefined;
+    const limit = req.query.limit ? parseInt(req.query.limit as string, 10) : undefined;
+    const result = await tenantPortalService.getTenantWorkOrders(tenantId, { cursor, limit });
+    res.json({ data: result });
+  } catch (err) {
+    next(err);
+  }
+});
+
+// POST /api/v1/tenant/work-orders
+router.post('/work-orders', async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const { tenantId, orgId } = req.tenant!;
+    const body = req.body as SubmitWorkOrderInput;
+
+    if (!body.category || !body.description) {
+      res.status(400).json({ error: { code: 'MISSING_FIELDS', message: 'category and description are required.' } });
+      return;
+    }
+
+    const workOrder = await tenantPortalService.createTenantWorkOrder(tenantId, orgId, body);
+    res.status(201).json({ data: workOrder });
+  } catch (err) {
+    next(err);
+  }
+});
+
+// POST /api/v1/tenant/upload-url
+router.post('/upload-url', async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const { orgId } = req.tenant!;
+    const { fileName, contentType } = req.body as { fileName: string; contentType: string };
+
+    if (!fileName || !contentType) {
+      res.status(400).json({ error: { code: 'MISSING_FIELDS', message: 'fileName and contentType are required.' } });
+      return;
+    }
+
+    const result = await tenantPortalService.requestTenantUploadUrl(orgId, fileName, contentType);
     res.json({ data: result });
   } catch (err) {
     next(err);

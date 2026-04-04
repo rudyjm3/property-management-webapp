@@ -105,6 +105,7 @@ export default function WorkOrderDetailPage() {
   const [workOrder, setWorkOrder] = useState<WorkOrder | null>(null);
   const [loading, setLoading] = useState(true);
   const [updating, setUpdating] = useState(false);
+  const [priorityReminder, setPriorityReminder] = useState(false);
 
   // Edit form state
   const [showEdit, setShowEdit] = useState(false);
@@ -148,6 +149,23 @@ export default function WorkOrderDetailPage() {
       setWorkOrder(updated);
     } catch (err) {
       console.error('Failed to update status:', err);
+    } finally {
+      setUpdating(false);
+    }
+  }
+
+  const PRIORITY_ORDER: Record<string, number> = { emergency: 2, urgent: 1, routine: 0 };
+
+  async function updatePriority(newPriority: string) {
+    if (!workOrder || newPriority === workOrder.priority) return;
+    const wasLowered = PRIORITY_ORDER[newPriority] < PRIORITY_ORDER[workOrder.priority];
+    setUpdating(true);
+    try {
+      const updated = await api.workOrders.update(workOrder.id, { priority: newPriority });
+      setWorkOrder(updated);
+      if (wasLowered) setPriorityReminder(true);
+    } catch (err) {
+      console.error('Failed to update priority:', err);
     } finally {
       setUpdating(false);
     }
@@ -278,6 +296,15 @@ export default function WorkOrderDetailPage() {
           {/* Status + actions */}
           <div className="card">
             <div className="card-body">
+              {priorityReminder && (
+                <div style={{ background: '#fffbeb', border: '1px solid #f59e0b', borderRadius: '8px', padding: '12px 14px', marginBottom: '16px', display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '12px' }}>
+                  <div>
+                    <div style={{ fontWeight: 600, fontSize: '13px', color: '#92400e', marginBottom: '2px' }}>Priority was lowered</div>
+                    <div style={{ fontSize: '13px', color: '#78350f' }}>Consider messaging or calling the tenant to explain why the priority was adjusted.</div>
+                  </div>
+                  <button onClick={() => setPriorityReminder(false)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#92400e', fontWeight: 700, fontSize: '16px', lineHeight: 1, flexShrink: 0 }}>✕</button>
+                </div>
+              )}
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
                 <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
                   <span className={`badge ${STATUS_COLORS[workOrder.status] ?? 'badge-vacant'}`}>
@@ -287,6 +314,19 @@ export default function WorkOrderDetailPage() {
                     {workOrder.priority}
                   </span>
                   <span className="badge badge-vacant">{CATEGORY_LABELS[workOrder.category] ?? workOrder.category}</span>
+                </div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  <label style={{ fontSize: '12px', color: 'var(--color-text-muted)', fontWeight: 500 }}>Priority:</label>
+                  <select
+                    value={workOrder.priority}
+                    onChange={(e) => updatePriority(e.target.value)}
+                    disabled={updating}
+                    style={{ fontSize: '13px', padding: '4px 8px', borderRadius: '6px', border: '1px solid var(--color-border)', cursor: 'pointer' }}
+                  >
+                    <option value="routine">Routine</option>
+                    <option value="urgent">Urgent</option>
+                    <option value="emergency">Emergency</option>
+                  </select>
                 </div>
               </div>
               {nextStatuses.length > 0 && (
