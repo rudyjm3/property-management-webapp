@@ -29,6 +29,24 @@ const ExpoSecureStoreAdapter = {
   },
 
   setItem: async (key: string, value: string): Promise<void> => {
+    // Before writing, clean up any previously stored chunks for this key
+    // so stale fragment keys don't accumulate when data shrinks.
+    const existing = await SecureStore.getItemAsync(key);
+    if (existing) {
+      try {
+        const meta = JSON.parse(existing);
+        if (typeof meta.chunks === 'number') {
+          await Promise.all(
+            Array.from({ length: meta.chunks }, (_, i) =>
+              SecureStore.deleteItemAsync(`${key}_chunk_${i}`)
+            )
+          );
+        }
+      } catch {
+        // Not chunked metadata — nothing to clean up
+      }
+    }
+
     if (value.length <= CHUNK_SIZE) {
       await SecureStore.setItemAsync(key, value);
       return;

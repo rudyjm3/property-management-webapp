@@ -4,6 +4,17 @@ import * as stripeService from './stripe.service';
 import * as s3Service from './s3.service';
 import type { SubmitWorkOrderInput } from '@propflow/shared';
 
+const SLA_HOURS: Record<string, number> = {
+  emergency: 1,
+  urgent: 24,
+  routine: 7 * 24,
+};
+
+function computeSlaDeadline(priority: string): Date {
+  const hours = SLA_HOURS[priority] ?? SLA_HOURS.routine;
+  return new Date(Date.now() + hours * 60 * 60 * 1000);
+}
+
 // ─── Profile ──────────────────────────────────────────────────────────────────
 
 export async function getTenantProfile(tenantId: string) {
@@ -322,6 +333,7 @@ export async function createTenantWorkOrder(
       description: data.description,
       entryPermissionGranted: data.entryPermissionGranted,
       preferredContactWindow: data.preferredContactWindow ?? null,
+      slaDeadlineAt: computeSlaDeadline(data.priority ?? 'routine'),
       photosBefore: data.photoKeys ?? [],
       photosAfter: [],
     },

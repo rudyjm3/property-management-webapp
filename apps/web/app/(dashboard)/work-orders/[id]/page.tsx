@@ -154,7 +154,9 @@ export default function WorkOrderDetailPage() {
     }
   }
 
-  const PRIORITY_ORDER: Record<string, number> = { emergency: 2, urgent: 1, routine: 0 };
+  // Normalize legacy DB enum value 'normal' → 'routine' for display/comparison
+  const normalizePriority = (p: string) => (p === 'normal' ? 'routine' : p);
+  const PRIORITY_ORDER: Record<string, number> = { emergency: 2, urgent: 1, routine: 0, normal: 0 };
 
   async function updatePriority(newPriority: string) {
     if (!workOrder || newPriority === workOrder.priority) return;
@@ -318,7 +320,7 @@ export default function WorkOrderDetailPage() {
                 <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                   <label style={{ fontSize: '12px', color: 'var(--color-text-muted)', fontWeight: 500 }}>Priority:</label>
                   <select
-                    value={workOrder.priority}
+                    value={normalizePriority(workOrder.priority)}
                     onChange={(e) => updatePriority(e.target.value)}
                     disabled={updating}
                     style={{ fontSize: '13px', padding: '4px 8px', borderRadius: '6px', border: '1px solid var(--color-border)', cursor: 'pointer' }}
