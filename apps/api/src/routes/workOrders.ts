@@ -40,7 +40,10 @@ router.get('/:workOrderId', async (req: Request, res: Response, next: NextFuncti
 // POST /api/v1/organizations/:orgId/work-orders
 router.post('/', validate(createWorkOrderSchema), async (req: Request, res: Response, next: NextFunction) => {
   try {
-    const workOrder = await workOrderService.createWorkOrder(req.params.orgId as string, req.body);
+    const workOrder = await workOrderService.createWorkOrder(req.params.orgId as string, {
+      ...req.body,
+      submittedByUserId: req.user!.userId,
+    });
     res.status(201).json({ data: workOrder });
   } catch (err) {
     next(err);

@@ -490,6 +490,7 @@ export interface TenantWorkOrderListItem {
   scheduledAt: Date | null;
   createdAt: Date;
   updatedAt: Date;
+  submittedByUser: { id: string; name: string } | null;
 }
 
 export interface SubmitWorkOrderInput {

@@ -61,6 +61,11 @@ function WorkOrderRow({ item }: { item: TenantWorkOrderListItem }) {
       ) : null}
       <Text style={styles.cardDescription} numberOfLines={2}>{item.description}</Text>
       <Text style={styles.cardDate}>Submitted {submittedDate}</Text>
+      {item.submittedByUser ? (
+        <Text style={styles.cardCreatedBy}>Staff request — {item.submittedByUser.name}</Text>
+      ) : (
+        <Text style={styles.cardCreatedBy}>Tenant submitted</Text>
+      )}
     </View>
   );
 }
@@ -169,6 +174,7 @@ const styles = StyleSheet.create({
   cardTitle: { fontSize: 15, fontWeight: '700', color: '#111827', marginBottom: 4 },
   cardDescription: { fontSize: 14, color: '#374151', lineHeight: 20, marginBottom: 8 },
   cardDate: { fontSize: 12, color: '#9ca3af' },
+  cardCreatedBy: { fontSize: 11, color: '#9ca3af', marginTop: 2 },
   centered: { flex: 1, alignItems: 'center', justifyContent: 'center', paddingTop: 80 },
   emptyState: { alignItems: 'center', paddingTop: 80, paddingHorizontal: 32, gap: 12 },
   emptyEmoji: { fontSize: 48 },

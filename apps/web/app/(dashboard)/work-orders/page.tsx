@@ -21,6 +21,7 @@ interface WorkOrder {
   };
   tenant: { id: string; name: string } | null;
   assignedTo: { id: string; name: string } | null;
+  submittedByUser: { id: string; name: string } | null;
 }
 
 interface UnitOption {
@@ -268,6 +269,7 @@ export default function WorkOrdersPage() {
                 <th>Category</th>
                 <th>Priority</th>
                 <th>Status</th>
+                <th>Created by</th>
                 <th>SLA Deadline</th>
                 <th>Created</th>
                 <th></th>
@@ -300,6 +302,11 @@ export default function WorkOrdersPage() {
                       ) : (
                         <span style={{ color: 'var(--color-text-muted)' }}>—</span>
                       )}
+                    </td>
+                    <td style={{ fontSize: '13px' }}>
+                      {wo.submittedByUser
+                        ? wo.submittedByUser.name
+                        : <span style={{ color: 'var(--color-text-muted)' }}>Tenant</span>}
                     </td>
                     <td>{CATEGORY_LABELS[wo.category] ?? wo.category}</td>
                     <td>

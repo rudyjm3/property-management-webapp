@@ -390,9 +390,23 @@ export async function getTenantWorkOrders(
 ) {
   const limit = opts.limit ?? 20;
 
-  const workOrders = await prisma.workOrder.findMany({
+  // Resolve the tenant's active lease unit(s) so staff-created work orders
+  // (which may have no tenantId set) still appear for the tenant
+  const leaseParticipants = await prisma.leaseParticipant.findMany({
     where: {
       tenantId,
+      lease: { status: { in: ['active', 'month_to_month'] }, deletedAt: null },
+    },
+    select: { lease: { select: { unit: { select: { id: true } } } } },
+  });
+  const activeUnitIds = leaseParticipants.map((p) => p.lease.unit.id);
+
+  const workOrders = await prisma.workOrder.findMany({
+    where: {
+      OR: [
+        { tenantId },
+        ...(activeUnitIds.length ? [{ unitId: { in: activeUnitIds } }] : []),
+      ],
       ...(opts.cursor ? { createdAt: { lt: new Date(opts.cursor) } } : {}),
     },
     orderBy: { createdAt: 'desc' },
@@ -408,6 +422,7 @@ export async function getTenantWorkOrders(
       scheduledAt: true,
       createdAt: true,
       updatedAt: true,
+      submittedByUser: { select: { id: true, name: true } },
     },
   });
 
