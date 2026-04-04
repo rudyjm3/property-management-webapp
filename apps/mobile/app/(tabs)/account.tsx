@@ -9,6 +9,19 @@ import { Button } from '@/components/ui/Button';
 import type { PreferredContact, UpdateTenantProfileInput } from '@propflow/shared';
 
 const CONTACT_OPTIONS: PreferredContact[] = ['email', 'sms', 'call'];
+const PROFILE_UPDATE_KEYS: Array<keyof UpdateTenantProfileInput> = [
+  'phone',
+  'preferredContact',
+  'languagePreference',
+  'avatarUrl',
+  'emergencyContactName',
+  'emergencyContactPhone',
+  'emergencyContact1Relationship',
+  'emergencyContact1Email',
+  'emergencyContact2Name',
+  'emergencyContact2Phone',
+  'emergencyContact2Relationship',
+];
 
 function isValidPhone(value: string) {
   return /^[+()\-\s\d]{7,20}$/.test(value);
@@ -93,7 +106,12 @@ export default function AccountScreen() {
   }
 
   function handleSave() {
-    const payload: UpdateTenantProfileInput = {
+    if (!profile) {
+      Alert.alert('Profile unavailable', 'Please wait for your profile to load before saving.');
+      return;
+    }
+
+    const normalizedCurrent: UpdateTenantProfileInput = {
       phone: normalize(form.phone ?? ''),
       preferredContact: form.preferredContact ?? null,
       languagePreference: normalize(form.languagePreference ?? ''),
@@ -106,6 +124,32 @@ export default function AccountScreen() {
       emergencyContact2Phone: normalize(form.emergencyContact2Phone ?? ''),
       emergencyContact2Relationship: normalize(form.emergencyContact2Relationship ?? ''),
     };
+
+    const normalizedOriginal: UpdateTenantProfileInput = {
+      phone: normalize(profile.phone ?? ''),
+      preferredContact: profile.preferredContact ?? null,
+      languagePreference: normalize(profile.languagePreference ?? ''),
+      avatarUrl: normalize(profile.avatarUrl ?? ''),
+      emergencyContactName: normalize(profile.emergencyContactName ?? ''),
+      emergencyContactPhone: normalize(profile.emergencyContactPhone ?? ''),
+      emergencyContact1Relationship: normalize(profile.emergencyContact1Relationship ?? ''),
+      emergencyContact1Email: normalize(profile.emergencyContact1Email ?? ''),
+      emergencyContact2Name: normalize(profile.emergencyContact2Name ?? ''),
+      emergencyContact2Phone: normalize(profile.emergencyContact2Phone ?? ''),
+      emergencyContact2Relationship: normalize(profile.emergencyContact2Relationship ?? ''),
+    };
+
+    const payload: UpdateTenantProfileInput = {};
+    for (const key of PROFILE_UPDATE_KEYS) {
+      if (normalizedCurrent[key] !== normalizedOriginal[key]) {
+        (payload as Record<string, unknown>)[key] = normalizedCurrent[key] ?? null;
+      }
+    }
+
+    if (Object.keys(payload).length === 0) {
+      setEditing(false);
+      return;
+    }
 
     if (payload.phone && !isValidPhone(payload.phone)) {
       Alert.alert('Invalid phone', 'Phone must be 7-20 characters and contain valid phone characters.');

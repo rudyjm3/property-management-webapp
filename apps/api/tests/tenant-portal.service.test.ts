@@ -75,7 +75,7 @@ describe('tenant-portal.service', () => {
     (prisma.tenant.findFirst as any).mockResolvedValue({
       id: 'tenant-1',
       organizationId: 'org-1',
-      leaseParticipants: [{ leaseId: 'lease-1' }],
+      leaseParticipants: [{ leaseId: 'lease-1' }, { leaseId: 'lease-2' }],
     });
   });
 
@@ -148,6 +148,10 @@ describe('tenant-portal.service', () => {
         where: expect.objectContaining({
           organizationId: 'org-1',
           visibleToTenant: true,
+          OR: expect.arrayContaining([
+            expect.objectContaining({ entityType: 'tenant', entityId: 'tenant-1' }),
+            expect.objectContaining({ entityType: 'lease', entityId: { in: ['lease-1', 'lease-2'] } }),
+          ]),
         }),
       })
     );
@@ -160,6 +164,18 @@ describe('tenant-portal.service', () => {
 
     const result = await getTenantDocumentDownloadUrl('tenant-1', 'doc-1');
 
+    expect(prisma.document.findFirst).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: expect.objectContaining({
+          organizationId: 'org-1',
+          visibleToTenant: true,
+          OR: expect.arrayContaining([
+            expect.objectContaining({ entityType: 'tenant', entityId: 'tenant-1' }),
+            expect.objectContaining({ entityType: 'lease', entityId: { in: ['lease-1', 'lease-2'] } }),
+          ]),
+        }),
+      })
+    );
     expect(result.downloadUrl).toBe('https://example.com/download');
   });
 

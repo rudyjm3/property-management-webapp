@@ -15,6 +15,35 @@ function computeSlaDeadline(priority: string): Date {
   return new Date(Date.now() + hours * 60 * 60 * 1000);
 }
 
+async function getTenantDocumentScope(tenantId: string) {
+  const tenant = await prisma.tenant.findFirst({
+    where: { id: tenantId, deletedAt: null },
+    select: {
+      id: true,
+      organizationId: true,
+      leaseParticipants: {
+        where: {
+          lease: {
+            status: { in: ['active', 'month_to_month'] },
+            deletedAt: null,
+          },
+        },
+        select: { leaseId: true },
+      },
+    },
+  });
+
+  if (!tenant) {
+    throw new AppError(404, 'TENANT_NOT_FOUND', 'Tenant not found.');
+  }
+
+  return {
+    tenantId: tenant.id,
+    organizationId: tenant.organizationId,
+    activeLeaseIds: tenant.leaseParticipants.map((p) => p.leaseId),
+  };
+}
+
 async function loadTenantProfile(tenantId: string) {
   const tenant = await prisma.tenant.findUnique({
     where: { id: tenantId },
@@ -241,37 +270,17 @@ export async function getTenantPayments(
 }
 
 export async function getTenantDocuments(tenantId: string) {
-  const tenant = await prisma.tenant.findFirst({
-    where: { id: tenantId, deletedAt: null },
-    select: {
-      id: true,
-      organizationId: true,
-      leaseParticipants: {
-        where: {
-          lease: {
-            status: { in: ['active', 'month_to_month'] },
-            deletedAt: null,
-          },
-        },
-        take: 1,
-        select: { leaseId: true },
-      },
-    },
-  });
-
-  if (!tenant) {
-    throw new AppError(404, 'TENANT_NOT_FOUND', 'Tenant not found.');
-  }
-
-  const activeLeaseId = tenant.leaseParticipants[0]?.leaseId;
+  const scope = await getTenantDocumentScope(tenantId);
 
   return prisma.document.findMany({
     where: {
-      organizationId: tenant.organizationId,
+      organizationId: scope.organizationId,
       visibleToTenant: true,
       OR: [
-        { entityType: 'tenant', entityId: tenant.id },
-        ...(activeLeaseId ? [{ entityType: 'lease' as const, entityId: activeLeaseId }] : []),
+        { entityType: 'tenant', entityId: scope.tenantId },
+        ...(scope.activeLeaseIds.length > 0
+          ? [{ entityType: 'lease' as const, entityId: { in: scope.activeLeaseIds } }]
+          : []),
       ],
     },
     select: {
@@ -288,38 +297,18 @@ export async function getTenantDocuments(tenantId: string) {
 }
 
 export async function getTenantDocumentDownloadUrl(tenantId: string, documentId: string) {
-  const tenant = await prisma.tenant.findFirst({
-    where: { id: tenantId, deletedAt: null },
-    select: {
-      id: true,
-      organizationId: true,
-      leaseParticipants: {
-        where: {
-          lease: {
-            status: { in: ['active', 'month_to_month'] },
-            deletedAt: null,
-          },
-        },
-        take: 1,
-        select: { leaseId: true },
-      },
-    },
-  });
-
-  if (!tenant) {
-    throw new AppError(404, 'TENANT_NOT_FOUND', 'Tenant not found.');
-  }
-
-  const activeLeaseId = tenant.leaseParticipants[0]?.leaseId;
+  const scope = await getTenantDocumentScope(tenantId);
 
   const document = await prisma.document.findFirst({
     where: {
       id: documentId,
-      organizationId: tenant.organizationId,
+      organizationId: scope.organizationId,
       visibleToTenant: true,
       OR: [
-        { entityType: 'tenant', entityId: tenant.id },
-        ...(activeLeaseId ? [{ entityType: 'lease' as const, entityId: activeLeaseId }] : []),
+        { entityType: 'tenant', entityId: scope.tenantId },
+        ...(scope.activeLeaseIds.length > 0
+          ? [{ entityType: 'lease' as const, entityId: { in: scope.activeLeaseIds } }]
+          : []),
       ],
     },
     select: { s3Key: true },
