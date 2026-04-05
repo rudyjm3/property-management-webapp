@@ -34,6 +34,14 @@ const PRIORITY_COLORS: Record<string, string> = {
   emergency: 'badge-notice',
   urgent: 'badge-maintenance',
   routine: 'badge-vacant',
+  normal: 'badge-vacant',
+};
+
+const PRIORITY_LABELS: Record<string, string> = {
+  emergency: 'Emergency',
+  urgent: 'Urgent',
+  routine: 'Routine',
+  normal: 'Routine',
 };
 
 const STATUS_COLORS: Record<string, string> = {
@@ -269,7 +277,6 @@ export default function WorkOrdersPage() {
                 <th>Category</th>
                 <th>Priority</th>
                 <th>Status</th>
-                <th>Created by</th>
                 <th>SLA Deadline</th>
                 <th>Created</th>
                 <th></th>
@@ -299,19 +306,16 @@ export default function WorkOrdersPage() {
                     <td>
                       {wo.tenant ? (
                         <Link href={`/tenants/${wo.tenant.id}`}>{wo.tenant.name}</Link>
+                      ) : wo.submittedByUser ? (
+                        <span style={{ color: 'var(--color-text-muted)', fontSize: '13px' }}>Staff created</span>
                       ) : (
                         <span style={{ color: 'var(--color-text-muted)' }}>—</span>
                       )}
                     </td>
-                    <td style={{ fontSize: '13px' }}>
-                      {wo.submittedByUser
-                        ? wo.submittedByUser.name
-                        : <span style={{ color: 'var(--color-text-muted)' }}>Tenant</span>}
-                    </td>
                     <td>{CATEGORY_LABELS[wo.category] ?? wo.category}</td>
                     <td>
                       <span className={`badge ${PRIORITY_COLORS[wo.priority] ?? 'badge-vacant'}`}>
-                        {wo.priority}
+                        {PRIORITY_LABELS[wo.priority] ?? wo.priority}
                       </span>
                     </td>
                     <td>

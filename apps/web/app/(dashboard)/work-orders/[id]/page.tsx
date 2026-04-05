@@ -56,6 +56,14 @@ const PRIORITY_COLORS: Record<string, string> = {
   emergency: 'badge-notice',
   urgent: 'badge-maintenance',
   routine: 'badge-vacant',
+  normal: 'badge-vacant',
+};
+
+const PRIORITY_LABELS: Record<string, string> = {
+  emergency: 'Emergency',
+  urgent: 'Urgent',
+  routine: 'Routine',
+  normal: 'Routine',
 };
 
 const STATUS_COLORS: Record<string, string> = {
@@ -314,7 +322,7 @@ export default function WorkOrderDetailPage() {
                     {STATUS_LABELS[workOrder.status] ?? workOrder.status}
                   </span>
                   <span className={`badge ${PRIORITY_COLORS[workOrder.priority] ?? 'badge-vacant'}`}>
-                    {workOrder.priority}
+                    {PRIORITY_LABELS[workOrder.priority] ?? workOrder.priority}
                   </span>
                   <span className="badge badge-vacant">{CATEGORY_LABELS[workOrder.category] ?? workOrder.category}</span>
                 </div>
