@@ -32,7 +32,7 @@ const workOrderInclude = {
   },
   tenant: { select: { id: true, name: true, email: true, phone: true } },
   assignedTo: { select: { id: true, name: true, email: true } },
-  submittedByUser: { select: { id: true, name: true } },
+  submittedByUser: { select: { id: true, name: true, role: true } },
   vendor: { select: { id: true, companyName: true, contactName: true, phonePrimary: true } },
 };
 

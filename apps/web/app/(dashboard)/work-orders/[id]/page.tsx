@@ -33,7 +33,7 @@ interface WorkOrder {
   };
   tenant: { id: string; name: string; email: string; phone: string | null } | null;
   assignedTo: { id: string; name: string; email: string } | null;
-  submittedByUser: { id: string; name: string } | null;
+  submittedByUser: { id: string; name: string; role: string } | null;
   vendor: { id: string; companyName: string; contactName: string; phonePrimary: string } | null;
 }
 
@@ -498,7 +498,12 @@ export default function WorkOrderDetailPage() {
               <h3 style={{ fontSize: '13px', fontWeight: 600, color: 'var(--color-text-muted)', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: '12px' }}>Timeline</h3>
               <div style={{ fontSize: '13px', display: 'flex', flexDirection: 'column', gap: '6px' }}>
                 <div><span style={{ color: 'var(--color-text-muted)' }}>Created:</span> {new Date(workOrder.createdAt).toLocaleString()}</div>
-                <div><span style={{ color: 'var(--color-text-muted)' }}>Created by:</span> {workOrder.submittedByUser ? workOrder.submittedByUser.name : 'Tenant'}</div>
+                <div>
+                  <span style={{ color: 'var(--color-text-muted)' }}>Created by:</span>{' '}
+                  {workOrder.submittedByUser
+                    ? <><span style={{ textTransform: 'capitalize' }}>({workOrder.submittedByUser.role})</span> {workOrder.submittedByUser.name}</>
+                    : 'Tenant'}
+                </div>
                 <div><span style={{ color: 'var(--color-text-muted)' }}>Updated:</span> {new Date(workOrder.updatedAt).toLocaleString()}</div>
               </div>
             </div>
