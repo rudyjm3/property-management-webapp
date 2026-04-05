@@ -1,10 +1,13 @@
 import { Router, Request, Response, NextFunction } from 'express';
 import * as messageService from '../services/message.service';
+import { requireRoles } from '../middleware/auth';
 
 const router = Router({ mergeParams: true });
 
+const requireManagerAccess = requireRoles(['owner', 'manager']);
+
 // GET /api/v1/organizations/:orgId/messages/threads
-router.get('/threads', async (req: Request, res: Response, next: NextFunction) => {
+router.get('/threads', requireManagerAccess, async (req: Request, res: Response, next: NextFunction) => {
   try {
     const threads = await messageService.listThreads(req.params.orgId);
     res.json({ data: threads });
@@ -14,7 +17,7 @@ router.get('/threads', async (req: Request, res: Response, next: NextFunction) =
 });
 
 // GET /api/v1/organizations/:orgId/messages/threads/:threadId
-router.get('/threads/:threadId', async (req: Request, res: Response, next: NextFunction) => {
+router.get('/threads/:threadId', requireManagerAccess, async (req: Request, res: Response, next: NextFunction) => {
   try {
     const messages = await messageService.getThread(req.params.orgId, req.params.threadId);
     res.json({ data: messages });
@@ -24,7 +27,7 @@ router.get('/threads/:threadId', async (req: Request, res: Response, next: NextF
 });
 
 // POST /api/v1/organizations/:orgId/messages
-router.post('/', async (req: Request, res: Response, next: NextFunction) => {
+router.post('/', requireManagerAccess, async (req: Request, res: Response, next: NextFunction) => {
   try {
     const { senderUserId, recipientTenantId, body, threadId, subject, unitId, workOrderId } = req.body;
 

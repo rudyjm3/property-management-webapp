@@ -7,8 +7,11 @@ import {
 } from '@propflow/shared';
 import { AppError } from '../middleware/error-handler';
 import * as documentService from '../services/document.service';
+import { requireRoles } from '../middleware/auth';
 
 const router = Router({ mergeParams: true });
+
+const requireManagerAccess = requireRoles(['owner', 'manager']);
 
 /** Express Request extended with properties set by auth middleware. */
 interface AuthedRequest extends Request {
@@ -28,6 +31,7 @@ function resolveUserId(req: AuthedRequest): string {
 // Step 1: request a presigned PUT URL for direct browser-to-S3 upload
 router.post(
   '/upload-url',
+  requireManagerAccess,
   validate(requestUploadSchema),
   async (req: AuthedRequest, res: Response, next: NextFunction) => {
     try {
@@ -48,6 +52,7 @@ router.post(
 // Step 2: confirm upload succeeded and persist document metadata
 router.post(
   '/',
+  requireManagerAccess,
   validate(confirmUploadSchema),
   async (req: AuthedRequest, res: Response, next: NextFunction) => {
     try {
@@ -68,6 +73,7 @@ router.post(
 // List documents, optionally filtered by entityType + entityId query params
 router.get(
   '/',
+  requireManagerAccess,
   async (req: AuthedRequest, res: Response, next: NextFunction) => {
     try {
       const parsed = listDocumentsSchema.safeParse(req.query);
@@ -90,6 +96,7 @@ router.get(
 // Get a short-lived presigned download URL
 router.get(
   '/:docId/download-url',
+  requireManagerAccess,
   async (req: AuthedRequest, res: Response, next: NextFunction) => {
     try {
       const result = await documentService.getDownloadUrl(
@@ -106,6 +113,7 @@ router.get(
 // DELETE /api/v1/organizations/:orgId/documents/:docId
 router.delete(
   '/:docId',
+  requireManagerAccess,
   async (req: AuthedRequest, res: Response, next: NextFunction) => {
     try {
       await documentService.deleteDocument(

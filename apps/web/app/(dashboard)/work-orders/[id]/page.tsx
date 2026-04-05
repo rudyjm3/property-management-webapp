@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react';
 import { useParams } from 'next/navigation';
 import Link from 'next/link';
 import { api } from '@/lib/api';
+import { useAuth } from '@/contexts/AuthContext';
 
 interface WorkOrder {
   id: string;
@@ -111,6 +112,8 @@ const NEXT_STATUSES: Record<string, string[]> = {
 
 export default function WorkOrderDetailPage() {
   const { id } = useParams<{ id: string }>();
+  const { profile } = useAuth();
+  const isMaintenance = profile?.role === 'maintenance';
   const [workOrder, setWorkOrder] = useState<WorkOrder | null>(null);
   const [loading, setLoading] = useState(true);
   const [updating, setUpdating] = useState(false);
@@ -281,7 +284,7 @@ export default function WorkOrderDetailPage() {
           </p>
         </div>
         <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
-          {!['completed', 'closed', 'cancelled'].includes(workOrder.status) && (
+          {!isMaintenance && !['completed', 'closed', 'cancelled'].includes(workOrder.status) && (
             <button
               className={isAssigned ? 'btn btn-secondary' : 'btn btn-primary'}
               onClick={openAssign}

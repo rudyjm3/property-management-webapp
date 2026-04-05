@@ -21,6 +21,12 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
     if (pathname.startsWith('/settings') && !['owner', 'manager'].includes(profile.role)) {
       router.replace('/dashboard');
     }
+    if (profile.role === 'maintenance') {
+      const blocked = ['/payments', '/leases', '/messages', '/documents', '/tenants', '/notifications', '/settings'];
+      if (blocked.some((p) => pathname.startsWith(p))) {
+        router.replace('/work-orders');
+      }
+    }
   }, [loading, pathname, profile, router]);
 
   if (loading) {
@@ -35,6 +41,11 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
 
   if (pathname.startsWith('/settings') && profile && !['owner', 'manager'].includes(profile.role)) {
     return null;
+  }
+
+  if (profile?.role === 'maintenance') {
+    const blocked = ['/payments', '/leases', '/messages', '/documents', '/tenants', '/notifications', '/settings'];
+    if (blocked.some((p) => pathname.startsWith(p))) return null;
   }
 
   return (

@@ -3,6 +3,7 @@
 import { useEffect, useState, useCallback } from 'react';
 import Link from 'next/link';
 import { api } from '@/lib/api';
+import { useAuth } from '@/contexts/AuthContext';
 
 interface WorkOrder {
   id: string;
@@ -82,6 +83,8 @@ const FILTER_PRIORITIES = ['', 'emergency', 'urgent', 'routine'];
 const FILTER_CATEGORIES = ['', 'plumbing', 'electrical', 'hvac', 'appliance', 'pest', 'structural', 'cosmetic', 'grounds', 'general', 'other'];
 
 export default function WorkOrdersPage() {
+  const { profile } = useAuth();
+  const isMaintenance = profile?.role === 'maintenance';
   const [workOrders, setWorkOrders] = useState<WorkOrder[]>([]);
   const [loading, setLoading] = useState(true);
   const [filterStatus, setFilterStatus] = useState('');
@@ -339,13 +342,15 @@ export default function WorkOrdersPage() {
                         <Link href={`/work-orders/${wo.id}`} className="btn btn-sm btn-secondary">
                           View
                         </Link>
-                        <button
-                          className="btn btn-sm btn-secondary"
-                          style={{ color: 'var(--color-danger)' }}
-                          onClick={() => handleDelete(wo.id)}
-                        >
-                          Delete
-                        </button>
+                        {!isMaintenance && (
+                          <button
+                            className="btn btn-sm btn-secondary"
+                            style={{ color: 'var(--color-danger)' }}
+                            onClick={() => handleDelete(wo.id)}
+                          >
+                            Delete
+                          </button>
+                        )}
                       </div>
                     </td>
                   </tr>

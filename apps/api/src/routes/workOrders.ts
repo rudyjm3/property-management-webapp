@@ -2,8 +2,11 @@ import { Router, Request, Response, NextFunction } from 'express';
 import { createWorkOrderSchema, updateWorkOrderSchema } from '@propflow/shared';
 import { validate } from '../middleware/validate';
 import * as workOrderService from '../services/workOrder.service';
+import { requireRoles } from '../middleware/auth';
 
 const router = Router({ mergeParams: true });
+
+const requireManagerAccess = requireRoles(['owner', 'manager']);
 
 // GET /api/v1/organizations/:orgId/work-orders
 router.get('/', async (req: Request, res: Response, next: NextFunction) => {
@@ -65,7 +68,7 @@ router.patch('/:workOrderId', validate(updateWorkOrderSchema), async (req: Reque
 });
 
 // DELETE /api/v1/organizations/:orgId/work-orders/:workOrderId
-router.delete('/:workOrderId', async (req: Request, res: Response, next: NextFunction) => {
+router.delete('/:workOrderId', requireManagerAccess, async (req: Request, res: Response, next: NextFunction) => {
   try {
     await workOrderService.deleteWorkOrder(
       req.params.orgId as string,

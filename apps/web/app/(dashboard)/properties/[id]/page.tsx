@@ -5,6 +5,7 @@ import { useParams } from 'next/navigation';
 import Link from 'next/link';
 import { api } from '@/lib/api';
 import DocumentPanel from '@/components/DocumentPanel';
+import { useAuth } from '@/contexts/AuthContext';
 
 const UNIT_TYPE_LABELS: Record<string, string> = {
   studio: 'Studio',
@@ -58,6 +59,8 @@ interface PropertyDetail {
 export default function PropertyDetailPage() {
   const params = useParams();
   const propertyId = params.id as string;
+  const { profile } = useAuth();
+  const isMaintenance = profile?.role === 'maintenance';
   const [property, setProperty] = useState<PropertyDetail | null>(null);
   const [loading, setLoading] = useState(true);
   const [showAddUnit, setShowAddUnit] = useState(false);
@@ -144,14 +147,16 @@ export default function PropertyDetailPage() {
             {property.address}, {property.city}, {property.state} {property.zip}
           </p>
         </div>
-        <div style={{ display: 'flex', gap: '8px' }}>
-          <button className="btn btn-secondary" onClick={() => setShowEditProperty(true)}>
-            Edit Property
-          </button>
-          <button className="btn btn-primary" onClick={() => setShowAddUnit(true)}>
-            + Add Unit
-          </button>
-        </div>
+        {!isMaintenance && (
+          <div style={{ display: 'flex', gap: '8px' }}>
+            <button className="btn btn-secondary" onClick={() => setShowEditProperty(true)}>
+              Edit Property
+            </button>
+            <button className="btn btn-primary" onClick={() => setShowAddUnit(true)}>
+              + Add Unit
+            </button>
+          </div>
+        )}
       </div>
 
       <div className="stats-grid">
@@ -212,9 +217,11 @@ export default function PropertyDetailPage() {
                   {!tenant && unit.status === 'vacant' && (
                     <div className="unit-tenant">No tenant</div>
                   )}
-                  <div className="unit-rent">
-                    ${Number(unit.rentAmount).toLocaleString()}/mo
-                  </div>
+                  {!isMaintenance && (
+                    <div className="unit-rent">
+                      ${Number(unit.rentAmount).toLocaleString()}/mo
+                    </div>
+                  )}
                   <div className="property-meta" style={{ marginTop: '8px' }}>
                     <span>{unit.bedrooms}bd / {unit.bathrooms}ba</span>
                     {unit.sqFt && <span>{unit.sqFt} sqft</span>}
@@ -226,7 +233,7 @@ export default function PropertyDetailPage() {
         </div>
       )}
 
-      <DocumentPanel entityType="property" entityId={propertyId} />
+      {!isMaintenance && <DocumentPanel entityType="property" entityId={propertyId} />}
 
       {showAddUnit && (
         <div className="modal-overlay" onClick={() => setShowAddUnit(false)}>

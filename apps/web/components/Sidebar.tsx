@@ -6,7 +6,7 @@ import { useEffect, useState } from 'react';
 import { api } from '@/lib/api';
 import { useAuth } from '@/contexts/AuthContext';
 
-const navItems = [
+const allNavItems = [
   { href: '/dashboard', label: 'Dashboard', icon: 'grid' },
   { href: '/properties', label: 'Properties', icon: 'building' },
   { href: '/tenants', label: 'Tenants', icon: 'users' },
@@ -17,6 +17,11 @@ const navItems = [
   { href: '/documents', label: 'Documents', icon: 'folder' },
   { href: '/notifications', label: 'Notifications', icon: 'bell' },
   { href: '/settings/organization', label: 'Settings', icon: 'settings' },
+];
+
+const maintenanceNavItems = [
+  { href: '/dashboard', label: 'Dashboard', icon: 'grid' },
+  { href: '/work-orders', label: 'Work Orders', icon: 'wrench' },
 ];
 
 const icons: Record<string, React.ReactNode> = {
@@ -87,6 +92,7 @@ const icons: Record<string, React.ReactNode> = {
 export default function Sidebar() {
   const pathname = usePathname();
   const { profile, signOut } = useAuth();
+  const navItems = profile?.role === 'maintenance' ? maintenanceNavItems : allNavItems;
   const [unreadCount, setUnreadCount] = useState(0);
 
   function refreshBadge(userId: string) {
