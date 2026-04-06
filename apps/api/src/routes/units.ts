@@ -2,8 +2,11 @@ import { Router, Request, Response, NextFunction } from 'express';
 import { createUnitSchema } from '@propflow/shared';
 import { validate } from '../middleware/validate';
 import * as unitService from '../services/unit.service';
+import { requireRoles } from '../middleware/auth';
 
 const router = Router({ mergeParams: true });
+
+const requireManagerAccess = requireRoles(['owner', 'manager']);
 
 // GET /api/v1/organizations/:orgId/properties/:propertyId/units
 router.get('/', async (req: Request, res: Response, next: NextFunction) => {
@@ -30,7 +33,7 @@ router.get('/:unitId', async (req: Request, res: Response, next: NextFunction) =
 });
 
 // POST /api/v1/organizations/:orgId/properties/:propertyId/units
-router.post('/', validate(createUnitSchema), async (req: Request, res: Response, next: NextFunction) => {
+router.post('/', requireManagerAccess, validate(createUnitSchema), async (req: Request, res: Response, next: NextFunction) => {
   try {
     const unit = await unitService.createUnit(
       req.params.orgId as string,
@@ -44,7 +47,7 @@ router.post('/', validate(createUnitSchema), async (req: Request, res: Response,
 });
 
 // PATCH /api/v1/organizations/:orgId/properties/:propertyId/units/:unitId
-router.patch('/:unitId', async (req: Request, res: Response, next: NextFunction) => {
+router.patch('/:unitId', requireManagerAccess, async (req: Request, res: Response, next: NextFunction) => {
   try {
     const unit = await unitService.updateUnit(
       req.params.orgId as string,
@@ -59,7 +62,7 @@ router.patch('/:unitId', async (req: Request, res: Response, next: NextFunction)
 });
 
 // DELETE /api/v1/organizations/:orgId/properties/:propertyId/units/:unitId
-router.delete('/:unitId', async (req: Request, res: Response, next: NextFunction) => {
+router.delete('/:unitId', requireManagerAccess, async (req: Request, res: Response, next: NextFunction) => {
   try {
     await unitService.deleteUnit(
       req.params.orgId as string,

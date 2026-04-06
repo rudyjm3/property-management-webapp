@@ -104,7 +104,17 @@ export async function applyLateFees(organizationId?: string): Promise<LateFeeJob
 }
 
 export function startLateFeeJob() {
-  applyLateFees();
-  setInterval(applyLateFees, INTERVAL_MS);
+  const runSafely = async () => {
+    try {
+      await applyLateFees();
+    } catch (err) {
+      console.error('[LateFee] Late fee job run failed:', err);
+    }
+  };
+
+  void runSafely();
+  setInterval(() => {
+    void runSafely();
+  }, INTERVAL_MS);
   console.log('[LateFee] Late fee job started (interval: 24h)');
 }

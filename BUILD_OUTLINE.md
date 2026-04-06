@@ -839,3 +839,46 @@ Response: { data: [...], nextCursor: "<id>" | null }
 | Redis | 6379 |
 
 > **XAMPP conflict note:** If XAMPP Apache is running on port 80/443, there is no conflict with this stack. If XAMPP MySQL is running on 3306, there is also no conflict since Postgres uses 5432.
+
+---
+
+## 11. Implementation Delta Appendix
+
+This appendix captures what is currently implemented in the repo beyond or different from the original roadmap text.
+
+### Stack / Versions
+- Manager web is currently on Next.js `15.1.7` (update 03-21-2026)
+- Tenant mobile is currently on Expo SDK `54` (update 03-31-2026)
+- Prisma runtime/tooling is currently on Prisma `6.x` (update 03-21-2026)
+
+### API Surface Deltas
+- Tenant portal API surface exists under `/api/v1/tenant/*` with routes for profile, dashboard, payments, work orders, messaging, documents, and push token registration. (Added 03-28-2026)
+- Stripe Connect API routes are implemented at `/api/v1/organizations/:orgId/connect/*` for status, account link, and sync flows. (Added 03-26-2026)
+- Ledger API route is implemented at `/api/v1/organizations/:orgId/ledger` with manager/owner role gating. (Added 03-28-2026)
+- Staff admin route behavior has been hardened with explicit role-gating (`owner/manager`), input validation, and self-lockout/last-privileged checks. (update 04-04-2026)
+- Maintenance-role restrictions were enforced across API and web settings/admin surfaces after initial Phase 3 week 33-34 delivery. (update 04-05-2026)
+
+### Manager Web Deltas
+- Settings now uses a shared settings shell/navigation component for consistent Organization/Team/Notifications/Billing/Stripe Connect UX. (Added 04-04-2026)
+- `/settings/billing` is currently implemented as read-only billing/subscription/connect metadata, not payment-method edits or invoice actions. (update 04-04-2026)
+- Lease renewal UX now includes stronger validation, renewal linkage visibility (`renewed from/to`), and query-driven renewal entry from lease-expiry notifications. (update 04-04-2026)
+- Lease list/detail currently includes renewal-chain context fields in UI/API payloads beyond the original baseline lease screen wording. (update 04-04-2026)
+
+### Tenant Mobile Deltas
+- Tenant onboarding currently ships as welcome + login flow and does not currently expose an invite-code entry screen. (update 03-31-2026)
+- Payments tab currently supports balance + pay-now + payment history/detail modal; autopay toggle is not currently shipped in tab UI. (update 04-04-2026)
+- Account tab currently ships profile/emergency-contact editing + preferred contact + sign out; in-tab notification preference controls and dedicated contact-manager shortcut are not currently shipped. (update 04-04-2026)
+- Messaging uses tab thread list plus dedicated `conversation` route/screen implementation. (Added 04-04-2026)
+- Expo push token registration is implemented and persisted to tenant profile via tenant portal API. (Added 04-04-2026)
+
+### Data Model / Enum Deltas
+- Organization includes implemented Stripe Connect fields: `stripe_account_id`, `stripe_account_status`, and `stripe_account_details_submitted`. (Added 03-26-2026)
+- Tenant includes implemented auth/mobile fields: `supabase_user_id` and `expo_push_token`. (Added 04-04-2026)
+- Lease renewal linkage is implemented with self-referential relation via `renewal_of_lease_id` and exposed in service include shapes. (Added 03-29-2026)
+- Unit and work order enum sets include legacy compatibility values in Prisma schema (for backward compatibility with seed/migrations), which extends beyond the stricter normalized values described in the original outline tables. (update 03-23-2026)
+- Work order status implementation uses normalized lifecycle values (`new_order`, `assigned`, `in_progress`, `pending_parts`, `completed`, `closed`, `cancelled`) rather than the simplified status labels shown in early outline text. (update 03-29-2026)
+
+### Phase Progress Snapshot
+- Phase 1 and Phase 2 planned foundations/workflows are materially implemented in the current branch lineage, including properties/units/tenants/leases/payments/work-orders/messages/documents/notifications. (update 03-29-2026)
+- Phase 3 weeks 25-34 features are implemented across the mobile app and supporting API, including scaffold, maintenance submission, messaging/push, lease docs/payment history/profile, and settings/admin/renewal hardening. (update 04-04-2026)
+- Additional post-week-34 hardening landed for role enforcement and work-order attribution display. (update 04-05-2026)

@@ -5,11 +5,14 @@ import * as paymentService from '../services/payment.service';
 import * as stripeService from '../services/stripe.service';
 import { prisma } from '@propflow/db';
 import { AppError } from '../middleware/error-handler';
+import { requireRoles } from '../middleware/auth';
 
 const router = Router({ mergeParams: true });
 
+const requireManagerAccess = requireRoles(['owner', 'manager']);
+
 // GET /api/v1/organizations/:orgId/payments/stats
-router.get('/stats', async (req: Request, res: Response, next: NextFunction) => {
+router.get('/stats', requireManagerAccess, async (req: Request, res: Response, next: NextFunction) => {
   try {
     const stats = await paymentService.getPaymentStats(req.params.orgId as string);
     res.json({ data: stats });
@@ -19,7 +22,7 @@ router.get('/stats', async (req: Request, res: Response, next: NextFunction) => 
 });
 
 // GET /api/v1/organizations/:orgId/payments
-router.get('/', async (req: Request, res: Response, next: NextFunction) => {
+router.get('/', requireManagerAccess, async (req: Request, res: Response, next: NextFunction) => {
   try {
     const filters = listPaymentsFiltersSchema.parse(req.query);
     const result = await paymentService.listPayments(req.params.orgId as string, filters);
@@ -30,7 +33,7 @@ router.get('/', async (req: Request, res: Response, next: NextFunction) => {
 });
 
 // GET /api/v1/organizations/:orgId/payments/:paymentId
-router.get('/:paymentId', async (req: Request, res: Response, next: NextFunction) => {
+router.get('/:paymentId', requireManagerAccess, async (req: Request, res: Response, next: NextFunction) => {
   try {
     const payment = await paymentService.getPayment(
       req.params.orgId as string,
@@ -43,7 +46,7 @@ router.get('/:paymentId', async (req: Request, res: Response, next: NextFunction
 });
 
 // POST /api/v1/organizations/:orgId/payments
-router.post('/', validate(createPaymentSchema), async (req: Request, res: Response, next: NextFunction) => {
+router.post('/', requireManagerAccess, validate(createPaymentSchema), async (req: Request, res: Response, next: NextFunction) => {
   try {
     const payment = await paymentService.createPayment(req.params.orgId as string, req.body);
     res.status(201).json({ data: payment });
@@ -53,7 +56,7 @@ router.post('/', validate(createPaymentSchema), async (req: Request, res: Respon
 });
 
 // PATCH /api/v1/organizations/:orgId/payments/:paymentId
-router.patch('/:paymentId', validate(updatePaymentSchema), async (req: Request, res: Response, next: NextFunction) => {
+router.patch('/:paymentId', requireManagerAccess, validate(updatePaymentSchema), async (req: Request, res: Response, next: NextFunction) => {
   try {
     const payment = await paymentService.updatePayment(
       req.params.orgId as string,
@@ -67,7 +70,7 @@ router.patch('/:paymentId', validate(updatePaymentSchema), async (req: Request, 
 });
 
 // DELETE /api/v1/organizations/:orgId/payments/:paymentId
-router.delete('/:paymentId', async (req: Request, res: Response, next: NextFunction) => {
+router.delete('/:paymentId', requireManagerAccess, async (req: Request, res: Response, next: NextFunction) => {
   try {
     await paymentService.deletePayment(
       req.params.orgId as string,
@@ -80,7 +83,7 @@ router.delete('/:paymentId', async (req: Request, res: Response, next: NextFunct
 });
 
 // POST /api/v1/organizations/:orgId/payments/:paymentId/initiate-ach
-router.post('/:paymentId/initiate-ach', async (req: Request, res: Response, next: NextFunction) => {
+router.post('/:paymentId/initiate-ach', requireManagerAccess, async (req: Request, res: Response, next: NextFunction) => {
   try {
     const orgId = req.params.orgId as string;
     const paymentId = req.params.paymentId as string;
@@ -130,7 +133,7 @@ router.post('/:paymentId/initiate-ach', async (req: Request, res: Response, next
 });
 
 // POST /api/v1/organizations/:orgId/payments/:paymentId/cancel-ach
-router.post('/:paymentId/cancel-ach', async (req: Request, res: Response, next: NextFunction) => {
+router.post('/:paymentId/cancel-ach', requireManagerAccess, async (req: Request, res: Response, next: NextFunction) => {
   try {
     const orgId = req.params.orgId as string;
     const paymentId = req.params.paymentId as string;

@@ -1,20 +1,53 @@
 import { Router, Request, Response, NextFunction } from 'express';
-import { prisma, UserStatus } from '@propflow/db';
-import { requireAuth, requireOrg } from '../middleware/auth';
+import { prisma, UserRole, UserStatus } from '@propflow/db';
+import { z } from 'zod';
+import { requireAuth, requireOrg, requireRoles } from '../middleware/auth';
 import { supabaseAdmin } from '../lib/supabase';
 
 const router = Router({ mergeParams: true });
+const requireSettingsAccess = requireRoles(['owner', 'manager']);
+
+const inviteSchema = z.object({
+  email: z.string().email(),
+  name: z.string().min(1).max(200),
+  role: z.nativeEnum(UserRole).default(UserRole.manager),
+});
+
+const updateSchema = z.object({
+  role: z.nativeEnum(UserRole).optional(),
+  status: z.nativeEnum(UserStatus).optional(),
+  notifRentOverdue: z.enum(['email', 'in_app', 'both', 'none']).optional(),
+  notifWorkOrder: z.enum(['email', 'in_app', 'both', 'none']).optional(),
+  notifLeaseExpiry: z.enum(['email', 'in_app', 'both', 'none']).optional(),
+  notifNewMessage: z.enum(['email', 'in_app', 'both', 'none']).optional(),
+});
+
+async function ensurePrivilegedAccessRemains(
+  organizationId: string,
+  targetUserId: string
+): Promise<boolean> {
+  const remaining = await prisma.user.count({
+    where: {
+      organizationId,
+      id: { not: targetUserId },
+      status: UserStatus.active,
+      role: { in: [UserRole.owner, UserRole.manager] },
+    },
+  });
+  return remaining > 0;
+}
 
 /**
  * GET /api/v1/organizations/:orgId/staff
  * List all staff members.
  */
-router.get('/', async (req: Request, res: Response, next: NextFunction) => {
+router.get('/', requireAuth, requireOrg, requireSettingsAccess, async (req: Request, res: Response, next: NextFunction) => {
   try {
+    const orgId = req.params.orgId as string;
     const { includeInactive } = req.query as { includeInactive?: string };
     const staff = await prisma.user.findMany({
       where: {
-        organizationId: req.params.orgId,
+        organizationId: orgId,
         ...(includeInactive !== 'true' && { status: UserStatus.active }),
       },
       select: {
@@ -44,18 +77,20 @@ router.get('/', async (req: Request, res: Response, next: NextFunction) => {
  * POST /api/v1/organizations/:orgId/staff/invite
  * Invite a new team member via email. Creates a pending User record and sends a Supabase invite.
  */
-router.post('/invite', requireAuth, requireOrg, async (req: Request, res: Response, next: NextFunction) => {
+router.post('/invite', requireAuth, requireOrg, requireSettingsAccess, async (req: Request, res: Response, next: NextFunction) => {
   try {
-    const { email, name, role = 'manager' } = req.body as { email: string; name: string; role?: string };
-
-    if (!email || !name) {
-      res.status(400).json({ error: { code: 'MISSING_FIELDS', message: 'email and name are required.' } });
+    const orgId = req.params.orgId as string;
+    const parsed = inviteSchema.safeParse(req.body);
+    if (!parsed.success) {
+      res.status(400).json({ error: { code: 'INVALID_INPUT', message: parsed.error.issues[0]?.message ?? 'Invalid invite payload.' } });
       return;
     }
 
+    const { email, name, role } = parsed.data;
+
     // Check if user already exists in this org
     const existing = await prisma.user.findFirst({
-      where: { organizationId: req.params.orgId, email },
+      where: { organizationId: orgId, email },
     });
     if (existing) {
       res.status(409).json({ error: { code: 'ALREADY_EXISTS', message: 'A user with this email already exists in your organization.' } });
@@ -65,10 +100,10 @@ router.post('/invite', requireAuth, requireOrg, async (req: Request, res: Respon
     // Create the user record as invited
     const invitedUser = await prisma.user.create({
       data: {
-        organizationId: req.params.orgId,
+        organizationId: orgId,
         email,
         name,
-        role: role as any,
+        role,
         status: UserStatus.invited,
         invitedAt: new Date(),
       },
@@ -78,7 +113,7 @@ router.post('/invite', requireAuth, requireOrg, async (req: Request, res: Respon
     // Send Supabase invite email so they can set a password
     const { data: { user: supabaseUser }, error } = await supabaseAdmin.auth.admin.inviteUserByEmail(email, {
       redirectTo: `${process.env.APP_URL}/onboarding?invited=true`,
-      data: { organizationId: req.params.orgId, role, name },
+      data: { organizationId: orgId, role, name },
     });
 
     if (error) {
@@ -112,35 +147,79 @@ router.post('/invite', requireAuth, requireOrg, async (req: Request, res: Respon
  * PATCH /api/v1/organizations/:orgId/staff/:userId
  * Update a staff member (role, status, notification prefs).
  */
-router.patch('/:userId', requireAuth, requireOrg, async (req: Request, res: Response, next: NextFunction) => {
+router.patch('/:userId', requireAuth, requireOrg, requireSettingsAccess, async (req: Request, res: Response, next: NextFunction) => {
   try {
-    const {
-      role,
-      status,
-      notifRentOverdue,
-      notifWorkOrder,
-      notifLeaseExpiry,
-      notifNewMessage,
-    } = req.body as {
-      role?: string;
-      status?: string;
-      notifRentOverdue?: string;
-      notifWorkOrder?: string;
-      notifLeaseExpiry?: string;
-      notifNewMessage?: string;
-    };
+    const orgId = req.params.orgId as string;
+    const userId = req.params.userId as string;
+    const parsed = updateSchema.safeParse(req.body);
+    if (!parsed.success) {
+      res.status(400).json({ error: { code: 'INVALID_INPUT', message: parsed.error.issues[0]?.message ?? 'Invalid update payload.' } });
+      return;
+    }
+
+    const target = await prisma.user.findFirst({
+      where: { id: userId, organizationId: orgId },
+      select: { id: true, role: true, status: true },
+    });
+
+    if (!target) {
+      res.status(404).json({ error: { code: 'STAFF_NOT_FOUND', message: 'Staff member not found in this organization.' } });
+      return;
+    }
+
+    const nextRole = parsed.data.role ?? target.role;
+    const nextStatus = parsed.data.status ?? target.status;
+    const nextIsPrivilegedAndActive =
+      nextStatus === UserStatus.active && (nextRole === UserRole.owner || nextRole === UserRole.manager);
+
+    // Prevent current caller from locking themselves out of settings access.
+    if (req.user?.userId === target.id && !nextIsPrivilegedAndActive) {
+      res.status(400).json({
+        error: {
+          code: 'SELF_LOCKOUT_BLOCKED',
+          message: 'You cannot remove your own owner/manager active access.',
+        },
+      });
+      return;
+    }
+
+    const currentlyPrivilegedAndActive =
+      target.status === UserStatus.active && (target.role === UserRole.owner || target.role === UserRole.manager);
+
+    if (currentlyPrivilegedAndActive && !nextIsPrivilegedAndActive) {
+      const hasOtherPrivileged = await ensurePrivilegedAccessRemains(orgId, target.id);
+      if (!hasOtherPrivileged) {
+        res.status(400).json({
+          error: {
+            code: 'LAST_PRIVILEGED_USER',
+            message: 'Cannot remove access from the last active owner/manager in this organization.',
+          },
+        });
+        return;
+      }
+    }
 
     const user = await prisma.user.update({
-      where: { id: req.params.userId, organizationId: req.params.orgId },
+      where: { id: target.id },
       data: {
-        ...(role !== undefined && { role: role as any }),
-        ...(status !== undefined && { status: status as any }),
-        ...(notifRentOverdue !== undefined && { notifRentOverdue }),
-        ...(notifWorkOrder !== undefined && { notifWorkOrder }),
-        ...(notifLeaseExpiry !== undefined && { notifLeaseExpiry }),
-        ...(notifNewMessage !== undefined && { notifNewMessage }),
+        ...(parsed.data.role !== undefined && { role: parsed.data.role }),
+        ...(parsed.data.status !== undefined && { status: parsed.data.status }),
+        ...(parsed.data.notifRentOverdue !== undefined && { notifRentOverdue: parsed.data.notifRentOverdue }),
+        ...(parsed.data.notifWorkOrder !== undefined && { notifWorkOrder: parsed.data.notifWorkOrder }),
+        ...(parsed.data.notifLeaseExpiry !== undefined && { notifLeaseExpiry: parsed.data.notifLeaseExpiry }),
+        ...(parsed.data.notifNewMessage !== undefined && { notifNewMessage: parsed.data.notifNewMessage }),
       },
-      select: { id: true, name: true, email: true, role: true, status: true, notifRentOverdue: true, notifWorkOrder: true, notifLeaseExpiry: true, notifNewMessage: true },
+      select: {
+        id: true,
+        name: true,
+        email: true,
+        role: true,
+        status: true,
+        notifRentOverdue: true,
+        notifWorkOrder: true,
+        notifLeaseExpiry: true,
+        notifNewMessage: true,
+      },
     });
     res.json({ data: user });
   } catch (err) {

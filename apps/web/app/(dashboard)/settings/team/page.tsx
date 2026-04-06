@@ -1,8 +1,8 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import Link from 'next/link';
 import { api } from '@/lib/api';
+import SettingsShell from '@/components/settings/SettingsShell';
 
 interface StaffMember {
   id: string;
@@ -33,7 +33,6 @@ export default function TeamSettingsPage() {
   const [showInvite, setShowInvite] = useState(false);
   const [includeInactive, setIncludeInactive] = useState(false);
 
-  // Invite form
   const [inviteName, setInviteName] = useState('');
   const [inviteEmail, setInviteEmail] = useState('');
   const [inviteRole, setInviteRole] = useState('manager');
@@ -82,31 +81,19 @@ export default function TeamSettingsPage() {
     try {
       const updated = await api.staff.update(member.id, { status: newStatus });
       setStaff((prev) => prev.map((m) => m.id === member.id ? { ...m, ...updated } : m));
-    } catch (err) {
-      console.error('Failed to update staff status:', err);
+    } catch (err: any) {
+      alert(err?.message || 'Failed to update staff status.');
     }
   }
 
-  const settingsNav = [
-    { href: '/settings/organization', label: 'Organization' },
-    { href: '/settings/team', label: 'Team' },
-    { href: '/settings/notifications', label: 'Notifications' },
-    { href: '/settings', label: 'Stripe Connect' },
-  ];
-
   return (
     <>
-      <div className="page-header">
-        <h1 className="page-title">Settings</h1>
-      </div>
-
-      {/* Invite modal */}
       {showInvite && (
         <div className="modal-overlay" onClick={() => setShowInvite(false)}>
           <div className="modal" onClick={(e) => e.stopPropagation()}>
             <div className="modal-header">
               <h2 className="modal-title">Invite Team Member</h2>
-              <button className="modal-close" onClick={() => setShowInvite(false)}>×</button>
+              <button className="modal-close" onClick={() => setShowInvite(false)}>x</button>
             </div>
             <form onSubmit={handleInvite}>
               <div className="modal-body">
@@ -130,13 +117,14 @@ export default function TeamSettingsPage() {
                   <select value={inviteRole} onChange={(e) => setInviteRole(e.target.value)}>
                     <option value="manager">Manager</option>
                     <option value="maintenance">Maintenance</option>
+                    <option value="owner">Owner</option>
                   </select>
                 </div>
               </div>
               <div className="modal-footer">
                 <button type="button" className="btn btn-secondary" onClick={() => setShowInvite(false)} disabled={inviting}>Cancel</button>
                 <button type="submit" className="btn btn-primary" disabled={inviting}>
-                  {inviting ? 'Sending invite…' : 'Send invite'}
+                  {inviting ? 'Sending invite...' : 'Send invite'}
                 </button>
               </div>
             </form>
@@ -144,27 +132,7 @@ export default function TeamSettingsPage() {
         </div>
       )}
 
-      <div style={{ display: 'grid', gridTemplateColumns: '200px 1fr', gap: '24px', alignItems: 'start' }}>
-        <div className="card">
-          <nav>
-            {settingsNav.map((item) => (
-              <Link
-                key={item.href}
-                href={item.href}
-                style={{
-                  display: 'block', padding: '10px 16px', fontSize: '14px',
-                  fontWeight: item.href === '/settings/team' ? 600 : 400,
-                  color: item.href === '/settings/team' ? 'var(--color-primary)' : 'inherit',
-                  borderLeft: item.href === '/settings/team' ? '3px solid var(--color-primary)' : '3px solid transparent',
-                  textDecoration: 'none',
-                }}
-              >
-                {item.label}
-              </Link>
-            ))}
-          </nav>
-        </div>
-
+      <SettingsShell activeHref="/settings/team">
         <div>
           <div className="card" style={{ marginBottom: '16px' }}>
             <div className="card-body" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '16px' }}>
@@ -186,7 +154,7 @@ export default function TeamSettingsPage() {
 
           <div className="card">
             {loading ? (
-              <div className="loading" style={{ padding: '32px' }}>Loading team…</div>
+              <div className="loading" style={{ padding: '32px' }}>Loading team...</div>
             ) : staff.length === 0 ? (
               <div className="empty-state" style={{ padding: '32px' }}>
                 <p>No team members yet. Invite someone to get started.</p>
@@ -220,7 +188,7 @@ export default function TeamSettingsPage() {
                         <td>
                           {member.lastLoginAt
                             ? new Date(member.lastLoginAt).toLocaleDateString()
-                            : member.invitedAt ? `Invited ${new Date(member.invitedAt).toLocaleDateString()}` : '—'}
+                            : member.invitedAt ? `Invited ${new Date(member.invitedAt).toLocaleDateString()}` : '--'}
                         </td>
                         <td>
                           {member.role !== 'owner' && (
@@ -240,7 +208,7 @@ export default function TeamSettingsPage() {
             )}
           </div>
         </div>
-      </div>
+      </SettingsShell>
     </>
   );
 }

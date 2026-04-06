@@ -32,6 +32,7 @@ const workOrderInclude = {
   },
   tenant: { select: { id: true, name: true, email: true, phone: true } },
   assignedTo: { select: { id: true, name: true, email: true } },
+  submittedByUser: { select: { id: true, name: true, role: true } },
   vendor: { select: { id: true, companyName: true, contactName: true, phonePrimary: true } },
 };
 
@@ -97,6 +98,7 @@ interface CreateWorkOrderData {
   entryPermissionGranted?: boolean;
   preferredContactWindow?: string | null;
   tenantId?: string | null;
+  submittedByUserId?: string | null;
 }
 
 export async function createWorkOrder(organizationId: string, data: CreateWorkOrderData) {
@@ -126,6 +128,7 @@ export async function createWorkOrder(organizationId: string, data: CreateWorkOr
       preferredContactWindow: data.preferredContactWindow ?? null,
       slaDeadlineAt: computeSlaDeadline(requestedPriority),
       tenantId: data.tenantId ?? null,
+      submittedByUserId: data.submittedByUserId ?? null,
       // Some local DB states have NOT NULL without default on these columns.
       photosBefore: [],
       photosAfter: [],

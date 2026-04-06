@@ -1,8 +1,8 @@
 'use client';
 
 import { useEffect, useState, useCallback } from 'react';
-import Link from 'next/link';
 import { api } from '@/lib/api';
+import SettingsShell from '@/components/settings/SettingsShell';
 
 type ConnectAccountStatus = 'not_connected' | 'pending' | 'active' | 'restricted';
 
@@ -52,40 +52,8 @@ export default function SettingsPage() {
     }
   }
 
-  const settingsNav = [
-    { href: '/settings/organization', label: 'Organization' },
-    { href: '/settings/team', label: 'Team' },
-    { href: '/settings/notifications', label: 'Notifications' },
-    { href: '/settings', label: 'Stripe Connect' },
-  ];
-
   return (
-    <div>
-      <div className="page-header">
-        <h1 className="page-title">Settings</h1>
-      </div>
-
-      <div style={{ display: 'grid', gridTemplateColumns: '200px 1fr', gap: '24px', alignItems: 'start' }}>
-        <div className="card">
-          <nav>
-            {settingsNav.map((item) => (
-              <Link
-                key={item.href}
-                href={item.href}
-                style={{
-                  display: 'block', padding: '10px 16px', fontSize: '14px',
-                  fontWeight: item.href === '/settings' ? 600 : 400,
-                  color: item.href === '/settings' ? 'var(--color-primary)' : 'inherit',
-                  borderLeft: item.href === '/settings' ? '3px solid var(--color-primary)' : '3px solid transparent',
-                  textDecoration: 'none',
-                }}
-              >
-                {item.label}
-              </Link>
-            ))}
-          </nav>
-        </div>
-
+    <SettingsShell activeHref="/settings">
       <div className="card" style={{ maxWidth: 600 }}>
         <div className="card-body">
           <h2 style={{ fontSize: 18, fontWeight: 600, marginBottom: 4 }}>Payouts &amp; Bank Account</h2>
@@ -127,7 +95,6 @@ export default function SettingsPage() {
           )}
         </div>
       </div>
-      </div>
-    </div>
+    </SettingsShell>
   );
 }

@@ -6,6 +6,7 @@ import Link from 'next/link';
 import { api } from '@/lib/api';
 import { formatPhone } from '@/lib/phone';
 import DocumentPanel from '@/components/DocumentPanel';
+import { useAuth } from '@/contexts/AuthContext';
 
 const UNIT_TYPE_LABELS: Record<string, string> = {
   studio: 'Studio',
@@ -69,6 +70,8 @@ export default function UnitDetailPage() {
   const router = useRouter();
   const propertyId = params.id as string;
   const unitId = params.unitId as string;
+  const { profile } = useAuth();
+  const isMaintenance = profile?.role === 'maintenance';
   const [unit, setUnit] = useState<UnitDetail | null>(null);
   const [loading, setLoading] = useState(true);
   const [showEditUnit, setShowEditUnit] = useState(false);
@@ -224,13 +227,15 @@ export default function UnitDetailPage() {
           )}
         </div>
         <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
-          <button className="btn btn-secondary" onClick={() => setShowEditUnit(true)}>
-            Edit Unit
-          </button>
+          {!isMaintenance && (
+            <button className="btn btn-secondary" onClick={() => setShowEditUnit(true)}>
+              Edit Unit
+            </button>
+          )}
           <button className="btn btn-secondary" onClick={() => setShowWOModal(true)}>
             + Add Work Order
           </button>
-          {primaryTenant && (
+          {!isMaintenance && primaryTenant && (
             <Link
               href={`/messages?tenantId=${primaryTenant.id}`}
               className="btn btn-secondary"
@@ -238,7 +243,7 @@ export default function UnitDetailPage() {
               Message Tenant
             </Link>
           )}
-          {activeLease && (
+          {!isMaintenance && activeLease && (
             <Link href={`/leases/${activeLease.id}`} className="btn btn-secondary">
               View Lease
             </Link>
@@ -288,18 +293,22 @@ export default function UnitDetailPage() {
                 <label>Floor</label>
                 <span>{unit.floor || '--'}</span>
               </div>
-              <div className="detail-item">
-                <label>Market Rent</label>
-                <span>{unit.marketRent ? `$${Number(unit.marketRent).toLocaleString()}` : '--'}</span>
-              </div>
-              <div className="detail-item">
-                <label>Monthly Rent</label>
-                <span>${Number(unit.rentAmount).toLocaleString()}</span>
-              </div>
-              <div className="detail-item">
-                <label>Security Deposit</label>
-                <span>${Number(unit.depositAmount).toLocaleString()}</span>
-              </div>
+              {!isMaintenance && (
+                <>
+                  <div className="detail-item">
+                    <label>Market Rent</label>
+                    <span>{unit.marketRent ? `$${Number(unit.marketRent).toLocaleString()}` : '--'}</span>
+                  </div>
+                  <div className="detail-item">
+                    <label>Monthly Rent</label>
+                    <span>${Number(unit.rentAmount).toLocaleString()}</span>
+                  </div>
+                  <div className="detail-item">
+                    <label>Security Deposit</label>
+                    <span>${Number(unit.depositAmount).toLocaleString()}</span>
+                  </div>
+                </>
+              )}
               {unit.availableDate && (
                 <div className="detail-item">
                   <label>Available Date</label>
@@ -336,22 +345,26 @@ export default function UnitDetailPage() {
                   <label>Phone</label>
                   <span>{formatPhone(primaryTenant.phone)}</span>
                 </div>
-                <div className="detail-item">
-                  <label>Lease Status</label>
-                  <span className={`badge badge-occupied`}>{activeLease?.status}</span>
-                </div>
-                <div className="detail-item">
-                  <label>Lease Start</label>
-                  <span>{activeLease ? new Date(activeLease.startDate).toLocaleDateString() : '--'}</span>
-                </div>
-                <div className="detail-item">
-                  <label>Lease End</label>
-                  <span>{activeLease ? new Date(activeLease.endDate).toLocaleDateString() : '--'}</span>
-                </div>
-                <div className="detail-item">
-                  <label>Monthly Rent</label>
-                  <span>${activeLease ? Number(activeLease.rentAmount).toLocaleString() : '--'}</span>
-                </div>
+                {!isMaintenance && (
+                  <>
+                    <div className="detail-item">
+                      <label>Lease Status</label>
+                      <span className={`badge badge-occupied`}>{activeLease?.status}</span>
+                    </div>
+                    <div className="detail-item">
+                      <label>Lease Start</label>
+                      <span>{activeLease ? new Date(activeLease.startDate).toLocaleDateString() : '--'}</span>
+                    </div>
+                    <div className="detail-item">
+                      <label>Lease End</label>
+                      <span>{activeLease ? new Date(activeLease.endDate).toLocaleDateString() : '--'}</span>
+                    </div>
+                    <div className="detail-item">
+                      <label>Monthly Rent</label>
+                      <span>${activeLease ? Number(activeLease.rentAmount).toLocaleString() : '--'}</span>
+                    </div>
+                  </>
+                )}
               </div>
             ) : (
               <div className="empty-state" style={{ padding: '24px' }}>
@@ -529,52 +542,54 @@ export default function UnitDetailPage() {
       </div>
 
       {/* Lease History */}
-      <div className="card" style={{ marginTop: '24px' }}>
-        <div className="card-body">
-          <h3 style={{ marginBottom: '16px', fontSize: '16px', fontWeight: 600 }}>
-            Lease History ({unit.leases.length})
-          </h3>
-          {unit.leases.length === 0 ? (
-            <div className="empty-state" style={{ padding: '24px' }}>
-              <p>No lease history for this unit</p>
-            </div>
-          ) : (
-            <div className="table-container">
-              <table>
-                <thead>
-                  <tr>
-                    <th>Tenant</th>
-                    <th>Start</th>
-                    <th>End</th>
-                    <th>Rent</th>
-                    <th>Status</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {unit.leases.map((lease) => {
-                    const tenant = lease.participants.find((p) => p.isPrimary)?.tenant;
-                    return (
-                      <tr key={lease.id}>
-                        <td>{tenant?.name || '--'}</td>
-                        <td>{new Date(lease.startDate).toLocaleDateString()}</td>
-                        <td>{new Date(lease.endDate).toLocaleDateString()}</td>
-                        <td>${Number(lease.rentAmount).toLocaleString()}</td>
-                        <td>
-                          <span className={`badge badge-${lease.status === 'active' ? 'occupied' : lease.status === 'expired' ? 'notice' : 'vacant'}`}>
-                            {lease.status.replace('_', ' ')}
-                          </span>
-                        </td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-            </div>
-          )}
+      {!isMaintenance && (
+        <div className="card" style={{ marginTop: '24px' }}>
+          <div className="card-body">
+            <h3 style={{ marginBottom: '16px', fontSize: '16px', fontWeight: 600 }}>
+              Lease History ({unit.leases.length})
+            </h3>
+            {unit.leases.length === 0 ? (
+              <div className="empty-state" style={{ padding: '24px' }}>
+                <p>No lease history for this unit</p>
+              </div>
+            ) : (
+              <div className="table-container">
+                <table>
+                  <thead>
+                    <tr>
+                      <th>Tenant</th>
+                      <th>Start</th>
+                      <th>End</th>
+                      <th>Rent</th>
+                      <th>Status</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {unit.leases.map((lease) => {
+                      const tenant = lease.participants.find((p) => p.isPrimary)?.tenant;
+                      return (
+                        <tr key={lease.id}>
+                          <td>{tenant?.name || '--'}</td>
+                          <td>{new Date(lease.startDate).toLocaleDateString()}</td>
+                          <td>{new Date(lease.endDate).toLocaleDateString()}</td>
+                          <td>${Number(lease.rentAmount).toLocaleString()}</td>
+                          <td>
+                            <span className={`badge badge-${lease.status === 'active' ? 'occupied' : lease.status === 'expired' ? 'notice' : 'vacant'}`}>
+                              {lease.status.replace('_', ' ')}
+                            </span>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
         </div>
-      </div>
+      )}
 
-      <DocumentPanel entityType="unit" entityId={unitId} />
+      {!isMaintenance && <DocumentPanel entityType="unit" entityId={unitId} />}
     </>
   );
 }

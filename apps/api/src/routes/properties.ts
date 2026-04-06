@@ -3,8 +3,11 @@ import { createPropertySchema } from '@propflow/shared';
 import { validate } from '../middleware/validate';
 import * as propertyService from '../services/property.service';
 import unitRoutes from './units';
+import { requireRoles } from '../middleware/auth';
 
 const router = Router({ mergeParams: true });
+
+const requireManagerAccess = requireRoles(['owner', 'manager']);
 
 // Nest unit routes under properties
 router.use('/:propertyId/units', unitRoutes);
@@ -30,7 +33,7 @@ router.get('/:propertyId', async (req: Request, res: Response, next: NextFunctio
 });
 
 // POST /api/v1/organizations/:orgId/properties
-router.post('/', validate(createPropertySchema), async (req: Request, res: Response, next: NextFunction) => {
+router.post('/', requireManagerAccess, validate(createPropertySchema), async (req: Request, res: Response, next: NextFunction) => {
   try {
     const property = await propertyService.createProperty(req.params.orgId as string, req.body);
     res.status(201).json({ data: property });
@@ -40,7 +43,7 @@ router.post('/', validate(createPropertySchema), async (req: Request, res: Respo
 });
 
 // PATCH /api/v1/organizations/:orgId/properties/:propertyId
-router.patch('/:propertyId', async (req: Request, res: Response, next: NextFunction) => {
+router.patch('/:propertyId', requireManagerAccess, async (req: Request, res: Response, next: NextFunction) => {
   try {
     const property = await propertyService.updateProperty(
       req.params.orgId as string,
@@ -54,7 +57,7 @@ router.patch('/:propertyId', async (req: Request, res: Response, next: NextFunct
 });
 
 // DELETE /api/v1/organizations/:orgId/properties/:propertyId
-router.delete('/:propertyId', async (req: Request, res: Response, next: NextFunction) => {
+router.delete('/:propertyId', requireManagerAccess, async (req: Request, res: Response, next: NextFunction) => {
   try {
     await propertyService.deleteProperty(req.params.orgId as string, req.params.propertyId as string);
     res.status(204).send();

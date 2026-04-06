@@ -73,4 +73,27 @@ router.post('/jobs/late-fees', async (req: Request, res: Response, next: NextFun
   }
 });
 
+
+// POST /api/v1/organizations/:orgId/notifications/jobs/rent-reminders
+// No cron secret required - intended to be triggered from the dashboard UI.
+router.post(`/jobs/rent-reminders`, async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const result = await notifService.runRentReminderJob(req.params.orgId as string);
+    res.json({ data: result });
+  } catch (err) {
+    next(err);
+  }
+});
+
+// POST /api/v1/organizations/:orgId/notifications/jobs/lease-expiry
+// No cron secret required - intended to be triggered from the dashboard UI.
+router.post(`/jobs/lease-expiry`, async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const result = await notifService.runLeaseExpiryJob(req.params.orgId as string);
+    res.json({ data: result });
+  } catch (err) {
+    next(err);
+  }
+});
+
 export default router;

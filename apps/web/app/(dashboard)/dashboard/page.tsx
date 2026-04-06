@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { api } from '@/lib/api';
+import { useAuth } from '@/contexts/AuthContext';
 
 interface PortfolioStats {
   totalProperties: number;
@@ -46,6 +47,13 @@ interface LeaseSummary {
   expiring60: number;
 }
 
+interface ExpiringLease {
+  id: string;
+  endDate: string;
+  unit: { unitNumber: string; property: { id: string; name: string } };
+  participants: Array<{ isPrimary: boolean; tenant: { id: string; name: string } }>;
+}
+
 interface MessageThread {
   id: string;
   subject: string | null;
@@ -54,11 +62,14 @@ interface MessageThread {
 }
 
 export default function DashboardPage() {
+  const { profile } = useAuth();
+  const isMaintenance = profile?.role === 'maintenance';
   const [portfolio, setPortfolio] = useState<PortfolioStats | null>(null);
   const [paymentStats, setPaymentStats] = useState<PaymentStats | null>(null);
   const [workOrderSummary, setWorkOrderSummary] = useState<WorkOrderSummary>({ open: 0, slaBreaches: 0, emergency: 0, urgent: 0 });
   const [leaseSummary, setLeaseSummary] = useState<LeaseSummary>({ expiring30: 0, expiring60: 0 });
   const [recentThreads, setRecentThreads] = useState<MessageThread[]>([]);
+  const [expiringLeases, setExpiringLeases] = useState<ExpiringLease[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -66,10 +77,10 @@ export default function DashboardPage() {
       try {
         const [properties, stats, workOrders, leases, threads] = await Promise.all([
           api.properties.list(),
-          api.payments.stats(),
+          isMaintenance ? Promise.resolve(null) : api.payments.stats(),
           api.workOrders.list(),
-          api.leases.list(),
-          api.messages.threads.list().catch(() => []),
+          isMaintenance ? Promise.resolve([]) : api.leases.list(),
+          isMaintenance ? Promise.resolve([]) : api.messages.threads.list().catch(() => []),
         ]);
 
         // Portfolio stats
@@ -103,6 +114,12 @@ export default function DashboardPage() {
         const expiring30 = activeLeases.filter((l: any) => new Date(l.endDate) <= in30).length;
         const expiring60 = activeLeases.filter((l: any) => new Date(l.endDate) <= in60).length;
         setLeaseSummary({ expiring30, expiring60 });
+
+        // Expiring leases detail — within 60 days, sorted soonest first
+        const expiring = activeLeases
+          .filter((l: any) => new Date(l.endDate) <= in60)
+          .sort((a: any, b: any) => new Date(a.endDate).getTime() - new Date(b.endDate).getTime());
+        setExpiringLeases(expiring);
 
         // Recent message threads (last 3)
         setRecentThreads((threads || []).slice(0, 3));
@@ -175,62 +192,66 @@ export default function DashboardPage() {
       </div>
 
       {/* Payment KPIs */}
-      <div style={{ marginBottom: '8px' }}>
-        <h2 style={{ fontSize: '14px', fontWeight: 600, color: 'var(--color-text-muted)', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: '12px' }}>
-          Rent Collection — This Month
-        </h2>
-      </div>
-      <div className="stats-grid" style={{ marginBottom: '32px' }}>
-        <Link href="/payments?status=completed" style={{ textDecoration: 'none' }}>
-          <div className="stat-card" style={{ cursor: 'pointer' }}>
-            <div className="stat-label">Collected</div>
-            <div className="stat-value" style={{ color: 'var(--color-success)' }}>
-              ${(paymentStats?.collectedThisMonth ?? 0).toLocaleString()}
+      {!isMaintenance && (
+        <>
+          <div style={{ marginBottom: '8px' }}>
+            <h2 style={{ fontSize: '14px', fontWeight: 600, color: 'var(--color-text-muted)', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: '12px' }}>
+              Rent Collection — This Month
+            </h2>
+          </div>
+          <div className="stats-grid" style={{ marginBottom: '32px' }}>
+            <Link href="/payments?status=completed" style={{ textDecoration: 'none' }}>
+              <div className="stat-card" style={{ cursor: 'pointer' }}>
+                <div className="stat-label">Collected</div>
+                <div className="stat-value" style={{ color: 'var(--color-success)' }}>
+                  ${(paymentStats?.collectedThisMonth ?? 0).toLocaleString()}
+                </div>
+              </div>
+            </Link>
+            <div className="stat-card">
+              <div className="stat-label">Expected</div>
+              <div className="stat-value">
+                ${(paymentStats?.expectedThisMonth ?? 0).toLocaleString()}
+              </div>
             </div>
-          </div>
-        </Link>
-        <div className="stat-card">
-          <div className="stat-label">Expected</div>
-          <div className="stat-value">
-            ${(paymentStats?.expectedThisMonth ?? 0).toLocaleString()}
-          </div>
-        </div>
-        <Link href="/payments?status=pending" style={{ textDecoration: 'none' }}>
-          <div className="stat-card" style={{ cursor: 'pointer' }}>
-            <div className="stat-label">Pending</div>
-            <div className="stat-value" style={{ color: 'var(--color-warning)' }}>
-              ${(paymentStats?.pendingThisMonth ?? 0).toLocaleString()}
+            <Link href="/payments?status=pending" style={{ textDecoration: 'none' }}>
+              <div className="stat-card" style={{ cursor: 'pointer' }}>
+                <div className="stat-label">Pending</div>
+                <div className="stat-value" style={{ color: 'var(--color-warning)' }}>
+                  ${(paymentStats?.pendingThisMonth ?? 0).toLocaleString()}
+                </div>
+              </div>
+            </Link>
+            <div className="stat-card">
+              <div className="stat-label">Collection Rate</div>
+              <div
+                className="stat-value"
+                style={{
+                  color:
+                    (paymentStats?.collectionRate ?? 0) >= 90
+                      ? 'var(--color-success)'
+                      : (paymentStats?.collectionRate ?? 0) >= 70
+                      ? 'var(--color-warning)'
+                      : 'var(--color-danger)',
+                }}
+              >
+                {paymentStats?.collectionRate ?? 0}%
+              </div>
             </div>
+            <Link href="/payments" style={{ textDecoration: 'none' }}>
+              <div className="stat-card" style={{ cursor: 'pointer', borderColor: (paymentStats?.overdueCount ?? 0) > 0 ? 'var(--color-danger)' : undefined }}>
+                <div className="stat-label">Overdue</div>
+                <div
+                  className="stat-value"
+                  style={{ color: (paymentStats?.overdueCount ?? 0) > 0 ? 'var(--color-danger)' : 'var(--color-success)' }}
+                >
+                  {paymentStats?.overdueCount ?? 0}
+                </div>
+              </div>
+            </Link>
           </div>
-        </Link>
-        <div className="stat-card">
-          <div className="stat-label">Collection Rate</div>
-          <div
-            className="stat-value"
-            style={{
-              color:
-                (paymentStats?.collectionRate ?? 0) >= 90
-                  ? 'var(--color-success)'
-                  : (paymentStats?.collectionRate ?? 0) >= 70
-                  ? 'var(--color-warning)'
-                  : 'var(--color-danger)',
-            }}
-          >
-            {paymentStats?.collectionRate ?? 0}%
-          </div>
-        </div>
-        <Link href="/payments" style={{ textDecoration: 'none' }}>
-          <div className="stat-card" style={{ cursor: 'pointer', borderColor: (paymentStats?.overdueCount ?? 0) > 0 ? 'var(--color-danger)' : undefined }}>
-            <div className="stat-label">Overdue</div>
-            <div
-              className="stat-value"
-              style={{ color: (paymentStats?.overdueCount ?? 0) > 0 ? 'var(--color-danger)' : 'var(--color-success)' }}
-            >
-              {paymentStats?.overdueCount ?? 0}
-            </div>
-          </div>
-        </Link>
-      </div>
+        </>
+      )}
 
       {/* Operations KPIs */}
       <div style={{ marginBottom: '8px' }}>
@@ -271,31 +292,36 @@ export default function DashboardPage() {
             </div>
           </div>
         </Link>
-        <Link href="/leases" style={{ textDecoration: 'none' }}>
-          <div className="stat-card" style={{ cursor: 'pointer', borderColor: leaseSummary.expiring30 > 0 ? 'var(--color-danger)' : undefined }}>
-            <div className="stat-label">Leases Expiring (30d)</div>
-            <div className="stat-value" style={{ color: leaseSummary.expiring30 > 0 ? 'var(--color-danger)' : 'var(--color-success)' }}>
-              {leaseSummary.expiring30}
-            </div>
-          </div>
-        </Link>
-        <Link href="/leases" style={{ textDecoration: 'none' }}>
-          <div className="stat-card" style={{ cursor: 'pointer', borderColor: leaseSummary.expiring60 > 0 ? 'var(--color-warning)' : undefined }}>
-            <div className="stat-label">Leases Expiring (60d)</div>
-            <div className="stat-value" style={{ color: leaseSummary.expiring60 > 0 ? 'var(--color-warning)' : 'var(--color-success)' }}>
-              {leaseSummary.expiring60}
-            </div>
-          </div>
-        </Link>
-        <Link href="/messages" style={{ textDecoration: 'none' }}>
-          <div className="stat-card" style={{ cursor: 'pointer' }}>
-            <div className="stat-label">Message Threads</div>
-            <div className="stat-value">{recentThreads.length > 0 ? recentThreads.length + '+' : 0}</div>
-          </div>
-        </Link>
+        {!isMaintenance && (
+          <>
+            <Link href="/leases" style={{ textDecoration: 'none' }}>
+              <div className="stat-card" style={{ cursor: 'pointer', borderColor: leaseSummary.expiring30 > 0 ? 'var(--color-danger)' : undefined }}>
+                <div className="stat-label">Leases Expiring (30d)</div>
+                <div className="stat-value" style={{ color: leaseSummary.expiring30 > 0 ? 'var(--color-danger)' : 'var(--color-success)' }}>
+                  {leaseSummary.expiring30}
+                </div>
+              </div>
+            </Link>
+            <Link href="/leases" style={{ textDecoration: 'none' }}>
+              <div className="stat-card" style={{ cursor: 'pointer', borderColor: leaseSummary.expiring60 > 0 ? 'var(--color-warning)' : undefined }}>
+                <div className="stat-label">Leases Expiring (60d)</div>
+                <div className="stat-value" style={{ color: leaseSummary.expiring60 > 0 ? 'var(--color-warning)' : 'var(--color-success)' }}>
+                  {leaseSummary.expiring60}
+                </div>
+              </div>
+            </Link>
+            <Link href="/messages" style={{ textDecoration: 'none' }}>
+              <div className="stat-card" style={{ cursor: 'pointer' }}>
+                <div className="stat-label">Message Threads</div>
+                <div className="stat-value">{recentThreads.length > 0 ? recentThreads.length + '+' : 0}</div>
+              </div>
+            </Link>
+          </>
+        )}
       </div>
 
       {/* Bottom row */}
+      {!isMaintenance && (
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '24px', marginBottom: '24px' }}>
         {/* Overdue Payments */}
         <div className="card">
@@ -378,48 +404,101 @@ export default function DashboardPage() {
           </div>
         </div>
       </div>
+      )}
+
+      {/* Expiring Leases */}
+      {!isMaintenance && (
+        <div className="card" style={{ marginBottom: '24px' }}>
+          <div className="card-body" style={{ padding: '0' }}>
+            <div style={{ padding: '16px 20px', borderBottom: '1px solid var(--color-border)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <h3 style={{ fontSize: '15px', fontWeight: 600 }}>
+                Leases Expiring Within 60 Days
+                {expiringLeases.length > 0 && (
+                  <span style={{ marginLeft: '8px', background: '#fef3c7', color: '#92400e', borderRadius: '12px', padding: '2px 8px', fontSize: '12px' }}>
+                    {expiringLeases.length}
+                  </span>
+                )}
+              </h3>
+              <Link href="/leases" style={{ fontSize: '13px' }}>View all leases</Link>
+            </div>
+            {expiringLeases.length === 0 ? (
+              <div style={{ padding: '24px', textAlign: 'center', color: 'var(--color-text-muted)', fontSize: '14px' }}>
+                No leases expiring within 60 days
+              </div>
+            ) : (
+              <div>
+                {expiringLeases.map((lease) => {
+                  const primary = lease.participants.find((p) => p.isPrimary) ?? lease.participants[0];
+                  const daysLeft = Math.ceil((new Date(lease.endDate).getTime() - Date.now()) / (1000 * 60 * 60 * 24));
+                  const isUrgent = daysLeft <= 30;
+                  return (
+                    <div key={lease.id} style={{ padding: '12px 20px', borderBottom: '1px solid var(--color-border)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                      <div>
+                        <Link href={`/tenants/${primary?.tenant.id}`} style={{ fontWeight: 500, fontSize: '14px' }}>
+                          {primary?.tenant.name ?? '—'}
+                        </Link>
+                        <div style={{ fontSize: '12px', color: 'var(--color-text-muted)' }}>
+                          Unit {lease.unit.unitNumber} · {lease.unit.property.name}
+                        </div>
+                        <div style={{ fontSize: '12px', color: isUrgent ? 'var(--color-danger)' : '#ca8a04', fontWeight: 500 }}>
+                          Expires {new Date(lease.endDate).toLocaleDateString()} · {daysLeft} day{daysLeft !== 1 ? 's' : ''} left
+                        </div>
+                      </div>
+                      <Link href={`/leases/${lease.id}?openRenew=1`} className="btn btn-sm btn-primary" style={{ textDecoration: 'none', flexShrink: 0 }}>
+                        Renew
+                      </Link>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+        </div>
+      )}
 
       {/* Recent Messages */}
-      <div className="card">
-        <div className="card-body" style={{ padding: '0' }}>
-          <div style={{ padding: '16px 20px', borderBottom: '1px solid var(--color-border)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-            <h3 style={{ fontSize: '15px', fontWeight: 600 }}>Recent Messages</h3>
-            <Link href="/messages" style={{ fontSize: '13px' }}>View all</Link>
-          </div>
-          {recentThreads.length === 0 ? (
-            <div style={{ padding: '24px', textAlign: 'center', color: 'var(--color-text-muted)', fontSize: '14px' }}>
-              No messages yet
+      {!isMaintenance && (
+        <div className="card">
+          <div className="card-body" style={{ padding: '0' }}>
+            <div style={{ padding: '16px 20px', borderBottom: '1px solid var(--color-border)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <h3 style={{ fontSize: '15px', fontWeight: 600 }}>Recent Messages</h3>
+              <Link href="/messages" style={{ fontSize: '13px' }}>View all</Link>
             </div>
-          ) : (
-            <div>
-              {recentThreads.map((thread, index) => (
-                <Link
-                  key={`${thread.id}-${index}`}
-                  href="/messages"
-                  style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '12px 20px', borderBottom: '1px solid var(--color-border)', textDecoration: 'none', color: 'inherit' }}
-                >
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                    {thread.unreadCount > 0 && (
-                      <span style={{ width: '8px', height: '8px', borderRadius: '50%', background: 'var(--color-primary)', display: 'inline-block', flexShrink: 0 }} />
-                    )}
-                    <span style={{ fontWeight: thread.unreadCount > 0 ? 600 : 400, fontSize: '14px' }}>
-                      {thread.subject || 'No subject'}
-                    </span>
-                    {thread.unreadCount > 0 && (
-                      <span style={{ background: 'var(--color-primary)', color: 'white', borderRadius: '12px', padding: '1px 7px', fontSize: '11px', fontWeight: 600 }}>
-                        {thread.unreadCount}
+            {recentThreads.length === 0 ? (
+              <div style={{ padding: '24px', textAlign: 'center', color: 'var(--color-text-muted)', fontSize: '14px' }}>
+                No messages yet
+              </div>
+            ) : (
+              <div>
+                {recentThreads.map((thread, index) => (
+                  <Link
+                    key={`${thread.id}-${index}`}
+                    href="/messages"
+                    style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '12px 20px', borderBottom: '1px solid var(--color-border)', textDecoration: 'none', color: 'inherit' }}
+                  >
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                      {thread.unreadCount > 0 && (
+                        <span style={{ width: '8px', height: '8px', borderRadius: '50%', background: 'var(--color-primary)', display: 'inline-block', flexShrink: 0 }} />
+                      )}
+                      <span style={{ fontWeight: thread.unreadCount > 0 ? 600 : 400, fontSize: '14px' }}>
+                        {thread.subject || 'No subject'}
                       </span>
-                    )}
-                  </div>
-                  <span style={{ fontSize: '12px', color: 'var(--color-text-muted)' }}>
-                    {new Date(thread.updatedAt).toLocaleDateString()}
-                  </span>
-                </Link>
-              ))}
-            </div>
-          )}
+                      {thread.unreadCount > 0 && (
+                        <span style={{ background: 'var(--color-primary)', color: 'white', borderRadius: '12px', padding: '1px 7px', fontSize: '11px', fontWeight: 600 }}>
+                          {thread.unreadCount}
+                        </span>
+                      )}
+                    </div>
+                    <span style={{ fontSize: '12px', color: 'var(--color-text-muted)' }}>
+                      {new Date(thread.updatedAt).toLocaleDateString()}
+                    </span>
+                  </Link>
+                ))}
+              </div>
+            )}
+          </div>
         </div>
-      </div>
+      )}
     </>
   );
 }

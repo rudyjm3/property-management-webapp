@@ -1,9 +1,9 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import Link from 'next/link';
 import { api } from '@/lib/api';
 import { useAuth } from '@/contexts/AuthContext';
+import SettingsShell from '@/components/settings/SettingsShell';
 
 const TIMEZONES = [
   'America/New_York',
@@ -16,7 +16,7 @@ const TIMEZONES = [
 ];
 
 export default function OrganizationSettingsPage() {
-  const { profile, refreshProfile } = useAuth();
+  const { refreshProfile } = useAuth();
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
@@ -76,125 +76,88 @@ export default function OrganizationSettingsPage() {
     }
   }
 
-  const settingsNav = [
-    { href: '/settings/organization', label: 'Organization' },
-    { href: '/settings/team', label: 'Team' },
-    { href: '/settings/notifications', label: 'Notifications' },
-    { href: '/settings', label: 'Stripe Connect' },
-  ];
-
-  if (loading) return <div className="loading">Loading settings…</div>;
+  if (loading) return <div className="loading">Loading settings...</div>;
 
   return (
-    <>
-      <div className="page-header">
-        <h1 className="page-title">Settings</h1>
-      </div>
+    <SettingsShell activeHref="/settings/organization">
+      <div className="card">
+        <div className="card-body">
+          <h2 style={{ fontSize: '16px', fontWeight: 600, marginBottom: '20px' }}>Organization Settings</h2>
 
-      <div style={{ display: 'grid', gridTemplateColumns: '200px 1fr', gap: '24px', alignItems: 'start' }}>
-        {/* Settings sub-nav */}
-        <div className="card">
-          <nav>
-            {settingsNav.map((item) => (
-              <Link
-                key={item.href}
-                href={item.href}
-                style={{
-                  display: 'block',
-                  padding: '10px 16px',
-                  fontSize: '14px',
-                  fontWeight: item.href === '/settings/organization' ? 600 : 400,
-                  color: item.href === '/settings/organization' ? 'var(--color-primary)' : 'inherit',
-                  borderLeft: item.href === '/settings/organization' ? '3px solid var(--color-primary)' : '3px solid transparent',
-                  textDecoration: 'none',
-                }}
-              >
-                {item.label}
-              </Link>
-            ))}
-          </nav>
-        </div>
+          {error && (
+            <div style={{ background: '#fef2f2', border: '1px solid #fecaca', borderRadius: '6px', padding: '12px', marginBottom: '16px', color: '#dc2626', fontSize: '14px' }}>
+              {error}
+            </div>
+          )}
+          {saved && (
+            <div style={{ background: '#f0fdf4', border: '1px solid #86efac', borderRadius: '6px', padding: '12px', marginBottom: '16px', color: '#16a34a', fontSize: '14px' }}>
+              Settings saved successfully.
+            </div>
+          )}
 
-        {/* Main content */}
-        <div className="card">
-          <div className="card-body">
-            <h2 style={{ fontSize: '16px', fontWeight: 600, marginBottom: '20px' }}>Organization Settings</h2>
+          <form onSubmit={handleSubmit}>
+            <h3 style={{ fontSize: '14px', fontWeight: 600, marginBottom: '12px', color: 'var(--color-text-muted)', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+              Company info
+            </h3>
 
-            {error && (
-              <div style={{ background: '#fef2f2', border: '1px solid #fecaca', borderRadius: '6px', padding: '12px', marginBottom: '16px', color: '#dc2626', fontSize: '14px' }}>
-                {error}
+            <div className="form-row">
+              <div className="form-group">
+                <label>Company name *</label>
+                <input type="text" value={name} onChange={(e) => setName(e.target.value)} required />
               </div>
-            )}
-            {saved && (
-              <div style={{ background: '#f0fdf4', border: '1px solid #86efac', borderRadius: '6px', padding: '12px', marginBottom: '16px', color: '#16a34a', fontSize: '14px' }}>
-                Settings saved successfully.
+              <div className="form-group">
+                <label>Email</label>
+                <input type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="contact@company.com" />
               </div>
-            )}
+            </div>
 
-            <form onSubmit={handleSubmit}>
-              <h3 style={{ fontSize: '14px', fontWeight: 600, marginBottom: '12px', color: 'var(--color-text-muted)', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
-                Company info
-              </h3>
-
-              <div className="form-row">
-                <div className="form-group">
-                  <label>Company name *</label>
-                  <input type="text" value={name} onChange={(e) => setName(e.target.value)} required />
-                </div>
-                <div className="form-group">
-                  <label>Email</label>
-                  <input type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="contact@company.com" />
-                </div>
+            <div className="form-row">
+              <div className="form-group">
+                <label>Phone</label>
+                <input type="tel" value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="(555) 000-0000" />
               </div>
-
-              <div className="form-row">
-                <div className="form-group">
-                  <label>Phone</label>
-                  <input type="tel" value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="(555) 000-0000" />
-                </div>
-                <div className="form-group">
-                  <label>Timezone</label>
-                  <select value={timezone} onChange={(e) => setTimezone(e.target.value)}>
-                    {TIMEZONES.map((tz) => (
-                      <option key={tz} value={tz}>{tz.replace(/_/g, ' ')}</option>
-                    ))}
-                  </select>
-                </div>
+              <div className="form-group">
+                <label>Timezone</label>
+                <select value={timezone} onChange={(e) => setTimezone(e.target.value)}>
+                  {TIMEZONES.map((tz) => (
+                    <option key={tz} value={tz}>{tz.replace(/_/g, ' ')}</option>
+                  ))}
+                </select>
               </div>
+            </div>
 
-              <hr style={{ border: 'none', borderTop: '1px solid var(--color-border)', margin: '24px 0' }} />
+            <hr style={{ border: 'none', borderTop: '1px solid var(--color-border)', margin: '24px 0' }} />
 
-              <h3 style={{ fontSize: '14px', fontWeight: 600, marginBottom: '12px', color: 'var(--color-text-muted)', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
-                Rent defaults
-              </h3>
-              <p style={{ fontSize: '13px', color: 'var(--color-text-muted)', marginBottom: '16px' }}>
-                These apply org-wide. Individual leases can override them.
-              </p>
+            <h3 style={{ fontSize: '14px', fontWeight: 600, marginBottom: '12px', color: 'var(--color-text-muted)', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+              Rent defaults
+            </h3>
+            <p style={{ fontSize: '13px', color: 'var(--color-text-muted)', marginBottom: '16px' }}>
+              These apply org-wide. Individual leases can override them.
+            </p>
 
-              <div className="form-row">
-                <div className="form-group">
-                  <label>Rent due day (1–28)</label>
-                  <input type="number" min="1" max="28" value={rentDueDay} onChange={(e) => setRentDueDay(Number(e.target.value))} />
-                </div>
-                <div className="form-group">
-                  <label>Grace period (days)</label>
-                  <input type="number" min="0" value={gracePeriodDays} onChange={(e) => setGracePeriodDays(Number(e.target.value))} />
-                </div>
-                <div className="form-group">
-                  <label>Default late fee ($)</label>
-                  <input type="number" step="0.01" min="0" value={lateFeeAmount} onChange={(e) => setLateFeeAmount(Number(e.target.value))} />
-                </div>
+            <div className="form-row">
+              <div className="form-group">
+                <label>Rent due day (1-28)</label>
+                <input type="number" min="1" max="28" value={rentDueDay} onChange={(e) => setRentDueDay(Number(e.target.value))} />
               </div>
-
-              <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: '8px' }}>
-                <button type="submit" className="btn btn-primary" disabled={saving}>
-                  {saving ? 'Saving…' : 'Save settings'}
-                </button>
+              <div className="form-group">
+                <label>Grace period (days)</label>
+                <input type="number" min="0" value={gracePeriodDays} onChange={(e) => setGracePeriodDays(Number(e.target.value))} />
               </div>
-            </form>
-          </div>
+              <div className="form-group">
+                <label>Default late fee ($)</label>
+                <input type="number" step="0.01" min="0" value={lateFeeAmount} onChange={(e) => setLateFeeAmount(Number(e.target.value))} />
+              </div>
+            </div>
+
+            <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: '8px' }}>
+              <button type="submit" className="btn btn-primary" disabled={saving}>
+                {saving ? 'Saving...' : 'Save settings'}
+              </button>
+            </div>
+          </form>
         </div>
       </div>
-    </>
+    </SettingsShell>
   );
 }

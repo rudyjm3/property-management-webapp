@@ -7,6 +7,7 @@ import { api } from '@/lib/api';
 import { formatPhone } from '@/lib/phone';
 import PhoneInput from '@/components/PhoneInput';
 import DocumentPanel from '@/components/DocumentPanel';
+import { useAuth } from '@/contexts/AuthContext';
 
 const PORTAL_STATUS_LABELS: Record<string, string> = {
   active: 'Portal Active',
@@ -72,6 +73,8 @@ export default function TenantDetailPage() {
   const params = useParams();
   const router = useRouter();
   const tenantId = params.id as string;
+  const { profile } = useAuth();
+  const isMaintenance = profile?.role === 'maintenance';
   const [tenant, setTenant] = useState<TenantDetail | null>(null);
   const [loading, setLoading] = useState(true);
   const [editing, setEditing] = useState(false);
@@ -166,19 +169,21 @@ export default function TenantDetailPage() {
             </span>
           </p>
         </div>
-        <div style={{ display: 'flex', gap: '8px' }}>
-          {(tenant.portalStatus === 'never_logged_in' || tenant.portalStatus === 'invited') && (
-            <button className="btn btn-primary" onClick={handleInvitePortal} disabled={inviting}>
-              {inviting ? 'Sending…' : tenant.portalStatus === 'invited' ? 'Resend Invite' : 'Invite to Portal'}
+        {!isMaintenance && (
+          <div style={{ display: 'flex', gap: '8px' }}>
+            {(tenant.portalStatus === 'never_logged_in' || tenant.portalStatus === 'invited') && (
+              <button className="btn btn-primary" onClick={handleInvitePortal} disabled={inviting}>
+                {inviting ? 'Sending…' : tenant.portalStatus === 'invited' ? 'Resend Invite' : 'Invite to Portal'}
+              </button>
+            )}
+            <button className="btn btn-secondary" onClick={() => setEditing(true)}>
+              Edit
             </button>
-          )}
-          <button className="btn btn-secondary" onClick={() => setEditing(true)}>
-            Edit
-          </button>
-          <button className="btn btn-secondary" style={{ color: 'var(--color-danger)' }} onClick={handleDelete}>
-            Delete
-          </button>
-        </div>
+            <button className="btn btn-secondary" style={{ color: 'var(--color-danger)' }} onClick={handleDelete}>
+              Delete
+            </button>
+          </div>
+        )}
       </div>
 
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '24px' }}>
@@ -195,151 +200,159 @@ export default function TenantDetailPage() {
                 <label>Phone</label>
                 <span>{formatPhone(tenant.phone)}</span>
               </div>
-              {tenant.fullLegalName && (
+              {!isMaintenance && tenant.fullLegalName && (
                 <div className="detail-item" style={{ gridColumn: '1 / -1' }}>
                   <label>Full Legal Name</label>
                   <span>{tenant.fullLegalName}</span>
                 </div>
               )}
-              {tenant.dateOfBirth && (
+              {!isMaintenance && tenant.dateOfBirth && (
                 <div className="detail-item">
                   <label>Date of Birth</label>
                   <span>{new Date(tenant.dateOfBirth).toLocaleDateString()}</span>
                 </div>
               )}
-              {tenant.currentAddress && (
+              {!isMaintenance && tenant.currentAddress && (
                 <div className="detail-item" style={{ gridColumn: '1 / -1' }}>
                   <label>Current Address</label>
                   <span>{tenant.currentAddress}</span>
                 </div>
               )}
-              <div className="detail-item">
-                <label>Emergency Contact</label>
-                <span>
-                  {tenant.emergencyContactName || '--'}
-                  {tenant.emergencyContact1Relationship && (
-                    <span style={{ color: 'var(--color-text-muted)', marginLeft: '6px', fontSize: '13px' }}>
-                      ({tenant.emergencyContact1Relationship})
+              {!isMaintenance && (
+                <>
+                  <div className="detail-item">
+                    <label>Emergency Contact</label>
+                    <span>
+                      {tenant.emergencyContactName || '--'}
+                      {tenant.emergencyContact1Relationship && (
+                        <span style={{ color: 'var(--color-text-muted)', marginLeft: '6px', fontSize: '13px' }}>
+                          ({tenant.emergencyContact1Relationship})
+                        </span>
+                      )}
                     </span>
-                  )}
-                </span>
-              </div>
-              <div className="detail-item">
-                <label>Emergency Phone</label>
-                <span>{formatPhone(tenant.emergencyContactPhone)}</span>
-              </div>
+                  </div>
+                  <div className="detail-item">
+                    <label>Emergency Phone</label>
+                    <span>{formatPhone(tenant.emergencyContactPhone)}</span>
+                  </div>
+                </>
+              )}
             </div>
           </div>
         </div>
 
         {/* Current Lease */}
-        <div className="card">
-          <div className="card-body">
-            <h3 style={{ marginBottom: '16px', fontSize: '16px', fontWeight: 600 }}>Current Lease</h3>
-            {currentLeases.length === 0 ? (
-              <div className="empty-state" style={{ padding: '24px' }}>
-                <p>No active lease</p>
-              </div>
-            ) : (
-              <>
-                {currentLeases.length > 1 && (
-                  <div style={{ marginBottom: '12px', fontSize: '13px', color: '#ca8a04', fontWeight: 500 }}>
-                    This tenant is on {currentLeases.length} active leases.
-                  </div>
-                )}
-                {currentLeases.map((lp, i) => (
-                  <div
-                    key={lp.lease.id}
-                    style={i > 0 ? { marginTop: '16px', paddingTop: '16px', borderTop: '1px solid var(--color-border)' } : {}}
-                  >
-                    <div className="detail-grid">
-                      <div className="detail-item">
-                        <label>Property</label>
-                        <Link
-                          href={`/properties/${lp.lease.unit.property.id}`}
-                          style={{ color: 'var(--color-primary)', textDecoration: 'none' }}
-                        >
-                          {lp.lease.unit.property.name}
-                        </Link>
-                      </div>
-                      <div className="detail-item">
-                        <label>Unit</label>
-                        <Link
-                          href={`/properties/${lp.lease.unit.property.id}/units/${lp.lease.unit.id}`}
-                          style={{ color: 'var(--color-primary)', textDecoration: 'none' }}
-                        >
-                          Unit {lp.lease.unit.unitNumber}
-                        </Link>
-                      </div>
-                      <div className="detail-item">
-                        <label>Lease Start</label>
-                        <span>{new Date(lp.lease.startDate).toLocaleDateString()}</span>
-                      </div>
-                      <div className="detail-item">
-                        <label>Lease End</label>
-                        <span>{new Date(lp.lease.endDate).toLocaleDateString()}</span>
-                      </div>
-                      <div className="detail-item">
-                        <label>Monthly Rent</label>
-                        <span>${Number(lp.lease.rentAmount).toLocaleString()}</span>
-                      </div>
-                      <div className="detail-item">
-                        <label>Status</label>
-                        <span className="badge badge-occupied">{lp.lease.status.replace(/_/g, ' ')}</span>
+        {!isMaintenance && (
+          <div className="card">
+            <div className="card-body">
+              <h3 style={{ marginBottom: '16px', fontSize: '16px', fontWeight: 600 }}>Current Lease</h3>
+              {currentLeases.length === 0 ? (
+                <div className="empty-state" style={{ padding: '24px' }}>
+                  <p>No active lease</p>
+                </div>
+              ) : (
+                <>
+                  {currentLeases.length > 1 && (
+                    <div style={{ marginBottom: '12px', fontSize: '13px', color: '#ca8a04', fontWeight: 500 }}>
+                      This tenant is on {currentLeases.length} active leases.
+                    </div>
+                  )}
+                  {currentLeases.map((lp, i) => (
+                    <div
+                      key={lp.lease.id}
+                      style={i > 0 ? { marginTop: '16px', paddingTop: '16px', borderTop: '1px solid var(--color-border)' } : {}}
+                    >
+                      <div className="detail-grid">
+                        <div className="detail-item">
+                          <label>Property</label>
+                          <Link
+                            href={`/properties/${lp.lease.unit.property.id}`}
+                            style={{ color: 'var(--color-primary)', textDecoration: 'none' }}
+                          >
+                            {lp.lease.unit.property.name}
+                          </Link>
+                        </div>
+                        <div className="detail-item">
+                          <label>Unit</label>
+                          <Link
+                            href={`/properties/${lp.lease.unit.property.id}/units/${lp.lease.unit.id}`}
+                            style={{ color: 'var(--color-primary)', textDecoration: 'none' }}
+                          >
+                            Unit {lp.lease.unit.unitNumber}
+                          </Link>
+                        </div>
+                        <div className="detail-item">
+                          <label>Lease Start</label>
+                          <span>{new Date(lp.lease.startDate).toLocaleDateString()}</span>
+                        </div>
+                        <div className="detail-item">
+                          <label>Lease End</label>
+                          <span>{new Date(lp.lease.endDate).toLocaleDateString()}</span>
+                        </div>
+                        <div className="detail-item">
+                          <label>Monthly Rent</label>
+                          <span>${Number(lp.lease.rentAmount).toLocaleString()}</span>
+                        </div>
+                        <div className="detail-item">
+                          <label>Status</label>
+                          <span className="badge badge-occupied">{lp.lease.status.replace(/_/g, ' ')}</span>
+                        </div>
                       </div>
                     </div>
-                  </div>
-                ))}
-              </>
-            )}
+                  ))}
+                </>
+              )}
+            </div>
           </div>
-        </div>
+        )}
       </div>
 
       {/* Lease History */}
-      <div className="card" style={{ marginTop: '24px' }}>
-        <div className="card-body">
-          <h3 style={{ marginBottom: '16px', fontSize: '16px', fontWeight: 600 }}>
-            Lease History ({tenant.leaseParticipants.length})
-          </h3>
-          {tenant.leaseParticipants.length === 0 ? (
-            <div className="empty-state" style={{ padding: '24px' }}>
-              <p>No lease history</p>
-            </div>
-          ) : (
-            <div className="table-container">
-              <table>
-                <thead>
-                  <tr>
-                    <th>Property</th>
-                    <th>Unit</th>
-                    <th>Start</th>
-                    <th>End</th>
-                    <th>Rent</th>
-                    <th>Status</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {tenant.leaseParticipants.map((lp) => (
-                    <tr key={lp.lease.id}>
-                      <td>{lp.lease.unit.property.name}</td>
-                      <td>Unit {lp.lease.unit.unitNumber}</td>
-                      <td>{new Date(lp.lease.startDate).toLocaleDateString()}</td>
-                      <td>{new Date(lp.lease.endDate).toLocaleDateString()}</td>
-                      <td>${Number(lp.lease.rentAmount).toLocaleString()}</td>
-                      <td>
-                        <span className={`badge badge-${lp.lease.status === 'active' ? 'occupied' : lp.lease.status === 'expired' ? 'notice' : 'vacant'}`}>
-                          {lp.lease.status.replace('_', ' ')}
-                        </span>
-                      </td>
+      {!isMaintenance && (
+        <div className="card" style={{ marginTop: '24px' }}>
+          <div className="card-body">
+            <h3 style={{ marginBottom: '16px', fontSize: '16px', fontWeight: 600 }}>
+              Lease History ({tenant.leaseParticipants.length})
+            </h3>
+            {tenant.leaseParticipants.length === 0 ? (
+              <div className="empty-state" style={{ padding: '24px' }}>
+                <p>No lease history</p>
+              </div>
+            ) : (
+              <div className="table-container">
+                <table>
+                  <thead>
+                    <tr>
+                      <th>Property</th>
+                      <th>Unit</th>
+                      <th>Start</th>
+                      <th>End</th>
+                      <th>Rent</th>
+                      <th>Status</th>
                     </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          )}
+                  </thead>
+                  <tbody>
+                    {tenant.leaseParticipants.map((lp) => (
+                      <tr key={lp.lease.id}>
+                        <td>{lp.lease.unit.property.name}</td>
+                        <td>Unit {lp.lease.unit.unitNumber}</td>
+                        <td>{new Date(lp.lease.startDate).toLocaleDateString()}</td>
+                        <td>{new Date(lp.lease.endDate).toLocaleDateString()}</td>
+                        <td>${Number(lp.lease.rentAmount).toLocaleString()}</td>
+                        <td>
+                          <span className={`badge badge-${lp.lease.status === 'active' ? 'occupied' : lp.lease.status === 'expired' ? 'notice' : 'vacant'}`}>
+                            {lp.lease.status.replace('_', ' ')}
+                          </span>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
         </div>
-      </div>
+      )}
 
       {/* Work Orders */}
       {tenant.workOrders.length > 0 && (
@@ -464,7 +477,7 @@ export default function TenantDetailPage() {
         </div>
       )}
 
-      <DocumentPanel entityType="tenant" entityId={tenantId} />
+      {!isMaintenance && <DocumentPanel entityType="tenant" entityId={tenantId} />}
     </>
   );
 }

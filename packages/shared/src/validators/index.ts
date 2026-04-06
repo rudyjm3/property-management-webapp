@@ -243,6 +243,7 @@ export const createWorkOrderSchema = z.object({
   description: z.string().min(1).max(5000),
   entryPermissionGranted: z.boolean().default(false),
   preferredContactWindow: z.string().max(200).nullable().optional(),
+  tenantId: z.string().uuid().nullable().optional(),
 });
 
 export const updateWorkOrderSchema = z.object({

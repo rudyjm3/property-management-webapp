@@ -11,7 +11,10 @@ interface Lease {
   startDate: string;
   endDate: string;
   status: string;
+  renewalOfLeaseId: string | null;
   createdAt: string;
+  renewalOf: { id: string } | null;
+  renewals: Array<{ id: string; status: string }>;
   unit: {
     id: string;
     unitNumber: string;
@@ -339,6 +342,16 @@ export default function LeasesPage() {
                       <span className={`badge ${statusBadgeClass(lease.status)}`}>
                         {lease.status.replace(/_/g, ' ')}
                       </span>
+                      {lease.renewalOfLeaseId && (
+                        <span className="badge badge-maintenance" style={{ marginLeft: '6px' }}>
+                          Renewal
+                        </span>
+                      )}
+                      {lease.renewals.length > 0 && (
+                        <span className="badge badge-notice" style={{ marginLeft: '6px' }}>
+                          Superseded
+                        </span>
+                      )}
                     </td>
                     <td>
                       <Link

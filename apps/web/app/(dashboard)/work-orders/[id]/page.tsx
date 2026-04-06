@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react';
 import { useParams } from 'next/navigation';
 import Link from 'next/link';
 import { api } from '@/lib/api';
+import { useAuth } from '@/contexts/AuthContext';
 
 interface WorkOrder {
   id: string;
@@ -33,6 +34,7 @@ interface WorkOrder {
   };
   tenant: { id: string; name: string; email: string; phone: string | null } | null;
   assignedTo: { id: string; name: string; email: string } | null;
+  submittedByUser: { id: string; name: string; role: string } | null;
   vendor: { id: string; companyName: string; contactName: string; phonePrimary: string } | null;
 }
 
@@ -55,6 +57,14 @@ const PRIORITY_COLORS: Record<string, string> = {
   emergency: 'badge-notice',
   urgent: 'badge-maintenance',
   routine: 'badge-vacant',
+  normal: 'badge-vacant',
+};
+
+const PRIORITY_LABELS: Record<string, string> = {
+  emergency: 'Emergency',
+  urgent: 'Urgent',
+  routine: 'Routine',
+  normal: 'Routine',
 };
 
 const STATUS_COLORS: Record<string, string> = {
@@ -102,6 +112,8 @@ const NEXT_STATUSES: Record<string, string[]> = {
 
 export default function WorkOrderDetailPage() {
   const { id } = useParams<{ id: string }>();
+  const { profile } = useAuth();
+  const isMaintenance = profile?.role === 'maintenance';
   const [workOrder, setWorkOrder] = useState<WorkOrder | null>(null);
   const [loading, setLoading] = useState(true);
   const [updating, setUpdating] = useState(false);
@@ -272,7 +284,7 @@ export default function WorkOrderDetailPage() {
           </p>
         </div>
         <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
-          {!['completed', 'closed', 'cancelled'].includes(workOrder.status) && (
+          {!isMaintenance && !['completed', 'closed', 'cancelled'].includes(workOrder.status) && (
             <button
               className={isAssigned ? 'btn btn-secondary' : 'btn btn-primary'}
               onClick={openAssign}
@@ -313,7 +325,7 @@ export default function WorkOrderDetailPage() {
                     {STATUS_LABELS[workOrder.status] ?? workOrder.status}
                   </span>
                   <span className={`badge ${PRIORITY_COLORS[workOrder.priority] ?? 'badge-vacant'}`}>
-                    {workOrder.priority}
+                    {PRIORITY_LABELS[workOrder.priority] ?? workOrder.priority}
                   </span>
                   <span className="badge badge-vacant">{CATEGORY_LABELS[workOrder.category] ?? workOrder.category}</span>
                 </div>
@@ -489,6 +501,12 @@ export default function WorkOrderDetailPage() {
               <h3 style={{ fontSize: '13px', fontWeight: 600, color: 'var(--color-text-muted)', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: '12px' }}>Timeline</h3>
               <div style={{ fontSize: '13px', display: 'flex', flexDirection: 'column', gap: '6px' }}>
                 <div><span style={{ color: 'var(--color-text-muted)' }}>Created:</span> {new Date(workOrder.createdAt).toLocaleString()}</div>
+                <div>
+                  <span style={{ color: 'var(--color-text-muted)' }}>Created by:</span>{' '}
+                  {workOrder.submittedByUser
+                    ? <><span style={{ textTransform: 'capitalize' }}>({workOrder.submittedByUser.role})</span> {workOrder.submittedByUser.name}</>
+                    : 'Tenant'}
+                </div>
                 <div><span style={{ color: 'var(--color-text-muted)' }}>Updated:</span> {new Date(workOrder.updatedAt).toLocaleString()}</div>
               </div>
             </div>

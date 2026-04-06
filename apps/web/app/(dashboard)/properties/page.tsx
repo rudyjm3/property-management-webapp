@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { api } from '@/lib/api';
+import { useAuth } from '@/contexts/AuthContext';
 
 const PROPERTY_TYPE_LABELS: Record<string, string> = {
   multifamily: 'Multifamily',
@@ -24,6 +25,8 @@ interface Property {
 }
 
 export default function PropertiesPage() {
+  const { profile } = useAuth();
+  const isMaintenance = profile?.role === 'maintenance';
   const [properties, setProperties] = useState<Property[]>([]);
   const [loading, setLoading] = useState(true);
   const [showForm, setShowForm] = useState(false);
@@ -71,9 +74,11 @@ export default function PropertiesPage() {
           <h1 className="page-title">Properties</h1>
           <p className="page-subtitle">{properties.length} properties in your portfolio</p>
         </div>
-        <button className="btn btn-primary" onClick={() => setShowForm(true)}>
-          + Add Property
-        </button>
+        {!isMaintenance && (
+          <button className="btn btn-primary" onClick={() => setShowForm(true)}>
+            + Add Property
+          </button>
+        )}
       </div>
 
       {properties.length === 0 ? (

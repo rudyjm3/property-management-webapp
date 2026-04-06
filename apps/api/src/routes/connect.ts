@@ -1,14 +1,16 @@
 import { Router, Request, Response, NextFunction } from 'express';
 import { prisma } from '@propflow/db';
 import { AppError } from '../middleware/error-handler';
+import { requireAuth, requireOrg, requireRoles } from '../middleware/auth';
 import * as stripeService from '../services/stripe.service';
 
 const router = Router({ mergeParams: true });
+const requireSettingsAccess = requireRoles(['owner', 'manager']);
 
 const APP_URL = process.env.APP_URL || 'http://localhost:3000';
 
 // GET /api/v1/organizations/:orgId/connect/status
-router.get('/status', async (req: Request, res: Response, next: NextFunction) => {
+router.get('/status', requireAuth, requireOrg, requireSettingsAccess, async (req: Request, res: Response, next: NextFunction) => {
   try {
     const org = await prisma.organization.findUniqueOrThrow({
       where: { id: req.params.orgId as string },
@@ -25,7 +27,7 @@ router.get('/status', async (req: Request, res: Response, next: NextFunction) =>
 });
 
 // POST /api/v1/organizations/:orgId/connect/account-link
-router.post('/account-link', async (req: Request, res: Response, next: NextFunction) => {
+router.post('/account-link', requireAuth, requireOrg, requireSettingsAccess, async (req: Request, res: Response, next: NextFunction) => {
   try {
     const account = await stripeService.getOrCreateConnectAccount(req.params.orgId as string);
 
@@ -44,7 +46,7 @@ router.post('/account-link', async (req: Request, res: Response, next: NextFunct
 });
 
 // POST /api/v1/organizations/:orgId/connect/sync
-router.post('/sync', async (req: Request, res: Response, next: NextFunction) => {
+router.post('/sync', requireAuth, requireOrg, requireSettingsAccess, async (req: Request, res: Response, next: NextFunction) => {
   try {
     const org = await prisma.organization.findUniqueOrThrow({
       where: { id: req.params.orgId as string },

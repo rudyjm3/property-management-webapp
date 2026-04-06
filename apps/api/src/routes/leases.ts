@@ -2,11 +2,14 @@ import { Router, Request, Response, NextFunction } from 'express';
 import { createLeaseSchema, updateLeaseSchema, renewLeaseSchema } from '@propflow/shared';
 import { validate } from '../middleware/validate';
 import * as leaseService from '../services/lease.service';
+import { requireRoles } from '../middleware/auth';
 
 const router = Router({ mergeParams: true });
 
+const requireManagerAccess = requireRoles(['owner', 'manager']);
+
 // GET /api/v1/organizations/:orgId/leases
-router.get('/', async (req: Request, res: Response, next: NextFunction) => {
+router.get('/', requireManagerAccess, async (req: Request, res: Response, next: NextFunction) => {
   try {
     const leases = await leaseService.listLeases(req.params.orgId as string);
     res.json({ data: leases });
@@ -16,7 +19,7 @@ router.get('/', async (req: Request, res: Response, next: NextFunction) => {
 });
 
 // GET /api/v1/organizations/:orgId/leases/:leaseId
-router.get('/:leaseId', async (req: Request, res: Response, next: NextFunction) => {
+router.get('/:leaseId', requireManagerAccess, async (req: Request, res: Response, next: NextFunction) => {
   try {
     const lease = await leaseService.getLease(
       req.params.orgId as string,
@@ -29,7 +32,7 @@ router.get('/:leaseId', async (req: Request, res: Response, next: NextFunction) 
 });
 
 // POST /api/v1/organizations/:orgId/leases
-router.post('/', validate(createLeaseSchema), async (req: Request, res: Response, next: NextFunction) => {
+router.post('/', requireManagerAccess, validate(createLeaseSchema), async (req: Request, res: Response, next: NextFunction) => {
   try {
     const lease = await leaseService.createLease(req.params.orgId as string, req.body);
     res.status(201).json({ data: lease });
@@ -39,7 +42,7 @@ router.post('/', validate(createLeaseSchema), async (req: Request, res: Response
 });
 
 // PATCH /api/v1/organizations/:orgId/leases/:leaseId
-router.patch('/:leaseId', validate(updateLeaseSchema), async (req: Request, res: Response, next: NextFunction) => {
+router.patch('/:leaseId', requireManagerAccess, validate(updateLeaseSchema), async (req: Request, res: Response, next: NextFunction) => {
   try {
     const lease = await leaseService.updateLease(
       req.params.orgId as string,
@@ -53,7 +56,7 @@ router.patch('/:leaseId', validate(updateLeaseSchema), async (req: Request, res:
 });
 
 // POST /api/v1/organizations/:orgId/leases/:leaseId/renew
-router.post('/:leaseId/renew', validate(renewLeaseSchema), async (req: Request, res: Response, next: NextFunction) => {
+router.post('/:leaseId/renew', requireManagerAccess, validate(renewLeaseSchema), async (req: Request, res: Response, next: NextFunction) => {
   try {
     const lease = await leaseService.renewLease(
       req.params.orgId as string,
@@ -67,7 +70,7 @@ router.post('/:leaseId/renew', validate(renewLeaseSchema), async (req: Request, 
 });
 
 // POST /api/v1/organizations/:orgId/leases/:leaseId/participants
-router.post('/:leaseId/participants', async (req: Request, res: Response, next: NextFunction) => {
+router.post('/:leaseId/participants', requireManagerAccess, async (req: Request, res: Response, next: NextFunction) => {
   try {
     const lease = await leaseService.addParticipant(
       req.params.orgId as string,
@@ -81,7 +84,7 @@ router.post('/:leaseId/participants', async (req: Request, res: Response, next: 
 });
 
 // PATCH /api/v1/organizations/:orgId/leases/:leaseId/participants/:participantId
-router.patch('/:leaseId/participants/:participantId', async (req: Request, res: Response, next: NextFunction) => {
+router.patch('/:leaseId/participants/:participantId', requireManagerAccess, async (req: Request, res: Response, next: NextFunction) => {
   try {
     const lease = await leaseService.setPrimaryParticipant(
       req.params.orgId as string,
@@ -95,7 +98,7 @@ router.patch('/:leaseId/participants/:participantId', async (req: Request, res: 
 });
 
 // DELETE /api/v1/organizations/:orgId/leases/:leaseId/participants/:participantId
-router.delete('/:leaseId/participants/:participantId', async (req: Request, res: Response, next: NextFunction) => {
+router.delete('/:leaseId/participants/:participantId', requireManagerAccess, async (req: Request, res: Response, next: NextFunction) => {
   try {
     const lease = await leaseService.removeParticipant(
       req.params.orgId as string,
@@ -109,7 +112,7 @@ router.delete('/:leaseId/participants/:participantId', async (req: Request, res:
 });
 
 // DELETE /api/v1/organizations/:orgId/leases/:leaseId
-router.delete('/:leaseId', async (req: Request, res: Response, next: NextFunction) => {
+router.delete('/:leaseId', requireManagerAccess, async (req: Request, res: Response, next: NextFunction) => {
   try {
     await leaseService.deleteLease(
       req.params.orgId as string,

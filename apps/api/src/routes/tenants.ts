@@ -4,8 +4,11 @@ import { validate } from '../middleware/validate';
 import * as tenantService from '../services/tenant.service';
 import { supabaseAdmin } from '../lib/supabase';
 import { prisma } from '@propflow/db';
+import { requireRoles } from '../middleware/auth';
 
 const router = Router({ mergeParams: true });
+
+const requireManagerAccess = requireRoles(['owner', 'manager']);
 
 // GET /api/v1/organizations/:orgId/tenants
 router.get('/', async (req: Request, res: Response, next: NextFunction) => {
@@ -28,7 +31,7 @@ router.get('/:tenantId', async (req: Request, res: Response, next: NextFunction)
 });
 
 // POST /api/v1/organizations/:orgId/tenants
-router.post('/', validate(createTenantSchema), async (req: Request, res: Response, next: NextFunction) => {
+router.post('/', requireManagerAccess, validate(createTenantSchema), async (req: Request, res: Response, next: NextFunction) => {
   try {
     const tenant = await tenantService.createTenant(req.params.orgId as string, req.body);
     res.status(201).json({ data: tenant });
@@ -38,7 +41,7 @@ router.post('/', validate(createTenantSchema), async (req: Request, res: Respons
 });
 
 // PATCH /api/v1/organizations/:orgId/tenants/:tenantId
-router.patch('/:tenantId', validate(updateTenantSchema), async (req: Request, res: Response, next: NextFunction) => {
+router.patch('/:tenantId', requireManagerAccess, validate(updateTenantSchema), async (req: Request, res: Response, next: NextFunction) => {
   try {
     const tenant = await tenantService.updateTenant(
       req.params.orgId as string,
@@ -52,7 +55,7 @@ router.patch('/:tenantId', validate(updateTenantSchema), async (req: Request, re
 });
 
 // POST /api/v1/organizations/:orgId/tenants/:tenantId/invite-portal
-router.post('/:tenantId/invite-portal', async (req: Request, res: Response, next: NextFunction) => {
+router.post('/:tenantId/invite-portal', requireManagerAccess, async (req: Request, res: Response, next: NextFunction) => {
   try {
     const tenant = await prisma.tenant.findFirst({
       where: { id: req.params.tenantId, organizationId: req.params.orgId, deletedAt: null },
@@ -98,7 +101,7 @@ router.post('/:tenantId/invite-portal', async (req: Request, res: Response, next
 });
 
 // DELETE /api/v1/organizations/:orgId/tenants/:tenantId
-router.delete('/:tenantId', async (req: Request, res: Response, next: NextFunction) => {
+router.delete('/:tenantId', requireManagerAccess, async (req: Request, res: Response, next: NextFunction) => {
   try {
     await tenantService.deleteTenant(req.params.orgId as string, req.params.tenantId as string);
     res.status(204).send();

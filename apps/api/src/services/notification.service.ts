@@ -335,7 +335,7 @@ export async function runLeaseExpiryJob(organizationId?: string) {
                 type: 'lease_expiry',
                 title: `Lease expires in ${days} days — ${tenant?.name ?? 'Unknown'}`,
                 body: `${property.name} Unit ${unit.unitNumber} lease ends on ${new Date(lease.endDate).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}.`,
-                actionUrl: `/leases/${lease.id}`,
+                actionUrl: `/leases/${lease.id}?openRenew=1`,
               })
             );
           }
