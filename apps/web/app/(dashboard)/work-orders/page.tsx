@@ -320,10 +320,10 @@ export default function WorkOrdersPage() {
                       <div style={{ fontSize: '12px', color: 'var(--color-text-muted)' }}>{wo.unit.property.name}</div>
                     </td>
                     <td>
-                      {wo.tenant ? (
-                        <Link href={`/tenants/${wo.tenant.id}`}>{wo.tenant.name}</Link>
-                      ) : wo.submittedByUser ? (
+                      {wo.submittedByUser ? (
                         <span style={{ color: 'var(--color-text-muted)', fontSize: '13px' }}>Staff created</span>
+                      ) : wo.tenant ? (
+                        <Link href={`/tenants/${wo.tenant.id}`}>{wo.tenant.name}</Link>
                       ) : (
                         <span style={{ color: 'var(--color-text-muted)' }}>—</span>
                       )}
