@@ -6,6 +6,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import SettingsShell from '@/components/settings/SettingsShell';
 
 type NotifPref = 'email' | 'in_app' | 'both' | 'none';
+type JobState = 'idle' | 'running' | 'done' | 'error';
 
 interface NotifSettings {
   notifRentOverdue: NotifPref;
@@ -40,6 +41,8 @@ export default function NotificationSettingsPage() {
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [leaseExpiryJobState, setLeaseExpiryJobState] = useState<JobState>('idle');
+  const [leaseExpiryJobResult, setLeaseExpiryJobResult] = useState<string | null>(null);
 
   useEffect(() => {
     if (!profile?.userId) return;
@@ -76,6 +79,19 @@ export default function NotificationSettingsPage() {
       setError(err.message || 'Failed to save preferences.');
     } finally {
       setSaving(false);
+    }
+  }
+
+  async function runLeaseExpiryJob() {
+    setLeaseExpiryJobState('running');
+    setLeaseExpiryJobResult(null);
+    try {
+      const result = await api.notifications.triggerLeaseExpiry();
+      setLeaseExpiryJobState('done');
+      setLeaseExpiryJobResult(`Processed ${result.processed} lease${result.processed !== 1 ? 's' : ''} — ${result.succeeded} notified, ${result.failed} failed.`);
+    } catch (err: any) {
+      setLeaseExpiryJobState('error');
+      setLeaseExpiryJobResult(err.message || 'Job failed.');
     }
   }
 
@@ -137,6 +153,36 @@ export default function NotificationSettingsPage() {
               </div>
             </div>
           )}
+        </div>
+      </div>
+      <div className="card" style={{ marginTop: '24px' }}>
+        <div className="card-body">
+          <h2 style={{ fontSize: '16px', fontWeight: 600, marginBottom: '4px' }}>Notification Jobs</h2>
+          <p style={{ fontSize: '13px', color: 'var(--color-text-muted)', marginBottom: '24px' }}>
+            Manually trigger scheduled notification jobs. In production these run automatically on a daily cron schedule.
+          </p>
+
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '16px 0', borderBottom: '1px solid var(--color-border)' }}>
+            <div>
+              <div style={{ fontWeight: 500, fontSize: '14px' }}>Lease Expiry Alerts</div>
+              <div style={{ fontSize: '12px', color: 'var(--color-text-muted)', marginTop: '2px' }}>
+                Sends expiry alerts for leases reaching the 90, 60, 30, and 14-day thresholds today
+              </div>
+              {leaseExpiryJobResult && (
+                <div style={{ fontSize: '12px', marginTop: '6px', color: leaseExpiryJobState === 'error' ? 'var(--color-danger)' : 'var(--color-success)' }}>
+                  {leaseExpiryJobResult}
+                </div>
+              )}
+            </div>
+            <button
+              className="btn btn-secondary"
+              onClick={runLeaseExpiryJob}
+              disabled={leaseExpiryJobState === 'running'}
+              style={{ flexShrink: 0 }}
+            >
+              {leaseExpiryJobState === 'running' ? 'Running…' : 'Run Now'}
+            </button>
+          </div>
         </div>
       </div>
     </SettingsShell>

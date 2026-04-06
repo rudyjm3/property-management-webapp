@@ -301,6 +301,8 @@ export const api = {
       apiFetch<any>(`/api/v1/organizations/${_orgId}/notifications/jobs/late-fees`, { method: 'POST' }),
     triggerRentReminders: () =>
       apiFetch<any>(`/api/v1/organizations/${_orgId}/notifications/jobs/rent-reminders`, { method: 'POST' }),
+    triggerLeaseExpiry: () =>
+      apiFetch<any>(`/api/v1/organizations/${_orgId}/notifications/jobs/lease-expiry`, { method: 'POST' }),
   },
   staff: {
     list: (params?: { includeInactive?: boolean }) => {

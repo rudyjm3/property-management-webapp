@@ -47,6 +47,13 @@ interface LeaseSummary {
   expiring60: number;
 }
 
+interface ExpiringLease {
+  id: string;
+  endDate: string;
+  unit: { unitNumber: string; property: { id: string; name: string } };
+  participants: Array<{ isPrimary: boolean; tenant: { id: string; name: string } }>;
+}
+
 interface MessageThread {
   id: string;
   subject: string | null;
@@ -62,6 +69,7 @@ export default function DashboardPage() {
   const [workOrderSummary, setWorkOrderSummary] = useState<WorkOrderSummary>({ open: 0, slaBreaches: 0, emergency: 0, urgent: 0 });
   const [leaseSummary, setLeaseSummary] = useState<LeaseSummary>({ expiring30: 0, expiring60: 0 });
   const [recentThreads, setRecentThreads] = useState<MessageThread[]>([]);
+  const [expiringLeases, setExpiringLeases] = useState<ExpiringLease[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -106,6 +114,12 @@ export default function DashboardPage() {
         const expiring30 = activeLeases.filter((l: any) => new Date(l.endDate) <= in30).length;
         const expiring60 = activeLeases.filter((l: any) => new Date(l.endDate) <= in60).length;
         setLeaseSummary({ expiring30, expiring60 });
+
+        // Expiring leases detail — within 60 days, sorted soonest first
+        const expiring = activeLeases
+          .filter((l: any) => new Date(l.endDate) <= in60)
+          .sort((a: any, b: any) => new Date(a.endDate).getTime() - new Date(b.endDate).getTime());
+        setExpiringLeases(expiring);
 
         // Recent message threads (last 3)
         setRecentThreads((threads || []).slice(0, 3));
@@ -390,6 +404,56 @@ export default function DashboardPage() {
           </div>
         </div>
       </div>
+      )}
+
+      {/* Expiring Leases */}
+      {!isMaintenance && (
+        <div className="card" style={{ marginBottom: '24px' }}>
+          <div className="card-body" style={{ padding: '0' }}>
+            <div style={{ padding: '16px 20px', borderBottom: '1px solid var(--color-border)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <h3 style={{ fontSize: '15px', fontWeight: 600 }}>
+                Leases Expiring Within 60 Days
+                {expiringLeases.length > 0 && (
+                  <span style={{ marginLeft: '8px', background: '#fef3c7', color: '#92400e', borderRadius: '12px', padding: '2px 8px', fontSize: '12px' }}>
+                    {expiringLeases.length}
+                  </span>
+                )}
+              </h3>
+              <Link href="/leases" style={{ fontSize: '13px' }}>View all leases</Link>
+            </div>
+            {expiringLeases.length === 0 ? (
+              <div style={{ padding: '24px', textAlign: 'center', color: 'var(--color-text-muted)', fontSize: '14px' }}>
+                No leases expiring within 60 days
+              </div>
+            ) : (
+              <div>
+                {expiringLeases.map((lease) => {
+                  const primary = lease.participants.find((p) => p.isPrimary) ?? lease.participants[0];
+                  const daysLeft = Math.ceil((new Date(lease.endDate).getTime() - Date.now()) / (1000 * 60 * 60 * 24));
+                  const isUrgent = daysLeft <= 30;
+                  return (
+                    <div key={lease.id} style={{ padding: '12px 20px', borderBottom: '1px solid var(--color-border)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                      <div>
+                        <Link href={`/tenants/${primary?.tenant.id}`} style={{ fontWeight: 500, fontSize: '14px' }}>
+                          {primary?.tenant.name ?? '—'}
+                        </Link>
+                        <div style={{ fontSize: '12px', color: 'var(--color-text-muted)' }}>
+                          Unit {lease.unit.unitNumber} · {lease.unit.property.name}
+                        </div>
+                        <div style={{ fontSize: '12px', color: isUrgent ? 'var(--color-danger)' : '#ca8a04', fontWeight: 500 }}>
+                          Expires {new Date(lease.endDate).toLocaleDateString()} · {daysLeft} day{daysLeft !== 1 ? 's' : ''} left
+                        </div>
+                      </div>
+                      <Link href={`/leases/${lease.id}?openRenew=1`} className="btn btn-sm btn-primary" style={{ textDecoration: 'none', flexShrink: 0 }}>
+                        Renew
+                      </Link>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+        </div>
       )}
 
       {/* Recent Messages */}

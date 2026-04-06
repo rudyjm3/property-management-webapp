@@ -293,8 +293,8 @@ export async function renewLease(
   const participants = existing.participants;
 
   const newLease = await prisma.$transaction(async (tx) => {
-    // Mark old lease as terminated
-    await tx.lease.update({ where: { id: leaseId }, data: { status: 'terminated' } });
+    // Mark old lease as expired (it ran its course — terminated is for early break)
+    await tx.lease.update({ where: { id: leaseId }, data: { status: 'expired' } });
 
     // Create new lease copying key terms from old lease
     const created = await tx.lease.create({
@@ -309,6 +309,13 @@ export async function renewLease(
         lateFeeGraceDays: existing.lateFeeGraceDays,
         rentDueDay: existing.rentDueDay,
         noticePeriodDays: data.noticePeriodDays ?? existing.noticePeriodDays,
+        utilitiesIncluded: existing.utilitiesIncluded ?? [],
+        hasPetAddendum: existing.hasPetAddendum ?? false,
+        petDepositAmount: existing.petDepositAmount ?? null,
+        hasParkingAddendum: existing.hasParkingAddendum ?? false,
+        parkingFee: existing.parkingFee ?? null,
+        occupantCount: existing.occupantCount ?? 1,
+        occupantNames: existing.occupantNames ?? [],
         renewalOf: { connect: { id: leaseId } },
         status: 'active',
         participants: {
