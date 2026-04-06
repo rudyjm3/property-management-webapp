@@ -17,10 +17,11 @@ export async function listUnits(organizationId: string, propertyId: string) {
     include: {
       leases: {
         where: { status: { in: [...CURRENT_LEASE_STATUSES] } },
+        orderBy: { startDate: 'desc' },
         include: {
           participants: {
-            where: { isPrimary: true },
             include: { tenant: { select: { id: true, name: true, email: true, phone: true } } },
+            orderBy: { isPrimary: 'desc' },
           },
         },
         take: 1,

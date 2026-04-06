@@ -29,6 +29,8 @@ interface UnitOption {
   id: string;
   label: string;
   propertyId: string;
+  tenantId: string | null;
+  leaseTenants: { id: string; name: string }[];
 }
 
 const PRIORITY_COLORS: Record<string, string> = {
@@ -96,9 +98,11 @@ export default function WorkOrdersPage() {
   const [formError, setFormError] = useState('');
   const [submitting, setSubmitting] = useState(false);
   const [unitOptions, setUnitOptions] = useState<UnitOption[]>([]);
+  const [leaseTenantOptions, setLeaseTenantOptions] = useState<{ id: string; name: string }[]>([]);
   const [formLoading, setFormLoading] = useState(false);
 
   const [unitId, setUnitId] = useState('');
+  const [formTenantId, setFormTenantId] = useState<string | null>(null);
   const [title, setTitle] = useState('');
   const [category, setCategory] = useState('general');
   const [priority, setPriority] = useState('routine');
@@ -134,11 +138,17 @@ export default function WorkOrdersPage() {
       const unitLists = await Promise.all(
         properties.map((p: any) =>
           api.units.list(p.id).then((units: any[]) =>
-            units.map((u) => ({
-              id: u.id,
-              label: `Unit ${u.unitNumber} — ${p.name}`,
-              propertyId: p.id,
-            }))
+            units.map((u) => {
+              const participants: any[] = u.leases?.[0]?.participants ?? [];
+              const primary = participants.find((p: any) => p.isPrimary);
+              return {
+                id: u.id,
+                label: `Unit ${u.unitNumber} — ${p.name}`,
+                propertyId: p.id,
+                tenantId: primary?.tenant?.id ?? participants[0]?.tenant?.id ?? null,
+                leaseTenants: participants.map((p: any) => ({ id: p.tenant.id, name: p.tenant.name })),
+              };
+            })
           )
         )
       );
@@ -154,6 +164,8 @@ export default function WorkOrdersPage() {
     setShowForm(false);
     setFormError('');
     setUnitId('');
+    setFormTenantId(null);
+    setLeaseTenantOptions([]);
     setTitle('');
     setCategory('general');
     setPriority('routine');
@@ -175,6 +187,7 @@ export default function WorkOrdersPage() {
         description,
         entryPermissionGranted: entryPermission,
         preferredContactWindow: contactWindow || null,
+        tenantId: formTenantId,
       });
       closeForm();
       loadWorkOrders();
@@ -382,13 +395,29 @@ export default function WorkOrdersPage() {
                   <>
                     <div className="form-group">
                       <label>Unit *</label>
-                      <select required value={unitId} onChange={(e) => setUnitId(e.target.value)}>
+                      <select required value={unitId} onChange={(e) => {
+                        setUnitId(e.target.value);
+                        const opt = unitOptions.find((u) => u.id === e.target.value);
+                        setFormTenantId(opt?.tenantId ?? null);
+                        setLeaseTenantOptions(opt?.leaseTenants ?? []);
+                      }}>
                         <option value="">— Select a unit —</option>
                         {unitOptions.map((u) => (
                           <option key={u.id} value={u.id}>{u.label}</option>
                         ))}
                       </select>
                     </div>
+
+                    {leaseTenantOptions.length > 1 && (
+                      <div className="form-group">
+                        <label>Tenant</label>
+                        <select value={formTenantId ?? ''} onChange={(e) => setFormTenantId(e.target.value || null)}>
+                          {leaseTenantOptions.map((t) => (
+                            <option key={t.id} value={t.id}>{t.name}</option>
+                          ))}
+                        </select>
+                      </div>
+                    )}
 
                     <div className="form-group">
                       <label>Title (optional)</label>
