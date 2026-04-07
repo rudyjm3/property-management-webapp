@@ -209,6 +209,9 @@ interface UpdatePaymentData {
   amount?: number;
   type?: string;
   status?: string;
+  method?: string;
+  checkNumber?: string | null;
+  referenceNote?: string | null;
   paidAt?: string | null;
   dueDate?: string;
   notes?: string | null;

@@ -211,6 +211,8 @@ export const updatePaymentSchema = z.object({
   type: z.enum(PAYMENT_TYPES).optional(),
   status: z.enum(PAYMENT_STATUSES).optional(),
   method: z.enum(PAYMENT_METHODS).optional(),
+  checkNumber: z.string().max(50).nullable().optional(),
+  referenceNote: z.string().max(500).nullable().optional(),
   paidAt: z.string().datetime().nullable().optional(),
   dueDate: z.string().date().optional(),
   periodStart: z.string().date().nullable().optional(),

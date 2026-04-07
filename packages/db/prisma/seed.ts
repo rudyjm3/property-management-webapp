@@ -186,11 +186,63 @@ async function main() {
     data: { status: 'occupied' },
   });
 
+  // ─── Payments ────────────────────────────────────────────────────────────────
+
+  const now = new Date();
+  const thisMonthStart = new Date(now.getFullYear(), now.getMonth(), 1);
+  const thisMonthEnd   = new Date(now.getFullYear(), now.getMonth() + 1, 0);
+  const lastMonthStart = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+  const lastMonthEnd   = new Date(now.getFullYear(), now.getMonth(), 0);
+
+  // Current-month pending rent for all 8 leases
+  for (let i = 0; i < leases.length; i++) {
+    const lease  = leases[i];
+    const tenant = tenants[i];
+    const dueDate = new Date(now.getFullYear(), now.getMonth(), lease.rentDueDay ?? 1);
+
+    await prisma.payment.create({
+      data: {
+        leaseId:     lease.id,
+        tenantId:    tenant.id,
+        type:        'rent',
+        status:      'pending',
+        amount:      lease.rentAmount,
+        dueDate,
+        periodStart: thisMonthStart,
+        periodEnd:   thisMonthEnd,
+      },
+    });
+  }
+
+  // Prior-month completed rent for all 8 leases (gives dashboard non-zero history)
+  for (let i = 0; i < leases.length; i++) {
+    const lease  = leases[i];
+    const tenant = tenants[i];
+    const dueDate = new Date(now.getFullYear(), now.getMonth() - 1, lease.rentDueDay ?? 1);
+    const paidAt  = new Date(now.getFullYear(), now.getMonth() - 1, (lease.rentDueDay ?? 1) + 2);
+
+    await prisma.payment.create({
+      data: {
+        leaseId:     lease.id,
+        tenantId:    tenant.id,
+        type:        'rent',
+        status:      'completed',
+        method:      'ach',
+        amount:      lease.rentAmount,
+        dueDate,
+        paidAt,
+        periodStart: lastMonthStart,
+        periodEnd:   lastMonthEnd,
+      },
+    });
+  }
+
   console.log('Seed complete:');
   console.log(`  Organization: ${org.name} (${org.id})`);
   console.log(`  Property: ${property.name} — ${units.length} units`);
   console.log(`  Tenants: ${tenants.length} demo tenants`);
   console.log(`  Leases:  ${leases.length} active leases`);
+  console.log(`  Payments: ${leases.length} pending (this month) + ${leases.length} completed (last month)`);
   console.log('');
   console.log('  Login: rudyjm3@gmail.com (Supabase session preserved)');
   console.log('  Mobile test tenant: jordan.chen@demo.propflow.com — run npm run seed:test-tenant');
