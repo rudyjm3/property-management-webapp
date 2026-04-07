@@ -238,7 +238,7 @@ export default function DashboardPage() {
                 {paymentStats?.collectionRate ?? 0}%
               </div>
             </div>
-            <Link href="/payments" style={{ textDecoration: 'none' }}>
+            <Link href="/payments?status=pending" style={{ textDecoration: 'none' }}>
               <div className="stat-card" style={{ cursor: 'pointer', borderColor: (paymentStats?.overdueCount ?? 0) > 0 ? 'var(--color-danger)' : undefined }}>
                 <div className="stat-label">Overdue</div>
                 <div
