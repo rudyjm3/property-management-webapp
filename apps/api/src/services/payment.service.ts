@@ -102,7 +102,7 @@ export async function getPaymentStats(organizationId: string) {
       },
       include: paymentInclude,
       orderBy: { paidAt: 'desc' },
-      take: 5,
+      take: 10,
     }),
   ]);
 
