@@ -111,8 +111,10 @@ export default function DashboardPage() {
         const in30 = new Date(now); in30.setDate(now.getDate() + 30);
         const in60 = new Date(now); in60.setDate(now.getDate() + 60);
         const activeLeases = leases.filter((l: any) => l.status === 'active' && l.endDate);
+        // expiring30: leases ending within 0–30 days
         const expiring30 = activeLeases.filter((l: any) => new Date(l.endDate) <= in30).length;
-        const expiring60 = activeLeases.filter((l: any) => new Date(l.endDate) <= in60).length;
+        // expiring60: leases ending in 31–60 days only (not overlapping with expiring30)
+        const expiring60 = activeLeases.filter((l: any) => new Date(l.endDate) > in30 && new Date(l.endDate) <= in60).length;
         setLeaseSummary({ expiring30, expiring60 });
 
         // Expiring leases detail — within 60 days, sorted soonest first
@@ -294,7 +296,7 @@ export default function DashboardPage() {
         </Link>
         {!isMaintenance && (
           <>
-            <Link href="/leases" style={{ textDecoration: 'none' }}>
+            <Link href="/leases?expiry=30" style={{ textDecoration: 'none' }}>
               <div className="stat-card" style={{ cursor: 'pointer', borderColor: leaseSummary.expiring30 > 0 ? 'var(--color-danger)' : undefined }}>
                 <div className="stat-label">Leases Expiring (30d)</div>
                 <div className="stat-value" style={{ color: leaseSummary.expiring30 > 0 ? 'var(--color-danger)' : 'var(--color-success)' }}>
@@ -302,9 +304,9 @@ export default function DashboardPage() {
                 </div>
               </div>
             </Link>
-            <Link href="/leases" style={{ textDecoration: 'none' }}>
+            <Link href="/leases?expiry=60" style={{ textDecoration: 'none' }}>
               <div className="stat-card" style={{ cursor: 'pointer', borderColor: leaseSummary.expiring60 > 0 ? 'var(--color-warning)' : undefined }}>
-                <div className="stat-label">Leases Expiring (60d)</div>
+                <div className="stat-label">Leases Expiring (31–60d)</div>
                 <div className="stat-value" style={{ color: leaseSummary.expiring60 > 0 ? 'var(--color-warning)' : 'var(--color-success)' }}>
                   {leaseSummary.expiring60}
                 </div>

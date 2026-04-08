@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import { useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import { api } from '@/lib/api';
 
@@ -42,6 +43,16 @@ function expiryColorClass(endDate: string, status: string): string {
   return 'lease-expiry-green';
 }
 
+function expiryBadge(endDate: string, status: string): { label: string; bg: string; color: string } | null {
+  if (status === 'expired') return { label: 'Expired', bg: '#f3f4f6', color: '#6b7280' };
+  const days = daysUntilExpiry(endDate);
+  if (days < 0) return { label: 'Expired', bg: '#f3f4f6', color: '#6b7280' };
+  if (days <= 14) return { label: `${days}d left`, bg: '#fee2e2', color: '#991b1b' };
+  if (days <= 30) return { label: `${days}d left`, bg: '#ffedd5', color: '#9a3412' };
+  if (days <= 60) return { label: `${days}d left`, bg: '#fef9c3', color: '#854d0e' };
+  return null;
+}
+
 function statusBadgeClass(status: string): string {
   switch (status) {
     case 'active': return 'badge-occupied';
@@ -69,10 +80,12 @@ interface TenantOption {
 }
 
 export default function LeasesPage() {
+  const searchParams = useSearchParams();
   const [leases, setLeases] = useState<Lease[]>([]);
   const [loading, setLoading] = useState(true);
   const [showForm, setShowForm] = useState(false);
   const [error, setError] = useState('');
+  const [filterExpiry, setFilterExpiry] = useState(searchParams.get('expiry') ?? '');
 
   // Dropdown data for new lease form
   const [unitOptions, setUnitOptions] = useState<UnitOption[]>([]);
@@ -255,6 +268,14 @@ export default function LeasesPage() {
     return days >= 0 && days <= 60;
   }).length;
 
+  const filteredLeases = leases.filter((l) => {
+    if (!filterExpiry) return true;
+    if (filterExpiry === 'expired') return l.status === 'expired' || daysUntilExpiry(l.endDate) < 0;
+    const days = daysUntilExpiry(l.endDate);
+    if (l.status === 'expired' || days < 0) return false;
+    return days <= Number(filterExpiry);
+  });
+
   return (
     <>
       <style>{`
@@ -271,9 +292,22 @@ export default function LeasesPage() {
             {leases.length} total &middot; {activeCount} active &middot; {expiringCount} expiring within 60 days
           </p>
         </div>
-        <button className="btn btn-primary" onClick={openForm}>
-          + New Lease
-        </button>
+        <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+          <select
+            value={filterExpiry}
+            onChange={(e) => setFilterExpiry(e.target.value)}
+            style={{ padding: '6px 12px', border: '1px solid var(--color-border)', borderRadius: 'var(--radius)', fontSize: '14px', background: 'white' }}
+          >
+            <option value="">All Leases</option>
+            <option value="14">Expiring within 14 days</option>
+            <option value="30">Expiring within 30 days</option>
+            <option value="60">Expiring within 60 days</option>
+            <option value="expired">Expired</option>
+          </select>
+          <button className="btn btn-primary" onClick={openForm}>
+            + New Lease
+          </button>
+        </div>
       </div>
 
       {leases.length === 0 ? (
@@ -297,9 +331,16 @@ export default function LeasesPage() {
               </tr>
             </thead>
             <tbody>
-              {leases.map((lease) => {
+              {filteredLeases.length === 0 ? (
+                <tr>
+                  <td colSpan={8} style={{ textAlign: 'center', padding: '32px', color: 'var(--color-text-muted)' }}>
+                    No leases match the selected filter.
+                  </td>
+                </tr>
+              ) : filteredLeases.map((lease) => {
                 const primaryTenant = lease.participants.find((p) => p.isPrimary) ?? lease.participants[0];
                 const colorClass = expiryColorClass(lease.endDate, lease.status);
+                const badge = expiryBadge(lease.endDate, lease.status);
                 return (
                   <tr key={lease.id}>
                     <td>
@@ -336,8 +377,25 @@ export default function LeasesPage() {
                       )}
                     </td>
                     <td>${Number(lease.rentAmount).toLocaleString()}</td>
-                    <td>{new Date(lease.startDate).toLocaleDateString()}</td>
-                    <td className={colorClass}>{new Date(lease.endDate).toLocaleDateString()}</td>
+                    <td>{new Date(lease.startDate).toLocaleDateString('en-US', { timeZone: 'UTC' })}</td>
+                    <td>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+                        <span className={colorClass}>{new Date(lease.endDate).toLocaleDateString('en-US', { timeZone: 'UTC' })}</span>
+                        {badge && (
+                          <span style={{
+                            background: badge.bg,
+                            color: badge.color,
+                            borderRadius: '12px',
+                            padding: '1px 8px',
+                            fontSize: '11px',
+                            fontWeight: 600,
+                            whiteSpace: 'nowrap',
+                          }}>
+                            {badge.label}
+                          </span>
+                        )}
+                      </div>
+                    </td>
                     <td>
                       <span className={`badge ${statusBadgeClass(lease.status)}`}>
                         {lease.status.replace(/_/g, ' ')}
