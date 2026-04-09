@@ -57,7 +57,7 @@ export async function applyLateFees(organizationId?: string): Promise<LateFeeJob
       const graceCutoff = new Date(payment.dueDate);
       graceCutoff.setDate(graceCutoff.getDate() + graceDays);
 
-      if (today <= graceCutoff) {
+      if (today < graceCutoff) {
         result.skipped++;
         continue;
       }

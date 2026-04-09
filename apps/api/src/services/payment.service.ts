@@ -102,7 +102,7 @@ export async function getPaymentStats(organizationId: string) {
       },
       include: paymentInclude,
       orderBy: { paidAt: 'desc' },
-      take: 5,
+      take: 10,
     }),
   ]);
 
@@ -209,6 +209,9 @@ interface UpdatePaymentData {
   amount?: number;
   type?: string;
   status?: string;
+  method?: string;
+  checkNumber?: string | null;
+  referenceNote?: string | null;
   paidAt?: string | null;
   dueDate?: string;
   notes?: string | null;

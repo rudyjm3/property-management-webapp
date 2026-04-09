@@ -9,6 +9,7 @@ import routes from './routes';
 import { errorHandler } from './middleware/error-handler';
 import { startSlaBreachJob } from './jobs/slaBreachCheck';
 import { startLateFeeJob } from './jobs/lateFeeJob';
+import { startRentGenerationJob } from './jobs/rentGenerationJob';
 import stripeWebhookHandler from './webhooks/stripe';
 
 const app = express();
@@ -44,6 +45,7 @@ app.use(errorHandler);
 app.listen(PORT, () => {
   console.log(`PropFlow API running on http://localhost:${PORT}`);
   startSlaBreachJob();
+  startRentGenerationJob();
   startLateFeeJob();
 });
 

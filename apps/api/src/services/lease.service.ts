@@ -179,8 +179,10 @@ interface UpdateLeaseData {
   rentAmount?: number;
   depositAmount?: number;
   endDate?: string;
+  moveOutDate?: string | null;
   lateFeeAmount?: number;
   lateFeeGraceDays?: number;
+  securityDepositStatus?: string;
   notes?: string | null;
 }
 
@@ -200,6 +202,8 @@ export async function updateLease(
 
   const updateData: Record<string, unknown> = { ...data };
   if (data.endDate) updateData.endDate = new Date(data.endDate);
+  if (data.moveOutDate) updateData.moveOutDate = new Date(data.moveOutDate);
+  if (data.moveOutDate === null) updateData.moveOutDate = null;
 
   // If the update would set this lease back to a current status, ensure no other
   // current lease already exists on the same unit (guards against reactivating

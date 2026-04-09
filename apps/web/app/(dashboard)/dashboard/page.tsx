@@ -111,8 +111,10 @@ export default function DashboardPage() {
         const in30 = new Date(now); in30.setDate(now.getDate() + 30);
         const in60 = new Date(now); in60.setDate(now.getDate() + 60);
         const activeLeases = leases.filter((l: any) => l.status === 'active' && l.endDate);
+        // expiring30: leases ending within 0–30 days
         const expiring30 = activeLeases.filter((l: any) => new Date(l.endDate) <= in30).length;
-        const expiring60 = activeLeases.filter((l: any) => new Date(l.endDate) <= in60).length;
+        // expiring60: leases ending in 31–60 days only (not overlapping with expiring30)
+        const expiring60 = activeLeases.filter((l: any) => new Date(l.endDate) > in30 && new Date(l.endDate) <= in60).length;
         setLeaseSummary({ expiring30, expiring60 });
 
         // Expiring leases detail — within 60 days, sorted soonest first
@@ -238,7 +240,7 @@ export default function DashboardPage() {
                 {paymentStats?.collectionRate ?? 0}%
               </div>
             </div>
-            <Link href="/payments" style={{ textDecoration: 'none' }}>
+            <Link href="/payments?status=pending" style={{ textDecoration: 'none' }}>
               <div className="stat-card" style={{ cursor: 'pointer', borderColor: (paymentStats?.overdueCount ?? 0) > 0 ? 'var(--color-danger)' : undefined }}>
                 <div className="stat-label">Overdue</div>
                 <div
@@ -294,7 +296,7 @@ export default function DashboardPage() {
         </Link>
         {!isMaintenance && (
           <>
-            <Link href="/leases" style={{ textDecoration: 'none' }}>
+            <Link href="/leases?expiry=30" style={{ textDecoration: 'none' }}>
               <div className="stat-card" style={{ cursor: 'pointer', borderColor: leaseSummary.expiring30 > 0 ? 'var(--color-danger)' : undefined }}>
                 <div className="stat-label">Leases Expiring (30d)</div>
                 <div className="stat-value" style={{ color: leaseSummary.expiring30 > 0 ? 'var(--color-danger)' : 'var(--color-success)' }}>
@@ -302,9 +304,9 @@ export default function DashboardPage() {
                 </div>
               </div>
             </Link>
-            <Link href="/leases" style={{ textDecoration: 'none' }}>
+            <Link href="/leases?expiry=60" style={{ textDecoration: 'none' }}>
               <div className="stat-card" style={{ cursor: 'pointer', borderColor: leaseSummary.expiring60 > 0 ? 'var(--color-warning)' : undefined }}>
-                <div className="stat-label">Leases Expiring (60d)</div>
+                <div className="stat-label">Leases Expiring (31–60d)</div>
                 <div className="stat-value" style={{ color: leaseSummary.expiring60 > 0 ? 'var(--color-warning)' : 'var(--color-success)' }}>
                   {leaseSummary.expiring60}
                 </div>
@@ -335,14 +337,14 @@ export default function DashboardPage() {
                   </span>
                 )}
               </h3>
-              <Link href="/payments" style={{ fontSize: '13px' }}>View all</Link>
+              <Link href="/payments?status=pending" style={{ fontSize: '13px' }}>View all</Link>
             </div>
             {!paymentStats?.overduePayments?.length ? (
               <div style={{ padding: '24px', textAlign: 'center', color: 'var(--color-text-muted)', fontSize: '14px' }}>
                 No overdue payments
               </div>
             ) : (
-              <div>
+              <div style={{ maxHeight: '320px', overflowY: 'auto' }}>
                 {paymentStats.overduePayments.map((p, index) => (
                   <div key={`${p.id}-${index}`} style={{ padding: '12px 20px', borderBottom: '1px solid var(--color-border)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                     <div>
@@ -353,7 +355,7 @@ export default function DashboardPage() {
                         Unit {p.lease.unit.unitNumber} · {p.lease.unit.property.name}
                       </div>
                       <div style={{ fontSize: '12px', color: 'var(--color-danger)' }}>
-                        Due {new Date(p.dueDate).toLocaleDateString()}
+                        Due {new Date(p.dueDate).toLocaleDateString('en-US', { timeZone: 'UTC' })}
                       </div>
                     </div>
                     <div style={{ fontWeight: 700, color: 'var(--color-danger)', fontSize: '15px' }}>
@@ -371,14 +373,14 @@ export default function DashboardPage() {
           <div className="card-body" style={{ padding: '0' }}>
             <div style={{ padding: '16px 20px', borderBottom: '1px solid var(--color-border)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
               <h3 style={{ fontSize: '15px', fontWeight: 600 }}>Recent Payments</h3>
-              <Link href="/payments" style={{ fontSize: '13px' }}>View all</Link>
+              <Link href="/payments?status=completed" style={{ fontSize: '13px' }}>View all</Link>
             </div>
             {!paymentStats?.recentPayments?.length ? (
               <div style={{ padding: '24px', textAlign: 'center', color: 'var(--color-text-muted)', fontSize: '14px' }}>
                 No payments recorded yet
               </div>
             ) : (
-              <div>
+              <div style={{ maxHeight: '320px', overflowY: 'auto' }}>
                 {paymentStats.recentPayments.map((p, index) => (
                   <div key={`${p.id}-${index}`} style={{ padding: '12px 20px', borderBottom: '1px solid var(--color-border)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                     <div>

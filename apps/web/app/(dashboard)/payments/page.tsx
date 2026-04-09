@@ -11,6 +11,8 @@ interface Payment {
   type: string;
   status: string;
   method: string;
+  checkNumber: string | null;
+  referenceNote: string | null;
   stripePaymentIntentId: string | null;
   dueDate: string;
   paidAt: string | null;
@@ -76,6 +78,12 @@ const METHOD_LABELS: Record<string, string> = {
 const FILTER_STATUSES = ['', 'pending', 'completed', 'failed', 'waived', 'refunded'];
 const FILTER_TYPES = ['', 'rent', 'deposit', 'late_fee', 'pet_deposit', 'parking', 'credit', 'other'];
 
+/** Format a @db.Date string (UTC midnight) as a date without timezone shift. */
+function formatDate(dateStr: string | null | undefined): string {
+  if (!dateStr) return '—';
+  return new Date(dateStr).toLocaleDateString('en-US', { timeZone: 'UTC' });
+}
+
 export default function PaymentsPage() {
   const searchParams = useSearchParams();
   const [payments, setPayments] = useState<Payment[]>([]);
@@ -107,11 +115,30 @@ export default function PaymentsPage() {
   const [achError, setAchError] = useState('');
   const [achResult, setAchResult] = useState<{ clientSecret: string; paymentIntentId: string; status: string } | null>(null);
 
-  // Form options
+  // Mark Paid modal state
+  const [markPaidPayment, setMarkPaidPayment] = useState<Payment | null>(null);
+  const [markPaidMethod, setMarkPaidMethod] = useState('other');
+  const [markPaidCheckNumber, setMarkPaidCheckNumber] = useState('');
+  const [markPaidReferenceNote, setMarkPaidReferenceNote] = useState('');
+  const [markPaidSubmitting, setMarkPaidSubmitting] = useState(false);
+  const [markPaidError, setMarkPaidError] = useState('');
+
+  // Edit modal state
+  const [editPayment, setEditPayment] = useState<Payment | null>(null);
+  const [editMethod, setEditMethod] = useState('other');
+  const [editCheckNumber, setEditCheckNumber] = useState('');
+  const [editReferenceNote, setEditReferenceNote] = useState('');
+  const [editNotes, setEditNotes] = useState('');
+  const [editAmount, setEditAmount] = useState('');
+  const [editDueDate, setEditDueDate] = useState('');
+  const [editSubmitting, setEditSubmitting] = useState(false);
+  const [editError, setEditError] = useState('');
+
+  // Log Payment form options
   const [leaseOptions, setLeaseOptions] = useState<LeaseOption[]>([]);
   const [formLoading, setFormLoading] = useState(false);
 
-  // Form state
+  // Log Payment form state
   const [leaseId, setLeaseId] = useState('');
   const [tenantId, setTenantId] = useState('');
   const [amount, setAmount] = useState('');
@@ -182,7 +209,6 @@ export default function PaymentsPage() {
           tenants: l.participants.map((p: any) => p.tenant),
         }))
       );
-      // Default date to today
       setDueDate(new Date().toISOString().split('T')[0]);
     } catch (err) {
       console.error('Failed to load form data:', err);
@@ -293,12 +319,80 @@ export default function PaymentsPage() {
     }
   }
 
-  async function markAsPaid(paymentId: string) {
+  // ── Mark Paid modal ──────────────────────────────────────────────────────────
+
+  function openMarkPaid(payment: Payment) {
+    setMarkPaidPayment(payment);
+    setMarkPaidMethod('other');
+    setMarkPaidCheckNumber('');
+    setMarkPaidReferenceNote('');
+    setMarkPaidError('');
+  }
+
+  function closeMarkPaid() {
+    setMarkPaidPayment(null);
+    setMarkPaidError('');
+  }
+
+  async function handleMarkPaid() {
+    if (!markPaidPayment) return;
+    setMarkPaidSubmitting(true);
+    setMarkPaidError('');
     try {
-      await api.payments.update(paymentId, { status: 'completed' });
+      await api.payments.update(markPaidPayment.id, {
+        status: 'completed',
+        method: markPaidMethod,
+        checkNumber: markPaidCheckNumber || null,
+        referenceNote: markPaidReferenceNote || null,
+      });
+      closeMarkPaid();
       loadPayments();
-    } catch (err) {
-      console.error('Failed to update payment:', err);
+    } catch (err: any) {
+      setMarkPaidError(err.message || 'Failed to mark payment as paid');
+    } finally {
+      setMarkPaidSubmitting(false);
+    }
+  }
+
+  // ── Edit modal ───────────────────────────────────────────────────────────────
+
+  function openEditModal(payment: Payment) {
+    setEditPayment(payment);
+    setEditMethod(payment.method || 'other');
+    setEditCheckNumber(payment.checkNumber || '');
+    setEditReferenceNote(payment.referenceNote || '');
+    setEditNotes(payment.notes || '');
+    setEditAmount(String(Number(payment.amount)));
+    // dueDate comes as ISO UTC string; extract the date part for the input
+    setEditDueDate(payment.dueDate.split('T')[0]);
+    setEditError('');
+  }
+
+  function closeEditModal() {
+    setEditPayment(null);
+    setEditError('');
+  }
+
+  async function handleEditSubmit(e: React.FormEvent) {
+    e.preventDefault();
+    if (!editPayment) return;
+    setEditSubmitting(true);
+    setEditError('');
+    try {
+      await api.payments.update(editPayment.id, {
+        method: editMethod,
+        checkNumber: editCheckNumber || null,
+        referenceNote: editReferenceNote || null,
+        notes: editNotes || null,
+        amount: parseFloat(editAmount),
+        dueDate: editDueDate,
+      });
+      closeEditModal();
+      loadPayments();
+    } catch (err: any) {
+      setEditError(err.message || 'Failed to update payment');
+    } finally {
+      setEditSubmitting(false);
     }
   }
 
@@ -507,9 +601,14 @@ export default function PaymentsPage() {
                           )}
                         </div>
                       </td>
-                      <td>{METHOD_LABELS[payment.method] ?? payment.method}</td>
+                      <td>
+                        <div>{METHOD_LABELS[payment.method] ?? payment.method}</div>
+                        {payment.checkNumber && (
+                          <div style={{ fontSize: '11px', color: 'var(--color-text-muted)' }}>#{payment.checkNumber}</div>
+                        )}
+                      </td>
                       <td style={{ fontWeight: 600 }}>${Number(payment.amount).toLocaleString()}</td>
-                      <td>{new Date(payment.dueDate).toLocaleDateString()}</td>
+                      <td>{formatDate(payment.dueDate)}</td>
                       <td>
                         {payment.paidAt
                           ? new Date(payment.paidAt).toLocaleDateString()
@@ -532,7 +631,7 @@ export default function PaymentsPage() {
                           {payment.status === 'pending' && !payment.stripePaymentIntentId && (
                             <button
                               className="btn btn-sm btn-primary"
-                              onClick={() => markAsPaid(payment.id)}
+                              onClick={() => openMarkPaid(payment)}
                             >
                               Mark Paid
                             </button>
@@ -554,6 +653,12 @@ export default function PaymentsPage() {
                               Cancel ACH
                             </button>
                           )}
+                          <button
+                            className="btn btn-sm btn-secondary"
+                            onClick={() => openEditModal(payment)}
+                          >
+                            Edit
+                          </button>
                           <button
                             className="btn btn-sm btn-secondary"
                             style={{ color: 'var(--color-danger)' }}
@@ -681,6 +786,171 @@ export default function PaymentsPage() {
                 </button>
               )}
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* Mark Paid Modal */}
+      {markPaidPayment && (
+        <div className="modal-overlay" onClick={closeMarkPaid}>
+          <div className="modal" onClick={(e) => e.stopPropagation()} style={{ maxWidth: '420px' }}>
+            <div className="modal-header">
+              <h2>Mark as Paid</h2>
+              <button className="btn btn-sm btn-secondary" onClick={closeMarkPaid}>X</button>
+            </div>
+            <div className="modal-body">
+              {markPaidError && (
+                <div style={{ color: 'var(--color-danger)', marginBottom: '12px', fontSize: '14px' }}>
+                  {markPaidError}
+                </div>
+              )}
+              <p style={{ marginBottom: '16px', fontSize: '14px' }}>
+                Recording payment of <strong>${Number(markPaidPayment.amount).toLocaleString()}</strong> for{' '}
+                <strong>{markPaidPayment.tenant.name}</strong>
+              </p>
+              <div className="form-row">
+                <div className="form-group">
+                  <label>Payment Method</label>
+                  <select value={markPaidMethod} onChange={(e) => setMarkPaidMethod(e.target.value)}>
+                    <option value="cash">Cash</option>
+                    <option value="check">Check</option>
+                    <option value="money_order">Money Order</option>
+                    <option value="ach">ACH</option>
+                    <option value="card">Card</option>
+                    <option value="other">Other</option>
+                  </select>
+                </div>
+                {(markPaidMethod === 'check' || markPaidMethod === 'money_order') && (
+                  <div className="form-group">
+                    <label>{markPaidMethod === 'check' ? 'Check #' : 'Money Order #'}</label>
+                    <input
+                      type="text"
+                      placeholder="e.g. 1042"
+                      value={markPaidCheckNumber}
+                      onChange={(e) => setMarkPaidCheckNumber(e.target.value)}
+                    />
+                  </div>
+                )}
+              </div>
+              <div className="form-group">
+                <label>Reference / Note (optional)</label>
+                <input
+                  type="text"
+                  placeholder="e.g. dropped off at office"
+                  value={markPaidReferenceNote}
+                  onChange={(e) => setMarkPaidReferenceNote(e.target.value)}
+                />
+              </div>
+            </div>
+            <div className="modal-footer">
+              <button type="button" className="btn btn-secondary" onClick={closeMarkPaid}>
+                Cancel
+              </button>
+              <button
+                type="button"
+                className="btn btn-primary"
+                disabled={markPaidSubmitting}
+                onClick={handleMarkPaid}
+              >
+                {markPaidSubmitting ? 'Saving…' : 'Confirm Payment'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Edit Payment Modal */}
+      {editPayment && (
+        <div className="modal-overlay" onClick={closeEditModal}>
+          <div className="modal" onClick={(e) => e.stopPropagation()} style={{ maxWidth: '480px' }}>
+            <div className="modal-header">
+              <h2>Edit Payment</h2>
+              <button className="btn btn-sm btn-secondary" onClick={closeEditModal}>X</button>
+            </div>
+            <form onSubmit={handleEditSubmit}>
+              <div className="modal-body">
+                {editError && (
+                  <div style={{ color: 'var(--color-danger)', marginBottom: '12px', fontSize: '14px' }}>
+                    {editError}
+                  </div>
+                )}
+                <div style={{ marginBottom: '12px', fontSize: '13px', color: 'var(--color-text-muted)' }}>
+                  {editPayment.tenant.name} — {TYPE_LABELS[editPayment.type] ?? editPayment.type}
+                </div>
+                <div className="form-row">
+                  <div className="form-group">
+                    <label>Amount ($)</label>
+                    <input
+                      type="number"
+                      min="0.01"
+                      step="0.01"
+                      required
+                      value={editAmount}
+                      onChange={(e) => setEditAmount(e.target.value)}
+                    />
+                  </div>
+                  <div className="form-group">
+                    <label>Due Date</label>
+                    <input
+                      type="date"
+                      required
+                      value={editDueDate}
+                      onChange={(e) => setEditDueDate(e.target.value)}
+                    />
+                  </div>
+                </div>
+                <div className="form-row">
+                  <div className="form-group">
+                    <label>Payment Method</label>
+                    <select value={editMethod} onChange={(e) => setEditMethod(e.target.value)}>
+                      <option value="cash">Cash</option>
+                      <option value="check">Check</option>
+                      <option value="money_order">Money Order</option>
+                      <option value="ach">ACH</option>
+                      <option value="card">Card</option>
+                      <option value="other">Other</option>
+                    </select>
+                  </div>
+                  {(editMethod === 'check' || editMethod === 'money_order') && (
+                    <div className="form-group">
+                      <label>{editMethod === 'check' ? 'Check #' : 'Money Order #'}</label>
+                      <input
+                        type="text"
+                        placeholder="e.g. 1042"
+                        value={editCheckNumber}
+                        onChange={(e) => setEditCheckNumber(e.target.value)}
+                      />
+                    </div>
+                  )}
+                </div>
+                <div className="form-group">
+                  <label>Reference / Note</label>
+                  <input
+                    type="text"
+                    placeholder="e.g. ACH confirmation #, memo line"
+                    value={editReferenceNote}
+                    onChange={(e) => setEditReferenceNote(e.target.value)}
+                  />
+                </div>
+                <div className="form-group">
+                  <label>Notes (optional)</label>
+                  <textarea
+                    rows={2}
+                    placeholder="Additional notes..."
+                    value={editNotes}
+                    onChange={(e) => setEditNotes(e.target.value)}
+                  />
+                </div>
+              </div>
+              <div className="modal-footer">
+                <button type="button" className="btn btn-secondary" onClick={closeEditModal}>
+                  Cancel
+                </button>
+                <button type="submit" className="btn btn-primary" disabled={editSubmitting}>
+                  {editSubmitting ? 'Saving…' : 'Save Changes'}
+                </button>
+              </div>
+            </form>
           </div>
         </div>
       )}
