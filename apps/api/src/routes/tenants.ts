@@ -43,11 +43,34 @@ router.post('/', requireManagerAccess, validate(createTenantSchema), async (req:
 // PATCH /api/v1/organizations/:orgId/tenants/:tenantId
 router.patch('/:tenantId', requireManagerAccess, validate(updateTenantSchema), async (req: Request, res: Response, next: NextFunction) => {
   try {
+    // Fetch existing tenant before update so we can detect email changes
+    const existing = await prisma.tenant.findFirst({
+      where: { id: req.params.tenantId as string, organizationId: req.params.orgId as string, deletedAt: null },
+      select: { email: true, supabaseUserId: true },
+    });
+
     const tenant = await tenantService.updateTenant(
       req.params.orgId as string,
       req.params.tenantId as string,
       req.body
     );
+
+    // If email changed and tenant has a Supabase auth account, sync the email there too
+    if (
+      existing &&
+      existing.supabaseUserId &&
+      req.body.email &&
+      req.body.email !== existing.email
+    ) {
+      const { error } = await supabaseAdmin.auth.admin.updateUserById(existing.supabaseUserId, {
+        email: req.body.email,
+      });
+      if (error) {
+        console.error('Failed to sync tenant email to Supabase Auth:', error.message);
+        // Non-fatal — Prisma record is updated; log and continue
+      }
+    }
+
     res.json({ data: tenant });
   } catch (err) {
     next(err);
