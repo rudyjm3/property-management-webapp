@@ -93,8 +93,14 @@ router.post('/:tenantId/invite-portal', requireManagerAccess, async (req: Reques
     const redirectTo = `${process.env.APP_URL}/auth/callback?next=/reset-password`;
 
     if (tenant.supabaseUserId) {
-      // Already registered — send a password reset email (actually delivers the email)
-      const { error } = await supabaseAdmin.auth.resetPasswordForEmail(tenant.email, { redirectTo });
+      // Already registered — generate a server-side recovery link (token_hash based, no PKCE)
+      // resetPasswordForEmail() uses PKCE which requires a code_verifier cookie set by the
+      // browser client — calling it from the API server breaks that flow.
+      const { error } = await supabaseAdmin.auth.admin.generateLink({
+        type: 'recovery',
+        email: tenant.email,
+        options: { redirectTo },
+      });
       if (error) {
         res.status(400).json({ error: { code: 'INVITE_FAILED', message: error.message } });
         return;
