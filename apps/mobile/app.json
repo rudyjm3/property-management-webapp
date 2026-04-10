@@ -3,6 +3,7 @@
     "name": "PropFlow",
     "slug": "propflow-tenant",
     "version": "1.0.0",
+    "platforms": ["ios", "android"],
     "scheme": "propflow",
     "orientation": "portrait",
     "icon": "./assets/icon.png",

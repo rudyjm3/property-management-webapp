@@ -84,7 +84,7 @@ export async function runRentReminderJob(organizationId?: string) {
         tenantEmail: payment.tenant.email,
         unitNumber: unit.unitNumber,
         propertyName: property.name,
-        rentAmount: payment.amount,
+        rentAmount: payment.amount.toNumber(),
         dueDate: payment.dueDate,
         organizationName: org.name,
       });
@@ -170,10 +170,10 @@ export async function runOverdueRentJob(organizationId?: string) {
           tenantEmail: payment.tenant.email,
           unitNumber: unit.unitNumber,
           propertyName: property.name,
-          rentAmount: payment.amount,
+          rentAmount: payment.amount.toNumber(),
           dueDate: payment.dueDate,
           daysOverdue,
-          lateFeeAmount: payment.lease.lateFeeAmount ?? undefined,
+          lateFeeAmount: payment.lease.lateFeeAmount?.toNumber() ?? undefined,
           organizationName: org.name,
         })
       );
@@ -190,7 +190,7 @@ export async function runOverdueRentJob(organizationId?: string) {
               tenantName: payment.tenant.name,
               unitNumber: unit.unitNumber,
               propertyName: property.name,
-              rentAmount: payment.amount,
+              rentAmount: payment.amount.toNumber(),
               dueDate: payment.dueDate,
               daysOverdue,
               organizationName: org.name,

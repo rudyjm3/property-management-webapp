@@ -882,3 +882,315 @@ This appendix captures what is currently implemented in the repo beyond or diffe
 - Phase 1 and Phase 2 planned foundations/workflows are materially implemented in the current branch lineage, including properties/units/tenants/leases/payments/work-orders/messages/documents/notifications. (update 03-29-2026)
 - Phase 3 weeks 25-34 features are implemented across the mobile app and supporting API, including scaffold, maintenance submission, messaging/push, lease docs/payment history/profile, and settings/admin/renewal hardening. (update 04-04-2026)
 - Additional post-week-34 hardening landed for role enforcement and work-order attribution display. (update 04-05-2026)
+
+---
+
+## 12. Phase-by-Phase Implementation Status
+
+*Last updated: 2026-04-09. Status reflects the `fix/week1-build-blockers` branch.*
+
+> **Legend:** ✅ Done — ⚠️ Partial — ❌ Not yet built — 🔴 Blocker (pilot) — 🟡 Required (production)
+
+---
+
+### Phase 1 — Foundation
+
+| Item | Status | Notes |
+|---|---|---|
+| Monorepo scaffold (Turborepo, packages/db, packages/shared) | ✅ | |
+| Prisma schema — all core entities | ✅ | |
+| Supabase auth + org isolation middleware | ✅ | |
+| Property / Unit CRUD — API + web | ✅ | |
+| Tenant / Lease CRUD — API + web | ✅ | |
+| Manual payment logging | ✅ | |
+| Dashboard with KPI cards (clickable) | ✅ | |
+| Email notifications via Resend | ✅ | |
+| Document upload to S3 | ✅ | |
+| CI pipeline (GitHub Actions — web + API) | ✅ | Mobile not yet covered |
+| Role-based access (owner / manager / maintenance) | ✅ | |
+| Onboarding wizard — org name + first property | ⚠️ | Logo upload and billing step not implemented (`BUILD_OUTLINE.md:686`) |
+| Billing/settings — payment method, invoice history, plan management | ⚠️ | Currently read-only (`settings/billing/page.tsx`) |
+| Web TypeScript build passing | ✅ | Fixed 2026-04-09 |
+| API TypeScript build passing | ✅ | Fixed 2026-04-09 |
+
+**Pilot blockers:** Onboarding must complete without manual DB intervention. Build must be green.
+**Production gaps:** Billing/settings must be fully operational. Auth + CRUD integration tests needed. Audit trail for lease changes and payment voids.
+
+---
+
+### Phase 2 — Core Workflows
+
+| Item | Status | Notes |
+|---|---|---|
+| Stripe Connect onboarding for manager bank accounts | ✅ | `connect.ts` |
+| ACH payment initiation + Stripe webhook handling | ✅ | `payments.ts`, `stripe.ts` |
+| Ledger entries | ✅ | `ledger.service.ts` |
+| Work order CRUD, assignment, SLA breach job | ✅ | |
+| In-app messaging (REST polling, 5 s interval) | ✅ | WebSocket deferred to Phase 4+ |
+| Email notifications — rent reminders, overdue, lease expiry, late fee | ✅ | |
+| Late fee auto-apply job | ✅ | |
+| Rent generation job (monthly Payment records from leases) | ✅ | `rentGenerationJob.ts` |
+| Lease renewal with linkage tracking | ✅ | |
+| Vendor management | ✅ | Basic |
+| Staff roles + permissions | ✅ | |
+| Tenant list — search + operational filters | ❌ | Currently table-only; no search, no rent-status / expiry / work-order filter (`tenants/page.tsx:91`) |
+| Tenant detail — payment history section | ❌ | Not rendered on tenant detail screen (`tenants/[id]/page.tsx`) |
+| Tenant detail — manager message thread | ❌ | No conversation view from tenant detail |
+| Tenant detail — move-out workflow | ❌ | No deposit/disposition section |
+| Message file/photo attachments (web) | ❌ | Text-only currently |
+| ACH end-to-end flow validated (success + failure + refund) | ⚠️ | Routes exist; webhook → ledger path not smoke-tested |
+| Financial controls (reconciliation, duplicate prevention, audit) | ❌ | |
+
+**Pilot blockers:** Tenant list search/filter. Tenant detail payment history. Tenant detail message thread.
+**Production gaps:** Move-out workflow. Message attachments (if in scope). Financial reconciliation and audit trail.
+
+---
+
+### Phase 3 — Tenant Mobile App
+
+| Item | Status | Notes |
+|---|---|---|
+| Expo Router scaffold + auth flow (welcome → login → forgot-password) | ✅ | |
+| Home tab: rent due, open work orders, messages badge | ✅ | |
+| Payments tab: balance, Pay Now sheet, payment history + detail | ✅ | |
+| Maintenance tab: active orders + submit new (with photo upload) | ✅ | |
+| Messages tab: thread list → conversation screen | ✅ | |
+| Documents tab: lease/notices download | ✅ | |
+| Account tab: profile, emergency contacts, current lease, sign out | ✅ | |
+| Push token registration (Expo push) | ✅ | |
+| Mobile build (`expo export`) passing | ✅ | Fixed 2026-04-09 — added `platforms: ["ios","android"]` to app.json |
+| Mobile lint (ESLint v9) passing | ✅ | Fixed 2026-04-09 — created `eslint.config.mjs` |
+| Resident activation / invite-code entry screen | ❌ | Flow is welcome → login only; no invite-code path (`BUILD_OUTLINE.md:735`) |
+| Autopay / recurring payment toggle | ❌ | Not in Payments tab UI (`BUILD_OUTLINE.md:747`) |
+| Message photo/file attachments (mobile) | ❌ | Text-only in `conversation.tsx` (`BUILD_OUTLINE.md:757`) |
+| Notification preferences on Account tab | ❌ | Not implemented (`BUILD_OUTLINE.md:766`) |
+| Contact manager shortcut on Account/Home tab | ❌ | Not implemented (`BUILD_OUTLINE.md:766`) |
+| iOS + Android device smoke test | ❌ | Not evidenced |
+| App Store submission readiness (icons, splash, EAS config, privacy policy) | ❌ | `app.json` has bundle IDs; icons/splash assets are placeholders |
+| Mobile CI coverage | ❌ | CI covers web + API only |
+
+**Pilot blockers:** Fix mobile build + lint (done). Add invite-code activation screen. Add notification preferences + contact-manager shortcut. Smoke test on real device.
+**Production gaps:** Autopay toggle. Message attachments. Full App Store submission prep. Mobile E2E tests. Mobile CI.
+
+---
+
+### Cross-Cutting Status
+
+| Item | Status |
+|---|---|
+| Web build (`tsc --noEmit`) green | ✅ |
+| API build (`tsc --noEmit`) green | ✅ |
+| Mobile build (`expo export`) green | ✅ |
+| Mobile lint green | ✅ |
+| API automated tests runnable on clean install | ⚠️ |
+| Seed / demo environment end-to-end workflow | ⚠️ |
+| Real observability (logs, error monitoring, alerting) | ❌ |
+| Security review (auth, file access, org isolation, webhook HMAC) | ❌ |
+| Financial accuracy tests (payments, refunds, late fees, ledger) | ❌ |
+
+---
+
+## 13. Add-On Module Documentation
+
+> Add-on modules are Phase 4+ features. They are outside base-product scope and will not be built until the pilot gate is cleared and early user feedback has been collected. Each module is feature-flagged at the API middleware layer via `organization.active_modules` and billed as additional Stripe Subscription Items. UI components are gated behind a `<ModuleGate module="...">` wrapper.
+
+---
+
+### Module 1 — Advanced Tenant Onboarding
+**Target price:** $25–40/mo
+**Priority:** High
+
+**What it adds:**
+- Digital rental application with configurable question sets
+- Background and credit check integration (TransUnion SmartMove or similar)
+- E-lease signing via DocuSign or HelloSign
+- Move-in inspection template with timestamped photo capture
+- Screening consent capture (legally required before running any check)
+
+**Data hooks already in schema:**
+- `ssn_full_encrypted` (Tenant) — encrypted at rest, never logged
+- `screening_consent_at` (Tenant) — required before check is triggered
+- `govt_id_number` (Tenant) — stored encrypted
+
+**Dependencies:** Lease management, Stripe, Resend, third-party screening API
+
+---
+
+### Module 2 — Unit Intelligence & Appliance Registry
+**Target price:** $20–35/mo
+**Priority:** High
+
+**What it adds:**
+- Per-unit appliance records: make, model, serial number, warranty expiry, purchase date
+- Maintenance cost tracking per appliance over time
+- Age-based replacement alerts (e.g. HVAC approaching end of life)
+- QR code label generation for each appliance (scannable in the field)
+- Appliance-linked work orders (tie a work order directly to a specific appliance)
+
+**Data hooks already in schema:**
+- `appliance_count` (Unit) — maintained by module, surfaced on unit detail
+
+**Dependencies:** Unit management, S3
+
+---
+
+### Module 3 — Grounds & Property Maintenance
+**Target price:** $25–40/mo
+**Priority:** Medium
+
+**What it adds:**
+- Recurring task scheduling for common areas (landscaping, HVAC filter changes, pest control)
+- Vendor assignment to recurring tasks
+- Inspection log with completion photo requirement
+- Task completion history and compliance reporting
+
+**Dependencies:** Work orders, Vendor management
+
+---
+
+### Module 4 — Advanced Payments & Accounting
+**Target price:** $30–50/mo
+**Priority:** Medium
+
+**What it adds:**
+- Card payment acceptance (in addition to ACH)
+- Partial payment handling with balance carry-forward
+- Security deposit reconciliation against move-in/move-out inspections
+- Owner disbursements with configurable management fee deductions
+- Profit & loss reporting by property
+- Schedule E export for tax filing
+
+**Data hooks already in schema:**
+- `tax_parcel_id` (Property) — needed for Schedule E
+
+**Dependencies:** Stripe, Payment ledger, Owner Portal module (for disbursements)
+
+---
+
+### Module 5 — Vendor & Contractor Management
+**Target price:** $20–30/mo
+**Priority:** Medium
+
+**What it adds:**
+- Full vendor database with contact info, license numbers, insurance certificates
+- License and insurance expiry alerts (flagged on dashboard before expiry)
+- Work history and spend tracking per vendor
+- Star ratings and notes per work order completion
+- Preferred vendor assignments per property or category
+
+**Data hooks already in schema:**
+- `w9_on_file` (Vendor) — required for contractor 1099 tax reporting
+
+**Dependencies:** Work orders
+
+---
+
+### Module 6 — Inspections & Compliance
+**Target price:** $25–40/mo
+**Priority:** Medium
+
+**What it adds:**
+- Move-in and move-out inspection templates (configurable per property type)
+- Scheduled inspection workflows (annual, semi-annual)
+- Photo and video documentation with timestamp + GPS metadata
+- Digital signature capture from tenant and manager
+- Automated inspection report PDF generation
+- Move-in vs. move-out comparison view (basis for deposit disposition)
+
+**Data hooks already in schema:**
+- `last_inspection_at` (Unit) — timestamp of most recent inspection of any type
+
+**Dependencies:** Unit management, S3
+
+---
+
+### Module 7 — Lease Renewal
+**Target price:** $15–25/mo
+**Priority:** Medium
+
+**What it adds:**
+- Renewal offer workflow: manager creates offer → tenant receives in app → accept/counter/decline
+- Rent increase history and audit trail
+- Market rate comparison (manual entry or third-party data feed)
+- Countersignature workflow for finalized renewal terms
+
+> **Note:** Basic lease renewal (one-click, no tenant-facing offer flow) is already in base product. This module adds the full negotiation and countersignature workflow.
+
+**Dependencies:** Lease management, Messaging
+
+---
+
+### Module 8 — Eviction Management
+**Target price:** $30–50/mo
+**Priority:** Medium
+
+**What it adds:**
+- Notice type tracking: pay-or-quit, cure-or-quit, unconditional quit
+- Delivery method logging: certified mail, personal service, posting
+- Court date and case number tracking
+- Jurisdiction-specific notice period lookup by state
+- Eviction timeline dashboard with deadline flags
+
+**Dependencies:** Lease management, Property jurisdiction data (`state` field)
+
+---
+
+### Module 9 — Owner Portal
+**Target price:** $25–40/mo
+**Priority:** Low
+
+**What it adds:**
+- Owner entity above the property level (owner of record separate from manager)
+- Ownership percentage tracking for co-owned properties
+- Owner-facing read-only portal (separate login)
+- Distribution and disbursement records with PDF statements
+- Owner-level reporting: income, expenses, NOI by property
+
+**Dependencies:** Payments, Properties, Advanced Payments & Accounting module
+
+---
+
+### Module 10 — Communications & Resident Engagement
+**Target price:** $20–30/mo
+**Priority:** Low
+
+**What it adds:**
+- Bulk messaging to all tenants in a property or unit group
+- Automated notice delivery (rent increase, policy change, community alert)
+- SMS integration via Twilio (opt-in, per-tenant)
+- Community bulletin board visible in tenant mobile app
+- Resident satisfaction surveys (move-in, maintenance completion, annual)
+
+> **Note:** Base messaging (one-to-one manager ↔ tenant thread) is already in base product. This module adds broadcast, automation, SMS, and community features.
+
+**Dependencies:** Messaging, Notifications, Twilio
+
+---
+
+### Module 11 — Reporting & Analytics
+**Target price:** $25–40/mo
+**Priority:** Low
+
+**What it adds:**
+- Custom report builder (drag-and-drop column selection)
+- Portfolio performance trends (occupancy rate, rent collected, vacancy days)
+- Maintenance spend breakdown by unit, property, category
+- Rent roll report (standard format for lenders and accountants)
+- Vacancy rate history and market comparison
+- Export to CSV and PDF
+
+**Dependencies:** All base modules; enhanced by all add-on modules
+
+---
+
+### Open API / Developer Platform
+**Target availability:** Premium plan or enterprise tier (Phase 5+)
+
+**What it adds:**
+- REST API with per-organization API keys
+- Webhook subscriptions (push events to external systems)
+- Official API documentation (OpenAPI spec)
+- Rate limiting and usage dashboard
+- Integration library: QuickBooks, Yardi, property listing feeds
+
+**Competitive context:** Buildium exposes an Open API on their Premium plan. AppFolio exposes API access by plan tier. PropFlow's open API is a long-term platform play that enables integrations with accounting software, listing platforms, and custom tooling that larger customers need.

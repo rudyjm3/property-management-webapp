@@ -58,7 +58,7 @@ router.patch('/:tenantId', requireManagerAccess, validate(updateTenantSchema), a
 router.post('/:tenantId/invite-portal', requireManagerAccess, async (req: Request, res: Response, next: NextFunction) => {
   try {
     const tenant = await prisma.tenant.findFirst({
-      where: { id: req.params.tenantId, organizationId: req.params.orgId, deletedAt: null },
+      where: { id: req.params.tenantId as string, organizationId: req.params.orgId as string, deletedAt: null },
       select: { id: true, email: true, name: true, supabaseUserId: true },
     });
 
