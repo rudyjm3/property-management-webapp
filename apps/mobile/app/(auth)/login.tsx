@@ -18,7 +18,11 @@ export default function LoginScreen() {
     setLoading(true); setError(null);
     const { error: authError } = await supabase.auth.signInWithPassword({ email: email.trim().toLowerCase(), password });
     setLoading(false);
-    if (authError) setError(authError.message);
+    if (authError) {
+      setError(authError.message);
+    } else {
+      router.replace('/(tabs)');
+    }
   }
 
   return (
