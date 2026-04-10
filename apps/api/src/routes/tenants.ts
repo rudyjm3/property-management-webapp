@@ -64,6 +64,7 @@ router.patch('/:tenantId', requireManagerAccess, validate(updateTenantSchema), a
     ) {
       const { error } = await supabaseAdmin.auth.admin.updateUserById(existing.supabaseUserId, {
         email: req.body.email,
+        email_confirm: true,
       });
       if (error) {
         console.error('Failed to sync tenant email to Supabase Auth:', error.message);
