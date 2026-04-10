@@ -113,8 +113,8 @@ export default function DashboardPage() {
         const activeLeases = leases.filter((l: any) => l.status === 'active' && l.endDate);
         // expiring30: leases ending within 0–30 days
         const expiring30 = activeLeases.filter((l: any) => new Date(l.endDate) <= in30).length;
-        // expiring60: leases ending in 31–60 days only (not overlapping with expiring30)
-        const expiring60 = activeLeases.filter((l: any) => new Date(l.endDate) > in30 && new Date(l.endDate) <= in60).length;
+        // expiring60: leases ending within 0–60 days (matches the "Expiring (60D)" filter)
+        const expiring60 = activeLeases.filter((l: any) => new Date(l.endDate) <= in60).length;
         setLeaseSummary({ expiring30, expiring60 });
 
         // Expiring leases detail — within 60 days, sorted soonest first
@@ -304,9 +304,9 @@ export default function DashboardPage() {
                 </div>
               </div>
             </Link>
-            <Link href="/leases?expiry=60&min=31" style={{ textDecoration: 'none' }}>
+            <Link href="/leases?expiry=60" style={{ textDecoration: 'none' }}>
               <div className="stat-card" style={{ cursor: 'pointer', borderColor: leaseSummary.expiring60 > 0 ? 'var(--color-warning)' : undefined }}>
-                <div className="stat-label">Leases Expiring (31–60d)</div>
+                <div className="stat-label">Leases Expiring (60D)</div>
                 <div className="stat-value" style={{ color: leaseSummary.expiring60 > 0 ? 'var(--color-warning)' : 'var(--color-success)' }}>
                   {leaseSummary.expiring60}
                 </div>

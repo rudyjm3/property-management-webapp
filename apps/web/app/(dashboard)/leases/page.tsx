@@ -86,7 +86,6 @@ export default function LeasesPage() {
   const [showForm, setShowForm] = useState(false);
   const [error, setError] = useState('');
   const [filterExpiry, setFilterExpiry] = useState(searchParams.get('expiry') ?? '');
-  const filterMin = Number(searchParams.get('min') ?? 0);
 
   // Dropdown data for new lease form
   const [unitOptions, setUnitOptions] = useState<UnitOption[]>([]);
@@ -274,8 +273,7 @@ export default function LeasesPage() {
     if (filterExpiry === 'expired') return l.status === 'expired' || daysUntilExpiry(l.endDate) < 0;
     const days = daysUntilExpiry(l.endDate);
     if (l.status === 'expired' || days < 0) return false;
-    const max = Number(filterExpiry);
-    return days >= filterMin && days <= max;
+    return days <= Number(filterExpiry);
   });
 
   return (
