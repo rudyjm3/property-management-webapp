@@ -304,7 +304,7 @@ export default function DashboardPage() {
                 </div>
               </div>
             </Link>
-            <Link href="/leases?expiry=60" style={{ textDecoration: 'none' }}>
+            <Link href="/leases?expiry=60&min=31" style={{ textDecoration: 'none' }}>
               <div className="stat-card" style={{ cursor: 'pointer', borderColor: leaseSummary.expiring60 > 0 ? 'var(--color-warning)' : undefined }}>
                 <div className="stat-label">Leases Expiring (31–60d)</div>
                 <div className="stat-value" style={{ color: leaseSummary.expiring60 > 0 ? 'var(--color-warning)' : 'var(--color-success)' }}>
