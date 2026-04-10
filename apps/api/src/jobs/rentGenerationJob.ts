@@ -1,4 +1,5 @@
 import { prisma } from '@propflow/db';
+import { CURRENT_LEASE_STATUSES } from '../constants';
 
 const INTERVAL_MS = 24 * 60 * 60 * 1000; // 24 hours
 
@@ -18,7 +19,7 @@ export async function generateRentPayments(organizationId?: string): Promise<Ren
 
   const activeLeases = await prisma.lease.findMany({
     where: {
-      status: 'active',
+      status: { in: [...CURRENT_LEASE_STATUSES] },
       deletedAt: null,
       ...(organizationId
         ? { unit: { property: { organizationId } } }

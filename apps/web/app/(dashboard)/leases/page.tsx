@@ -273,7 +273,9 @@ export default function LeasesPage() {
     if (filterExpiry === 'expired') return l.status === 'expired' || daysUntilExpiry(l.endDate) < 0;
     const days = daysUntilExpiry(l.endDate);
     if (l.status === 'expired' || days < 0) return false;
-    return days <= Number(filterExpiry);
+    const max = Number(filterExpiry);
+    const min = max > 30 ? 31 : 0;
+    return days >= min && days <= max;
   });
 
   return (
