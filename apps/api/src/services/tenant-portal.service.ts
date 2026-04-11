@@ -166,9 +166,9 @@ export async function getTenantDashboard(tenantId: string) {
   });
   const activeUnitIds = leaseParticipants.map((p) => p.lease.unit.id);
 
-  const [nextPayment, openWorkOrdersCount, unreadMessagesCount, activeLease] = await Promise.all([
-    // Next pending payment for this tenant
-    prisma.payment.findFirst({
+  const [pendingPayments, openWorkOrdersCount, unreadMessagesCount, activeLease] = await Promise.all([
+    // All pending payments for this tenant (rent, late fees, etc.)
+    prisma.payment.findMany({
       where: {
         tenantId,
         status: 'pending',
@@ -180,6 +180,7 @@ export async function getTenantDashboard(tenantId: string) {
         amount: true,
         dueDate: true,
         status: true,
+        type: true,
         stripePaymentIntentId: true,
       },
     }),
@@ -232,15 +233,14 @@ export async function getTenantDashboard(tenantId: string) {
   ]);
 
   return {
-    nextPayment: nextPayment
-      ? {
-          id: nextPayment.id,
-          amount: Number(nextPayment.amount),
-          dueDate: nextPayment.dueDate,
-          status: nextPayment.status,
-          stripePaymentIntentId: nextPayment.stripePaymentIntentId,
-        }
-      : null,
+    pendingPayments: pendingPayments.map((p) => ({
+      id: p.id,
+      amount: Number(p.amount),
+      dueDate: p.dueDate,
+      status: p.status,
+      type: p.type,
+      stripePaymentIntentId: p.stripePaymentIntentId,
+    })),
     openWorkOrdersCount,
     unreadMessagesCount,
     activeLease: activeLease?.lease ?? null,
@@ -394,6 +394,73 @@ export async function initiateTenantPayment(
   });
 
   return { clientSecret: pi.client_secret!, paymentIntentId: pi.id, status: pi.status };
+}
+
+// ─── Initiate Multi-Payment (combined ACH for rent + late fees) ───────────────
+
+export async function initiateMultiTenantPayment(
+  tenantId: string,
+  orgId: string,
+  paymentIds: string[]
+) {
+  if (!paymentIds.length) {
+    throw new AppError(400, 'NO_PAYMENTS', 'At least one paymentId is required.');
+  }
+
+  const freshOrg = await prisma.organization.findUniqueOrThrow({ where: { id: orgId } });
+
+  if (freshOrg.stripeAccountStatus !== 'active') {
+    throw new AppError(400, 'CONNECT_NOT_ACTIVE', 'Payments are not yet enabled. Please contact your property manager.');
+  }
+
+  const payments = await prisma.payment.findMany({
+    where: { id: { in: paymentIds }, deletedAt: null },
+    include: { tenant: { select: { id: true, name: true } } },
+  });
+
+  if (payments.length !== paymentIds.length) {
+    throw new AppError(404, 'PAYMENT_NOT_FOUND', 'One or more payments not found.');
+  }
+
+  // Security: all payments must belong to this tenant
+  for (const payment of payments) {
+    if (payment.tenantId !== tenantId) {
+      throw new AppError(403, 'FORBIDDEN', 'You cannot initiate payment on behalf of another tenant.');
+    }
+    if (payment.status !== 'pending') {
+      throw new AppError(400, 'PAYMENT_NOT_PENDING', `Payment ${payment.id} is not pending.`);
+    }
+  }
+
+  // Idempotent: if all payments already share the same PI, return it
+  const existingPiIds = [...new Set(payments.map((p) => p.stripePaymentIntentId).filter(Boolean))];
+  if (existingPiIds.length === 1) {
+    const { default: Stripe } = await import('stripe');
+    const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!, { apiVersion: '2025-02-24.acacia' });
+    const pi = await stripe.paymentIntents.retrieve(existingPiIds[0]!);
+    return { clientSecret: pi.client_secret!, paymentIntentId: pi.id, status: pi.status, paymentIds };
+  }
+
+  const firstPayment = payments[0]!;
+  const totalAmount = payments.reduce((sum, p) => sum + Number(p.amount), 0);
+  const types = payments.map((p) => p.type).join(', ');
+
+  const pi = await stripeService.createMultiPaymentIntent({
+    leaseId: firstPayment.leaseId,
+    paymentIds,
+    tenantName: firstPayment.tenant.name,
+    amount: totalAmount,
+    stripeAccountId: freshOrg.stripeAccountId!,
+    description: `Payment for lease ${firstPayment.leaseId}: ${types}`,
+  });
+
+  // Store the PI ID on all payment records
+  await prisma.payment.updateMany({
+    where: { id: { in: paymentIds } },
+    data: { stripePaymentIntentId: pi.id, method: 'ach' },
+  });
+
+  return { clientSecret: pi.client_secret!, paymentIntentId: pi.id, status: pi.status, paymentIds };
 }
 
 // ─── Work Orders ──────────────────────────────────────────────────────────────

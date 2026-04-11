@@ -9,7 +9,7 @@ const requireManagerAccess = requireRoles(['owner', 'manager']);
 // GET /api/v1/organizations/:orgId/messages/threads
 router.get('/threads', requireManagerAccess, async (req: Request, res: Response, next: NextFunction) => {
   try {
-    const threads = await messageService.listThreads(req.params.orgId);
+    const threads = await messageService.listThreads(req.params.orgId as string);
     res.json({ data: threads });
   } catch (err) {
     next(err);
@@ -19,7 +19,7 @@ router.get('/threads', requireManagerAccess, async (req: Request, res: Response,
 // GET /api/v1/organizations/:orgId/messages/threads/:threadId
 router.get('/threads/:threadId', requireManagerAccess, async (req: Request, res: Response, next: NextFunction) => {
   try {
-    const messages = await messageService.getThread(req.params.orgId, req.params.threadId);
+    const messages = await messageService.getThread(req.params.orgId as string, req.params.threadId as string);
     res.json({ data: messages });
   } catch (err) {
     next(err);
@@ -36,7 +36,7 @@ router.post('/', requireManagerAccess, async (req: Request, res: Response, next:
       return;
     }
 
-    const message = await messageService.sendMessage(req.params.orgId, {
+    const message = await messageService.sendMessage(req.params.orgId as string, {
       senderUserId,
       recipientTenantId,
       body,

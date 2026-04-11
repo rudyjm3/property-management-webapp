@@ -1,4 +1,4 @@
-import { prisma } from '@propflow/db';
+import { prisma, Prisma } from '@propflow/db';
 import { AppError } from '../middleware/error-handler';
 import { CURRENT_LEASE_STATUSES } from '../constants';
 
@@ -48,9 +48,9 @@ export async function createProperty(
   const { organizationId: _, ...rest } = data;
   return prisma.property.create({
     data: {
-      ...rest,
       organization: { connect: { id: organizationId } },
-    },
+      ...rest,
+    } as Prisma.PropertyCreateInput,
     include: { _count: { select: { units: true } } },
   });
 }

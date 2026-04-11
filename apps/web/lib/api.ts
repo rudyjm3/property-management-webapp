@@ -280,10 +280,11 @@ export const api = {
       }),
   },
   notifications: {
-    list: (params?: { userId?: string; unreadOnly?: boolean }) => {
+    list: (params?: { userId?: string; unreadOnly?: boolean; limit?: number }) => {
       const query = new URLSearchParams();
       if (params?.userId) query.set('userId', params.userId);
       if (params?.unreadOnly) query.set('unreadOnly', 'true');
+      if (params?.limit) query.set('limit', String(params.limit));
       const qs = query.toString();
       return apiFetch<any[]>(`/api/v1/organizations/${_orgId}/notifications${qs ? `?${qs}` : ''}`);
     },

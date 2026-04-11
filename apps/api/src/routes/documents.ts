@@ -13,15 +13,8 @@ const router = Router({ mergeParams: true });
 
 const requireManagerAccess = requireRoles(['owner', 'manager']);
 
-/** Express Request extended with properties set by auth middleware. */
-interface AuthedRequest extends Request {
-  user?: {
-    userId: string;
-  };
-}
-
 /** Resolve the calling user's ID from auth middleware or the x-user-id header. */
-function resolveUserId(req: AuthedRequest): string {
+function resolveUserId(req: Request): string {
   const userId = req.user?.userId ?? (req.headers['x-user-id'] as string | undefined);
   if (!userId) throw new AppError(401, 'UNAUTHORIZED', 'Missing user identity');
   return userId;
@@ -33,7 +26,7 @@ router.post(
   '/upload-url',
   requireManagerAccess,
   validate(requestUploadSchema),
-  async (req: AuthedRequest, res: Response, next: NextFunction) => {
+  async (req: Request, res: Response, next: NextFunction) => {
     try {
       const userId = resolveUserId(req);
       const result = await documentService.requestUpload(
@@ -54,7 +47,7 @@ router.post(
   '/',
   requireManagerAccess,
   validate(confirmUploadSchema),
-  async (req: AuthedRequest, res: Response, next: NextFunction) => {
+  async (req: Request, res: Response, next: NextFunction) => {
     try {
       const userId = resolveUserId(req);
       const document = await documentService.confirmUpload(
@@ -74,7 +67,7 @@ router.post(
 router.get(
   '/',
   requireManagerAccess,
-  async (req: AuthedRequest, res: Response, next: NextFunction) => {
+  async (req: Request, res: Response, next: NextFunction) => {
     try {
       const parsed = listDocumentsSchema.safeParse(req.query);
       if (!parsed.success) {
@@ -97,7 +90,7 @@ router.get(
 router.get(
   '/:docId/download-url',
   requireManagerAccess,
-  async (req: AuthedRequest, res: Response, next: NextFunction) => {
+  async (req: Request, res: Response, next: NextFunction) => {
     try {
       const result = await documentService.getDownloadUrl(
         req.params.orgId as string,
@@ -114,7 +107,7 @@ router.get(
 router.delete(
   '/:docId',
   requireManagerAccess,
-  async (req: AuthedRequest, res: Response, next: NextFunction) => {
+  async (req: Request, res: Response, next: NextFunction) => {
     try {
       await documentService.deleteDocument(
         req.params.orgId as string,

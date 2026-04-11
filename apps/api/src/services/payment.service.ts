@@ -1,4 +1,5 @@
 import { prisma } from '@propflow/db';
+import { PaymentType, PaymentStatus } from '@propflow/db';
 import { AppError } from '../middleware/error-handler';
 
 // ─── Shared include shape ─────────────────────────────────────────────────────
@@ -40,8 +41,8 @@ export async function listPayments(organizationId: string, opts: ListPaymentsOpt
       lease: { unit: { property: { organizationId } } },
       ...(leaseId ? { leaseId } : {}),
       ...(tenantId ? { tenantId } : {}),
-      ...(status ? { status } : {}),
-      ...(type ? { type } : {}),
+      ...(status ? { status: status as PaymentStatus } : {}),
+      ...(type ? { type: type as PaymentType } : {}),
       ...(cursor ? { id: { lt: cursor } } : {}),
     },
     include: paymentInclude,
@@ -189,8 +190,8 @@ export async function createPayment(organizationId: string, data: CreatePaymentD
       lease: { connect: { id: data.leaseId } },
       tenant: { connect: { id: data.tenantId } },
       amount: data.amount,
-      type: data.type,
-      status: data.status,
+      type: data.type as PaymentType,
+      status: data.status as PaymentStatus,
       dueDate: new Date(data.dueDate),
       paidAt: data.status === 'completed'
         ? (data.paidAt ? new Date(data.paidAt) : new Date())

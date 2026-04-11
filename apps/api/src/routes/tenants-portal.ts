@@ -74,6 +74,25 @@ router.post('/payments/initiate', async (req: Request, res: Response, next: Next
 });
 
 
+// POST /api/v1/tenant/payments/initiate-multi
+router.post('/payments/initiate-multi', async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const { tenantId, orgId } = req.tenant!;
+    const { paymentIds } = req.body as { paymentIds: string[] };
+
+    if (!Array.isArray(paymentIds) || paymentIds.length === 0) {
+      res.status(400).json({ error: { code: 'MISSING_PAYMENT_IDS', message: 'paymentIds must be a non-empty array.' } });
+      return;
+    }
+
+    const result = await tenantPortalService.initiateMultiTenantPayment(tenantId, orgId, paymentIds);
+    res.json({ data: result });
+  } catch (err) {
+    next(err);
+  }
+});
+
+
 // ─── Work Orders ─────────────────────────────────────────────────────────────
 
 // GET /api/v1/tenant/work-orders

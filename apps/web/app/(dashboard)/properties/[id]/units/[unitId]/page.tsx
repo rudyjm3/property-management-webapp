@@ -150,7 +150,7 @@ export default function UnitDetailPage() {
   if (loading) return <div className="loading">Loading unit...</div>;
   if (!unit) return <div className="loading">Unit not found</div>;
 
-  const activeLease = unit.leases.find((l) => l.status === 'active');
+  const activeLease = unit.leases.find((l) => ['active', 'month_to_month', 'notice_given'].includes(l.status));
   const primaryTenant = activeLease?.participants.find((p) => p.isPrimary)?.tenant;
   const hasUnitAddress = !!(unit.address || unit.city || unit.state || unit.zip);
   const resolvedAddress = `${unit.address ?? unit.property.address}, ${unit.city ?? unit.property.city}, ${unit.state ?? unit.property.state} ${unit.zip ?? unit.property.zip}`;

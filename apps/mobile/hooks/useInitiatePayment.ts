@@ -7,7 +7,18 @@ export function useInitiatePayment() {
   return useMutation({
     mutationFn: (paymentId: string) => tenantApi.initiatePayment(paymentId),
     onSuccess: () => {
-      // Refresh dashboard and payments after initiating
+      queryClient.invalidateQueries({ queryKey: ['dashboard'] });
+      queryClient.invalidateQueries({ queryKey: ['payments'] });
+    },
+  });
+}
+
+export function useInitiateMultiPayment() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: (paymentIds: string[]) => tenantApi.initiateMultiPayment(paymentIds),
+    onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['dashboard'] });
       queryClient.invalidateQueries({ queryKey: ['payments'] });
     },

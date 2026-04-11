@@ -128,6 +128,37 @@ export async function createPaymentIntent(
   });
 }
 
+// ─── Create combined ACH PaymentIntent for multiple line items ────────────────
+
+export interface CreateMultiPaymentIntentOptions {
+  leaseId: string;
+  paymentIds: string[]; // all line item payment IDs (rent, late fees, etc.)
+  tenantName: string;
+  amount: number; // total dollars — converted to cents internally
+  stripeAccountId: string;
+  description?: string;
+}
+
+export async function createMultiPaymentIntent(
+  opts: CreateMultiPaymentIntentOptions
+): Promise<Stripe.PaymentIntent> {
+  const stripe = getStripe();
+
+  return stripe.paymentIntents.create({
+    amount: Math.round(opts.amount * 100),
+    currency: 'usd',
+    payment_method_types: ['us_bank_account'],
+    transfer_data: { destination: opts.stripeAccountId },
+    description: opts.description ?? `Payment for lease ${opts.leaseId}`,
+    metadata: {
+      leaseId: opts.leaseId,
+      // Store all IDs comma-separated; webhook uses this to complete all line items
+      paymentIds: opts.paymentIds.join(','),
+      tenantName: opts.tenantName,
+    },
+  });
+}
+
 // ─── Cancel a PaymentIntent ───────────────────────────────────────────────────
 
 export async function cancelPaymentIntent(

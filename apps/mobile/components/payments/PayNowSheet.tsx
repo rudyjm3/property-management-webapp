@@ -1,39 +1,54 @@
 import { useState } from 'react';
 import { View, Text, Modal, TouchableOpacity, ActivityIndicator, StyleSheet } from 'react-native';
 import { useStripe } from '@stripe/stripe-react-native';
-import { useInitiatePayment } from '@/hooks/useInitiatePayment';
+import { useInitiateMultiPayment } from '@/hooks/useInitiatePayment';
+import { useAuth } from '@/contexts/AuthContext';
 import { Button } from '@/components/ui/Button';
-import type { TenantDashboard } from '@propflow/shared';
+import type { TenantPendingPayment } from '@propflow/shared';
 
 interface PayNowSheetProps {
   visible: boolean;
-  payment: NonNullable<TenantDashboard['nextPayment']>;
+  payments: TenantPendingPayment[];
   onClose: () => void;
   onSuccess: () => void;
 }
 
-function formatCurrency(cents: number): string {
-  return new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(cents);
+function formatCurrency(amount: number): string {
+  return new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(amount);
+}
+
+function formatPaymentType(type: string): string {
+  return type.replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase());
 }
 
 type Step = 'confirm' | 'processing' | 'success' | 'error';
 
-export function PayNowSheet({ visible, payment, onClose, onSuccess }: PayNowSheetProps) {
+export function PayNowSheet({ visible, payments, onClose, onSuccess }: PayNowSheetProps) {
   const { collectBankAccountForPayment, confirmPayment } = useStripe();
-  const initiateMutation = useInitiatePayment();
+  const initiateMutation = useInitiateMultiPayment();
+  const { profile } = useAuth();
   const [step, setStep] = useState<Step>('confirm');
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+
+  const total = payments.reduce((sum, p) => sum + p.amount, 0);
+  const paymentIds = payments.map((p) => p.id);
+
+  // Earliest due date across all pending payments
+  const earliestDue = payments
+    .map((p) => p.dueDate)
+    .filter(Boolean)
+    .sort((a, b) => new Date(a!).getTime() - new Date(b!).getTime())[0];
 
   async function handlePay() {
     setStep('processing');
     setErrorMessage(null);
 
     try {
-      const { clientSecret } = await initiateMutation.mutateAsync(payment.id);
+      const { clientSecret } = await initiateMutation.mutateAsync(paymentIds);
 
       const { error: collectError } = await collectBankAccountForPayment(clientSecret, {
         paymentMethodType: 'USBankAccount',
-        paymentMethodData: { billingDetails: { name: '' } },
+        paymentMethodData: { billingDetails: { name: profile?.name ?? '' } },
       });
 
       if (collectError) {
@@ -80,7 +95,7 @@ export function PayNowSheet({ visible, payment, onClose, onSuccess }: PayNowShee
     >
       <View style={styles.container}>
         <View style={styles.header}>
-          <Text style={styles.headerTitle}>Pay Rent</Text>
+          <Text style={styles.headerTitle}>Pay Now</Text>
           <TouchableOpacity onPress={handleClose}>
             <Text style={styles.closeButton}>×</Text>
           </TouchableOpacity>
@@ -90,11 +105,33 @@ export function PayNowSheet({ visible, payment, onClose, onSuccess }: PayNowShee
           {step === 'confirm' && (
             <View style={styles.confirmContainer}>
               <View style={styles.amountBox}>
-                <Text style={styles.amountLabel}>Amount due</Text>
-                <Text style={styles.amountValue}>{formatCurrency(payment.amount)}</Text>
-                {payment.dueDate && (
+                {/* Line items */}
+                {payments.map((p) => (
+                  <View key={p.id} style={styles.lineItem}>
+                    <Text style={styles.lineItemLabel}>{formatPaymentType(p.type)}</Text>
+                    <Text style={styles.lineItemAmount}>{formatCurrency(p.amount)}</Text>
+                  </View>
+                ))}
+
+                {/* Divider + total */}
+                {payments.length > 1 && (
+                  <>
+                    <View style={styles.divider} />
+                    <View style={styles.lineItem}>
+                      <Text style={styles.totalLabel}>Total</Text>
+                      <Text style={styles.totalAmount}>{formatCurrency(total)}</Text>
+                    </View>
+                  </>
+                )}
+
+                {/* Single-item shows the large amount display */}
+                {payments.length === 1 && (
+                  <Text style={styles.singleAmount}>{formatCurrency(total)}</Text>
+                )}
+
+                {earliestDue && (
                   <Text style={styles.amountDate}>
-                    Due {new Date(payment.dueDate).toLocaleDateString('en-US', {
+                    Due {new Date(earliestDue).toLocaleDateString('en-US', {
                       month: 'long',
                       day: 'numeric',
                       year: 'numeric',
@@ -155,10 +192,15 @@ const styles = StyleSheet.create({
   closeButton: { fontSize: 28, color: '#9ca3af', lineHeight: 32 },
   body: { flex: 1, paddingHorizontal: 24, paddingTop: 24 },
   confirmContainer: { gap: 16 },
-  amountBox: { backgroundColor: '#f9fafb', borderRadius: 16, padding: 20 },
-  amountLabel: { fontSize: 14, color: '#6b7280', marginBottom: 4 },
-  amountValue: { fontSize: 40, fontWeight: '700', color: '#111827' },
-  amountDate: { fontSize: 14, color: '#6b7280', marginTop: 8 },
+  amountBox: { backgroundColor: '#f9fafb', borderRadius: 16, padding: 20, gap: 10 },
+  lineItem: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
+  lineItemLabel: { fontSize: 15, color: '#374151' },
+  lineItemAmount: { fontSize: 15, fontWeight: '600', color: '#111827' },
+  divider: { height: 1, backgroundColor: '#e5e7eb', marginVertical: 4 },
+  totalLabel: { fontSize: 16, fontWeight: '700', color: '#111827' },
+  totalAmount: { fontSize: 16, fontWeight: '700', color: '#111827' },
+  singleAmount: { fontSize: 40, fontWeight: '700', color: '#111827', marginTop: 4 },
+  amountDate: { fontSize: 13, color: '#6b7280', marginTop: 2 },
   infoBox: { backgroundColor: '#eff6ff', borderRadius: 12, padding: 16 },
   infoTitle: { fontSize: 14, fontWeight: '500', color: '#1d4ed8' },
   infoBody: { fontSize: 12, color: '#2563eb', marginTop: 4 },

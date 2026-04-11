@@ -222,7 +222,6 @@ export default function MessagesPage() {
                   width: '100%',
                   textAlign: 'left',
                   padding: '14px 16px',
-                  borderBottom: '1px solid var(--color-border)',
                   background: activeThreadId === thread.threadId ? 'var(--color-hover)' : 'transparent',
                   cursor: 'pointer',
                   border: 'none',

@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { View, Text, TextInput, TouchableOpacity, KeyboardAvoidingView, Platform, StyleSheet } from 'react-native';
+import { View, Text, TextInput, TouchableOpacity, KeyboardAvoidingView, Platform, StyleSheet, Pressable } from 'react-native';
 import { useRouter } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { supabase } from '@/lib/supabase';
@@ -11,13 +11,18 @@ export default function LoginScreen() {
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [showPassword, setShowPassword] = useState(false);
 
   async function handleLogin() {
     if (!email.trim() || !password) { setError('Please enter your email and password.'); return; }
     setLoading(true); setError(null);
     const { error: authError } = await supabase.auth.signInWithPassword({ email: email.trim().toLowerCase(), password });
     setLoading(false);
-    if (authError) setError(authError.message);
+    if (authError) {
+      setError(authError.message);
+    } else {
+      router.replace('/(tabs)');
+    }
   }
 
   return (
@@ -36,7 +41,19 @@ export default function LoginScreen() {
             </View>
             <View>
               <Text style={styles.label}>Password</Text>
-              <TextInput style={styles.input} value={password} onChangeText={setPassword} placeholder="••••••••" secureTextEntry autoComplete="password" />
+              <View style={styles.passwordWrap}>
+                <TextInput
+                  style={styles.passwordInput}
+                  value={password}
+                  onChangeText={setPassword}
+                  placeholder="••••••••"
+                  secureTextEntry={!showPassword}
+                  autoComplete="password"
+                />
+                <Pressable onPress={() => setShowPassword((v) => !v)} style={styles.eyeBtn} hitSlop={8}>
+                  <Text style={styles.eyeIcon}>{showPassword ? '🙈' : '👁️'}</Text>
+                </Pressable>
+              </View>
             </View>
             {error && <Text style={styles.error}>{error}</Text>}
             <Button title="Sign In" onPress={handleLogin} loading={loading} style={styles.mt} />
@@ -61,6 +78,10 @@ const styles = StyleSheet.create({
   form: { gap: 16 },
   label: { fontSize: 14, fontWeight: '500', color: '#374151', marginBottom: 6 },
   input: { borderWidth: 1, borderColor: '#e5e7eb', borderRadius: 12, paddingHorizontal: 16, paddingVertical: 12, fontSize: 16, backgroundColor: '#f9fafb' },
+  passwordWrap: { flexDirection: 'row', alignItems: 'center', borderWidth: 1, borderColor: '#e5e7eb', borderRadius: 12, backgroundColor: '#f9fafb' },
+  passwordInput: { flex: 1, paddingHorizontal: 16, paddingVertical: 12, fontSize: 16 },
+  eyeBtn: { paddingHorizontal: 14 },
+  eyeIcon: { fontSize: 18 },
   error: { color: '#ef4444', fontSize: 14 },
   mt: { marginTop: 8 },
   forgotWrap: { alignItems: 'center', marginTop: 8 },

@@ -67,18 +67,44 @@ export default function HomeScreen() {
 
         <Card style={styles.cardGap}>
           {isLoading ? <Text style={styles.muted}>Loading…</Text>
-            : data?.nextPayment ? (
-              <View style={{ gap: 12 }}>
-                <View>
-                  <Text style={styles.muted}>Next payment</Text>
-                  <Text style={styles.amount}>{formatCurrency(data.nextPayment.amount)}</Text>
-                  <Text style={styles.muted}>Due {new Date(data.nextPayment.dueDate!).toLocaleDateString('en-US', { month: 'long', day: 'numeric' })} · {daysUntil(data.nextPayment.dueDate!)} days away</Text>
+            : data?.pendingPayments?.length ? (() => {
+              const total = data.pendingPayments.reduce((sum, p) => sum + p.amount, 0);
+              const earliest = data.pendingPayments
+                .map((p) => p.dueDate)
+                .filter(Boolean)
+                .sort((a, b) => new Date(a!).getTime() - new Date(b!).getTime())[0];
+              return (
+                <View style={{ gap: 12 }}>
+                  <View style={{ gap: 6 }}>
+                    <Text style={styles.muted}>Balance due</Text>
+                    {data.pendingPayments.map((p) => (
+                      <View key={p.id} style={styles.lineRow}>
+                        <Text style={styles.lineLabel}>{p.type.replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase())}</Text>
+                        <Text style={styles.lineAmt}>{formatCurrency(p.amount)}</Text>
+                      </View>
+                    ))}
+                    {data.pendingPayments.length > 1 && (
+                      <View style={[styles.lineRow, styles.totalRow]}>
+                        <Text style={styles.totalLabel}>Total</Text>
+                        <Text style={styles.totalAmt}>{formatCurrency(total)}</Text>
+                      </View>
+                    )}
+                    {data.pendingPayments.length === 1 && (
+                      <Text style={styles.amount}>{formatCurrency(total)}</Text>
+                    )}
+                    {earliest && (
+                      <Text style={styles.muted}>
+                        Due {new Date(earliest).toLocaleDateString('en-US', { month: 'long', day: 'numeric' })} · {daysUntil(earliest)} days away
+                      </Text>
+                    )}
+                  </View>
+                  <Button title="Pay Now" onPress={() => setPaySheetVisible(true)} />
                 </View>
-                <Button title="Pay Now" onPress={() => setPaySheetVisible(true)} />
-              </View>
-            ) : (
+              );
+            })()
+            : (
               <View>
-                <Text style={styles.muted}>Next payment</Text>
+                <Text style={styles.muted}>Balance due</Text>
                 <Text style={styles.noPayment}>No payments due</Text>
               </View>
             )}
@@ -109,8 +135,8 @@ export default function HomeScreen() {
         </TouchableOpacity>
       </ScrollView>
 
-      {data?.nextPayment && (
-        <PayNowSheet visible={paySheetVisible} payment={data.nextPayment} onClose={() => setPaySheetVisible(false)} onSuccess={() => refetch()} />
+      {!!data?.pendingPayments?.length && (
+        <PayNowSheet visible={paySheetVisible} payments={data.pendingPayments} onClose={() => setPaySheetVisible(false)} onSuccess={() => refetch()} />
       )}
     </SafeAreaView>
   );
@@ -135,6 +161,12 @@ const styles = StyleSheet.create({
   muted: { color: '#6b7280', fontSize: 14 },
   amount: { fontSize: 32, fontWeight: '700', color: '#111827', marginVertical: 4 },
   noPayment: { fontSize: 17, fontWeight: '600', color: '#16a34a', marginTop: 4 },
+  lineRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
+  lineLabel: { fontSize: 14, color: '#374151' },
+  lineAmt: { fontSize: 14, fontWeight: '500', color: '#111827' },
+  totalRow: { borderTopWidth: 1, borderTopColor: '#e5e7eb', paddingTop: 8, marginTop: 2 },
+  totalLabel: { fontSize: 15, fontWeight: '700', color: '#111827' },
+  totalAmt: { fontSize: 15, fontWeight: '700', color: '#111827' },
   row: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   countNum: { fontSize: 28, fontWeight: '700', color: '#111827', marginTop: 4 },
 });
