@@ -240,6 +240,14 @@ export async function updateLease(
       await tx.unit.update({ where: { id: existing.unitId }, data: { status: 'notice' } });
     }
 
+    // Propagate rent amount change to all pending payments for this lease
+    if (data.rentAmount !== undefined) {
+      await tx.payment.updateMany({
+        where: { leaseId, status: 'pending', deletedAt: null },
+        data: { amount: data.rentAmount },
+      });
+    }
+
     return updated;
   });
 
