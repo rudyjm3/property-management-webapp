@@ -464,7 +464,7 @@ export default function TenantDetailPage() {
                 <tbody>
                   {tenant.payments.map((p) => (
                     <tr key={p.id}>
-                      <td>{new Date(p.dueDate).toLocaleDateString()}</td>
+                      <td>{new Date(p.dueDate).toLocaleDateString('en-US', { timeZone: 'UTC' })}</td>
                       <td style={{ textTransform: 'capitalize' }}>{p.type.replace('_', ' ')}</td>
                       <td style={{ fontWeight: 600 }}>${Number(p.amount).toLocaleString()}</td>
                       <td>
