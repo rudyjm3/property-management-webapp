@@ -76,7 +76,16 @@ const METHOD_LABELS: Record<string, string> = {
 };
 
 const FILTER_STATUSES = ['', 'pending', 'completed', 'failed', 'waived', 'refunded'];
-const FILTER_TYPES = ['', 'rent', 'deposit', 'late_fee', 'pet_deposit', 'parking', 'credit', 'other'];
+const FILTER_TYPES = [
+  '',
+  'rent',
+  'deposit',
+  'late_fee',
+  'pet_deposit',
+  'parking',
+  'credit',
+  'other',
+];
 
 /** Format a @db.Date string (UTC midnight) as a date without timezone shift. */
 function formatDate(dateStr: string | null | undefined): string {
@@ -92,7 +101,10 @@ export default function PaymentsPage() {
   const [filterType, setFilterType] = useState(searchParams.get('type') ?? '');
   const [filterPropertyId, setFilterPropertyId] = useState('');
   const [filterTenantId, setFilterTenantId] = useState('');
-  const [propertiesForFilter, setPropertiesForFilter] = useState<Array<{ id: string; name: string }>>([]);
+  const [searchPayment, setSearchPayment] = useState('');
+  const [propertiesForFilter, setPropertiesForFilter] = useState<
+    Array<{ id: string; name: string }>
+  >([]);
   const [tenantsForFilter, setTenantsForFilter] = useState<Array<{ id: string; name: string }>>([]);
   const [showForm, setShowForm] = useState(false);
   const [formError, setFormError] = useState('');
@@ -107,13 +119,19 @@ export default function PaymentsPage() {
   const [ledgerLoading, setLedgerLoading] = useState(false);
 
   // Connect status (for ACH initiation eligibility)
-  const [connectStatus, setConnectStatus] = useState<'not_connected' | 'pending' | 'active' | 'restricted'>('not_connected');
+  const [connectStatus, setConnectStatus] = useState<
+    'not_connected' | 'pending' | 'active' | 'restricted'
+  >('not_connected');
 
   // ACH modal state
   const [achPayment, setAchPayment] = useState<Payment | null>(null);
   const [achLoading, setAchLoading] = useState(false);
   const [achError, setAchError] = useState('');
-  const [achResult, setAchResult] = useState<{ clientSecret: string; paymentIntentId: string; status: string } | null>(null);
+  const [achResult, setAchResult] = useState<{
+    clientSecret: string;
+    paymentIntentId: string;
+    status: string;
+  } | null>(null);
 
   // Mark Paid modal state
   const [markPaidPayment, setMarkPaidPayment] = useState<Payment | null>(null);
@@ -173,7 +191,8 @@ export default function PaymentsPage() {
   }, [loadPayments]);
 
   useEffect(() => {
-    api.connect.getStatus()
+    api.connect
+      .getStatus()
       .then((s) => setConnectStatus(s.stripeAccountStatus))
       .catch(() => {});
   }, []);
@@ -190,7 +209,8 @@ export default function PaymentsPage() {
   useEffect(() => {
     if (activeTab !== 'ledger') return;
     setLedgerLoading(true);
-    api.ledger.list({ limit: 50 })
+    api.ledger
+      .list({ limit: 50 })
       .then((entries) => setLedgerEntries(entries as LedgerEntry[]))
       .catch(console.error)
       .finally(() => setLedgerLoading(false));
@@ -310,7 +330,9 @@ export default function PaymentsPage() {
     setLateFeeJobResult(null);
     try {
       const result = await api.notifications.triggerLateFees();
-      setLateFeeJobResult(`Applied ${result.lateFees.applied} late fee(s) — ${result.lateFees.skipped} skipped`);
+      setLateFeeJobResult(
+        `Applied ${result.lateFees.applied} late fee(s) — ${result.lateFees.skipped} skipped`
+      );
       await loadPayments();
     } catch (err: any) {
       setLateFeeJobResult(`Error: ${err.message}`);
@@ -413,6 +435,25 @@ export default function PaymentsPage() {
   const totalPending = payments
     .filter((p) => p.status === 'pending')
     .reduce((sum, p) => sum + Number(p.amount), 0);
+  const visiblePayments = payments.filter((payment) => {
+    if (searchPayment) {
+      const query = searchPayment.toLowerCase();
+      const matchesSearch =
+        payment.tenant.name.toLowerCase().includes(query) ||
+        payment.tenant.email.toLowerCase().includes(query) ||
+        payment.lease.unit.unitNumber.toLowerCase().includes(query) ||
+        payment.lease.unit.property.name.toLowerCase().includes(query);
+      if (!matchesSearch) return false;
+    }
+
+    if (filterPropertyId && payment.lease.unit.property.id !== filterPropertyId) return false;
+    if (filterTenantId && payment.tenant.id !== filterTenantId) return false;
+
+    return true;
+  });
+  const hasActivePaymentFilters = Boolean(
+    searchPayment || filterStatus || filterType || filterPropertyId || filterTenantId
+  );
 
   const selectedLeaseForForm = leaseOptions.find((l) => l.id === leaseId);
 
@@ -422,12 +463,15 @@ export default function PaymentsPage() {
         <div>
           <h1 className="page-title">Payments</h1>
           <p className="page-subtitle">
-            {payments.length} records &middot; ${totalCollected.toLocaleString()} collected &middot; ${totalPending.toLocaleString()} pending
+            {payments.length} records &middot; ${totalCollected.toLocaleString()} collected &middot;
+            ${totalPending.toLocaleString()} pending
           </p>
         </div>
         <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
           {lateFeeJobResult && (
-            <span style={{ fontSize: '13px', color: 'var(--color-text-muted)' }}>{lateFeeJobResult}</span>
+            <span style={{ fontSize: '13px', color: 'var(--color-text-muted)' }}>
+              {lateFeeJobResult}
+            </span>
           )}
           <button
             className="btn btn-secondary"
@@ -460,7 +504,14 @@ export default function PaymentsPage() {
       </div>
 
       {/* Tabs */}
-      <div style={{ display: 'flex', gap: '0', marginBottom: '24px', borderBottom: '1px solid var(--color-border)' }}>
+      <div
+        style={{
+          display: 'flex',
+          gap: '0',
+          marginBottom: '24px',
+          borderBottom: '1px solid var(--color-border)',
+        }}
+      >
         {(['payments', 'ledger'] as const).map((tab) => (
           <button
             key={tab}
@@ -489,70 +540,166 @@ export default function PaymentsPage() {
       {/* Payments tab */}
       {activeTab === 'payments' && (
         <>
-          <div style={{ display: 'flex', gap: '12px', marginBottom: '20px', flexWrap: 'wrap' }}>
-            <select
-              value={filterStatus}
-              onChange={(e) => setFilterStatus(e.target.value)}
-              style={{ padding: '6px 12px', border: '1px solid var(--color-border)', borderRadius: 'var(--radius)', fontSize: '14px', background: 'white' }}
-            >
-              <option value="">All Statuses</option>
-              {FILTER_STATUSES.filter(Boolean).map((s) => (
-                <option key={s} value={s}>{s.charAt(0).toUpperCase() + s.slice(1)}</option>
-              ))}
-            </select>
+          <div className="filter-bar">
+            <div className="filter-search">
+              <label className="filter-label" htmlFor="payment-search">
+                Search
+              </label>
+              <div className="filter-search-input-wrap">
+                <svg
+                  className="filter-search-icon"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2.5"
+                >
+                  <circle cx="11" cy="11" r="8" />
+                  <path d="m21 21-4.35-4.35" />
+                </svg>
+                <input
+                  id="payment-search"
+                  type="text"
+                  placeholder="Tenant, email, unit or property..."
+                  value={searchPayment}
+                  onChange={(e) => setSearchPayment(e.target.value)}
+                  className={`filter-search-input${searchPayment ? ' has-clear' : ''}`}
+                />
+                {searchPayment && (
+                  <button
+                    type="button"
+                    aria-label="Clear payment search"
+                    onClick={() => setSearchPayment('')}
+                    style={{
+                      position: 'absolute',
+                      right: '8px',
+                      top: '50%',
+                      transform: 'translateY(-50%)',
+                      background: 'none',
+                      border: 'none',
+                      cursor: 'pointer',
+                      color: 'var(--color-text-muted)',
+                      fontSize: '16px',
+                      lineHeight: 1,
+                      padding: '0 2px',
+                    }}
+                  >
+                    &times;
+                  </button>
+                )}
+              </div>
+            </div>
 
-            <select
-              value={filterType}
-              onChange={(e) => setFilterType(e.target.value)}
-              style={{ padding: '6px 12px', border: '1px solid var(--color-border)', borderRadius: 'var(--radius)', fontSize: '14px', background: 'white' }}
-            >
-              <option value="">All Types</option>
-              {FILTER_TYPES.filter(Boolean).map((t) => (
-                <option key={t} value={t}>{TYPE_LABELS[t]}</option>
-              ))}
-            </select>
+            <div className="filter-divider" />
 
-            <select
-              value={filterPropertyId}
-              onChange={(e) => setFilterPropertyId(e.target.value)}
-              style={{ padding: '6px 12px', border: '1px solid var(--color-border)', borderRadius: 'var(--radius)', fontSize: '14px', background: 'white' }}
-            >
-              <option value="">All Properties</option>
-              {propertiesForFilter.map((p) => (
-                <option key={p.id} value={p.id}>{p.name}</option>
-              ))}
-            </select>
-
-            <select
-              value={filterTenantId}
-              onChange={(e) => setFilterTenantId(e.target.value)}
-              style={{ padding: '6px 12px', border: '1px solid var(--color-border)', borderRadius: 'var(--radius)', fontSize: '14px', background: 'white' }}
-            >
-              <option value="">All Tenants</option>
-              {tenantsForFilter.map((t) => (
-                <option key={t.id} value={t.id}>{t.name}</option>
-              ))}
-            </select>
-
-            {(filterStatus || filterType || filterPropertyId || filterTenantId) && (
-              <button
-                className="btn btn-sm btn-secondary"
-                onClick={() => { setFilterStatus(''); setFilterType(''); setFilterPropertyId(''); setFilterTenantId(''); }}
+            <div className="filter-group">
+              <label className="filter-label" htmlFor="payment-status-filter">
+                Status
+              </label>
+              <select
+                id="payment-status-filter"
+                value={filterStatus}
+                onChange={(e) => setFilterStatus(e.target.value)}
+                className={`filter-select${filterStatus ? ' filter-select-active-primary' : ''}`}
               >
-                Clear Filters
-              </button>
+                <option value="">All Statuses</option>
+                {FILTER_STATUSES.filter(Boolean).map((s) => (
+                  <option key={s} value={s}>
+                    {s.charAt(0).toUpperCase() + s.slice(1)}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            <div className="filter-group">
+              <label className="filter-label" htmlFor="payment-type-filter">
+                Type
+              </label>
+              <select
+                id="payment-type-filter"
+                value={filterType}
+                onChange={(e) => setFilterType(e.target.value)}
+                className={`filter-select${filterType ? ' filter-select-active-primary' : ''}`}
+              >
+                <option value="">All Types</option>
+                {FILTER_TYPES.filter(Boolean).map((t) => (
+                  <option key={t} value={t}>
+                    {TYPE_LABELS[t]}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            <div className="filter-group filter-group-wide">
+              <label className="filter-label" htmlFor="payment-property-filter">
+                Property
+              </label>
+              <select
+                id="payment-property-filter"
+                value={filterPropertyId}
+                onChange={(e) => setFilterPropertyId(e.target.value)}
+                className={`filter-select${filterPropertyId ? ' filter-select-active-primary' : ''}`}
+              >
+                <option value="">All Properties</option>
+                {propertiesForFilter.map((p) => (
+                  <option key={p.id} value={p.id}>
+                    {p.name}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            <div className="filter-group filter-group-wide">
+              <label className="filter-label" htmlFor="payment-tenant-filter">
+                Tenant
+              </label>
+              <select
+                id="payment-tenant-filter"
+                value={filterTenantId}
+                onChange={(e) => setFilterTenantId(e.target.value)}
+                className={`filter-select${filterTenantId ? ' filter-select-active-primary' : ''}`}
+              >
+                <option value="">All Tenants</option>
+                {tenantsForFilter.map((t) => (
+                  <option key={t.id} value={t.id}>
+                    {t.name}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            {hasActivePaymentFilters && (
+              <div className="filter-summary">
+                <span className="filter-label">Results</span>
+                <div className="filter-summary-row">
+                  <span className="filter-count">{visiblePayments.length}</span>
+                  <button
+                    type="button"
+                    className="filter-clear-button"
+                    onClick={() => {
+                      setSearchPayment('');
+                      setFilterStatus('');
+                      setFilterType('');
+                      setFilterPropertyId('');
+                      setFilterTenantId('');
+                    }}
+                  >
+                    Clear filters
+                  </button>
+                </div>
+              </div>
             )}
           </div>
 
           {loading ? (
             <div className="loading">Loading payments...</div>
-          ) : payments.filter((p) =>
-              (!filterPropertyId || p.lease.unit.property.id === filterPropertyId) &&
-              (!filterTenantId || p.tenant.id === filterTenantId)
-            ).length === 0 ? (
+          ) : visiblePayments.length === 0 ? (
             <div className="empty-state">
               <h3>No payments found</h3>
-              <p>{filterStatus || filterType || filterPropertyId || filterTenantId ? 'Try adjusting your filters.' : 'Log the first payment to get started.'}</p>
+              <p>
+                {hasActivePaymentFilters
+                  ? 'Try adjusting your filters.'
+                  : 'Log the first payment to get started.'}
+              </p>
             </div>
           ) : (
             <div className="table-container">
@@ -571,19 +718,20 @@ export default function PaymentsPage() {
                   </tr>
                 </thead>
                 <tbody>
-                  {payments.filter((p) =>
-                    (!filterPropertyId || p.lease.unit.property.id === filterPropertyId) &&
-                    (!filterTenantId || p.tenant.id === filterTenantId)
-                  ).map((payment) => (
+                  {visiblePayments.map((payment) => (
                     <tr key={payment.id}>
                       <td>
                         <Link href={`/tenants/${payment.tenant.id}`} style={{ fontWeight: 500 }}>
                           {payment.tenant.name}
                         </Link>
-                        <div style={{ fontSize: '12px', color: 'var(--color-text-muted)' }}>{payment.tenant.email}</div>
+                        <div style={{ fontSize: '12px', color: 'var(--color-text-muted)' }}>
+                          {payment.tenant.email}
+                        </div>
                       </td>
                       <td>
-                        <Link href={`/properties/${payment.lease.unit.property.id}/units/${payment.lease.unit.id}`}>
+                        <Link
+                          href={`/properties/${payment.lease.unit.property.id}/units/${payment.lease.unit.id}`}
+                        >
                           Unit {payment.lease.unit.unitNumber}
                         </Link>
                         <div style={{ fontSize: '12px', color: 'var(--color-text-muted)' }}>
@@ -594,33 +742,81 @@ export default function PaymentsPage() {
                         <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
                           {TYPE_LABELS[payment.type] ?? payment.type}
                           {payment.type === 'late_fee' && (
-                            <span style={{ background: '#f59e0b', color: '#fff', borderRadius: '4px', fontSize: '10px', padding: '1px 5px', fontWeight: 700, letterSpacing: '0.02em' }}>LATE FEE</span>
+                            <span
+                              style={{
+                                background: '#f59e0b',
+                                color: '#fff',
+                                borderRadius: '4px',
+                                fontSize: '10px',
+                                padding: '1px 5px',
+                                fontWeight: 700,
+                                letterSpacing: '0.02em',
+                              }}
+                            >
+                              LATE FEE
+                            </span>
                           )}
                           {payment.isLate && payment.type !== 'late_fee' && (
-                            <span style={{ background: 'var(--color-danger)', color: '#fff', borderRadius: '4px', fontSize: '10px', padding: '1px 5px', fontWeight: 700, letterSpacing: '0.02em' }}>LATE</span>
+                            <span
+                              style={{
+                                background: 'var(--color-danger)',
+                                color: '#fff',
+                                borderRadius: '4px',
+                                fontSize: '10px',
+                                padding: '1px 5px',
+                                fontWeight: 700,
+                                letterSpacing: '0.02em',
+                              }}
+                            >
+                              LATE
+                            </span>
                           )}
                         </div>
                       </td>
                       <td>
                         <div>{METHOD_LABELS[payment.method] ?? payment.method}</div>
                         {payment.checkNumber && (
-                          <div style={{ fontSize: '11px', color: 'var(--color-text-muted)' }}>#{payment.checkNumber}</div>
+                          <div style={{ fontSize: '11px', color: 'var(--color-text-muted)' }}>
+                            #{payment.checkNumber}
+                          </div>
                         )}
                       </td>
-                      <td style={{ fontWeight: 600 }}>${Number(payment.amount).toLocaleString()}</td>
+                      <td style={{ fontWeight: 600 }}>
+                        ${Number(payment.amount).toLocaleString()}
+                      </td>
                       <td>{formatDate(payment.dueDate)}</td>
                       <td>
-                        {payment.paidAt
-                          ? new Date(payment.paidAt).toLocaleDateString()
-                          : <span style={{ color: 'var(--color-text-muted)' }}>—</span>}
+                        {payment.paidAt ? (
+                          new Date(payment.paidAt).toLocaleDateString()
+                        ) : (
+                          <span style={{ color: 'var(--color-text-muted)' }}>—</span>
+                        )}
                       </td>
                       <td>
-                        <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', alignItems: 'flex-start' }}>
-                          <span className={`badge ${STATUS_COLORS[payment.status] ?? 'badge-vacant'}`}>
+                        <div
+                          style={{
+                            display: 'flex',
+                            flexDirection: 'column',
+                            gap: '4px',
+                            alignItems: 'flex-start',
+                          }}
+                        >
+                          <span
+                            className={`badge ${STATUS_COLORS[payment.status] ?? 'badge-vacant'}`}
+                          >
                             {payment.status}
                           </span>
                           {payment.status === 'pending' && payment.stripePaymentIntentId && (
-                            <span style={{ background: '#e0f2fe', color: '#0369a1', borderRadius: '4px', fontSize: '10px', padding: '1px 5px', fontWeight: 600 }}>
+                            <span
+                              style={{
+                                background: '#e0f2fe',
+                                color: '#0369a1',
+                                borderRadius: '4px',
+                                fontSize: '10px',
+                                padding: '1px 5px',
+                                fontWeight: 600,
+                              }}
+                            >
                               PROCESSING
                             </span>
                           )}
@@ -636,14 +832,16 @@ export default function PaymentsPage() {
                               Mark Paid
                             </button>
                           )}
-                          {payment.status === 'pending' && connectStatus === 'active' && !payment.stripePaymentIntentId && (
-                            <button
-                              className="btn btn-sm btn-secondary"
-                              onClick={() => openAchModal(payment)}
-                            >
-                              Initiate ACH
-                            </button>
-                          )}
+                          {payment.status === 'pending' &&
+                            connectStatus === 'active' &&
+                            !payment.stripePaymentIntentId && (
+                              <button
+                                className="btn btn-sm btn-secondary"
+                                onClick={() => openAchModal(payment)}
+                              >
+                                Initiate ACH
+                              </button>
+                            )}
                           {payment.status === 'pending' && payment.stripePaymentIntentId && (
                             <button
                               className="btn btn-sm btn-secondary"
@@ -678,13 +876,15 @@ export default function PaymentsPage() {
       )}
 
       {/* Ledger tab */}
-      {activeTab === 'ledger' && (
-        ledgerLoading ? (
+      {activeTab === 'ledger' &&
+        (ledgerLoading ? (
           <div className="loading">Loading ledger…</div>
         ) : ledgerEntries.length === 0 ? (
           <div className="empty-state">
             <h3>No ledger entries yet</h3>
-            <p>Ledger entries are created automatically when ACH payments settle via Stripe webhooks.</p>
+            <p>
+              Ledger entries are created automatically when ACH payments settle via Stripe webhooks.
+            </p>
           </div>
         ) : (
           <div className="table-container">
@@ -701,32 +901,50 @@ export default function PaymentsPage() {
               <tbody>
                 {ledgerEntries.map((entry) => (
                   <tr key={entry.id}>
-                    <td style={{ whiteSpace: 'nowrap' }}>{new Date(entry.createdAt).toLocaleDateString()}</td>
+                    <td style={{ whiteSpace: 'nowrap' }}>
+                      {new Date(entry.createdAt).toLocaleDateString()}
+                    </td>
                     <td>
-                      <span style={{
-                        color: entry.type === 'credit' ? 'var(--color-success, #16a34a)' : 'var(--color-danger)',
-                        fontWeight: 700,
-                        textTransform: 'uppercase',
-                        fontSize: '11px',
-                        letterSpacing: '0.05em',
-                      }}>
+                      <span
+                        style={{
+                          color:
+                            entry.type === 'credit'
+                              ? 'var(--color-success, #16a34a)'
+                              : 'var(--color-danger)',
+                          fontWeight: 700,
+                          textTransform: 'uppercase',
+                          fontSize: '11px',
+                          letterSpacing: '0.05em',
+                        }}
+                      >
                         {entry.type}
                       </span>
                     </td>
-                    <td style={{ fontSize: '13px', color: 'var(--color-text-muted)' }}>{entry.description}</td>
+                    <td style={{ fontSize: '13px', color: 'var(--color-text-muted)' }}>
+                      {entry.description}
+                    </td>
                     <td style={{ fontWeight: 600 }}>
-                      <span style={{ color: entry.type === 'credit' ? 'var(--color-success, #16a34a)' : 'var(--color-danger)' }}>
-                        {entry.type === 'credit' ? '+' : '-'}${Number(entry.amount).toLocaleString()}
+                      <span
+                        style={{
+                          color:
+                            entry.type === 'credit'
+                              ? 'var(--color-success, #16a34a)'
+                              : 'var(--color-danger)',
+                        }}
+                      >
+                        {entry.type === 'credit' ? '+' : '-'}$
+                        {Number(entry.amount).toLocaleString()}
                       </span>
                     </td>
-                    <td style={{ fontWeight: 500 }}>${Number(entry.balanceAfter).toLocaleString()}</td>
+                    <td style={{ fontWeight: 500 }}>
+                      ${Number(entry.balanceAfter).toLocaleString()}
+                    </td>
                   </tr>
                 ))}
               </tbody>
             </table>
           </div>
-        )
-      )}
+        ))}
 
       {/* ACH Initiation Modal */}
       {achPayment && (
@@ -734,45 +952,81 @@ export default function PaymentsPage() {
           <div className="modal" onClick={(e) => e.stopPropagation()} style={{ maxWidth: '460px' }}>
             <div className="modal-header">
               <h2>Initiate ACH Payment</h2>
-              <button className="btn btn-sm btn-secondary" onClick={() => setAchPayment(null)}>X</button>
+              <button className="btn btn-sm btn-secondary" onClick={() => setAchPayment(null)}>
+                X
+              </button>
             </div>
             <div className="modal-body">
               {achError && (
-                <div style={{ color: 'var(--color-danger)', marginBottom: '12px', fontSize: '14px' }}>
+                <div
+                  style={{ color: 'var(--color-danger)', marginBottom: '12px', fontSize: '14px' }}
+                >
                   {achError}
                 </div>
               )}
               {achResult ? (
                 <div>
-                  <p style={{ color: 'var(--color-success, #16a34a)', marginBottom: '8px', fontWeight: 600 }}>
+                  <p
+                    style={{
+                      color: 'var(--color-success, #16a34a)',
+                      marginBottom: '8px',
+                      fontWeight: 600,
+                    }}
+                  >
                     PaymentIntent created successfully
                   </p>
                   <p style={{ fontSize: '13px', color: 'var(--color-text-muted)' }}>
                     Status: <strong>{achResult.status}</strong>
                   </p>
-                  <p style={{ fontSize: '12px', color: 'var(--color-text-muted)', marginTop: '4px', wordBreak: 'break-all' }}>
+                  <p
+                    style={{
+                      fontSize: '12px',
+                      color: 'var(--color-text-muted)',
+                      marginTop: '4px',
+                      wordBreak: 'break-all',
+                    }}
+                  >
                     Intent ID: {achResult.paymentIntentId}
                   </p>
                   <p style={{ fontSize: '13px', marginTop: '12px' }}>
-                    The ACH debit has been submitted. Payment status will update automatically via webhook when the transfer settles (typically 3–5 business days).
+                    The ACH debit has been submitted. Payment status will update automatically via
+                    webhook when the transfer settles (typically 3–5 business days).
                   </p>
                 </div>
               ) : (
                 <div>
                   <p>This will create an ACH debit PaymentIntent for:</p>
-                  <ul style={{ margin: '12px 0', paddingLeft: '20px', fontSize: '14px', lineHeight: '1.8' }}>
-                    <li><strong>{achPayment.tenant.name}</strong></li>
-                    <li>Amount: <strong>${Number(achPayment.amount).toLocaleString()}</strong></li>
-                    <li>Type: <strong>{TYPE_LABELS[achPayment.type] ?? achPayment.type}</strong></li>
+                  <ul
+                    style={{
+                      margin: '12px 0',
+                      paddingLeft: '20px',
+                      fontSize: '14px',
+                      lineHeight: '1.8',
+                    }}
+                  >
+                    <li>
+                      <strong>{achPayment.tenant.name}</strong>
+                    </li>
+                    <li>
+                      Amount: <strong>${Number(achPayment.amount).toLocaleString()}</strong>
+                    </li>
+                    <li>
+                      Type: <strong>{TYPE_LABELS[achPayment.type] ?? achPayment.type}</strong>
+                    </li>
                   </ul>
                   <p style={{ fontSize: '13px', color: 'var(--color-text-muted)' }}>
-                    Funds will be transferred to your connected Stripe bank account after the ACH debit settles.
+                    Funds will be transferred to your connected Stripe bank account after the ACH
+                    debit settles.
                   </p>
                 </div>
               )}
             </div>
             <div className="modal-footer">
-              <button type="button" className="btn btn-secondary" onClick={() => setAchPayment(null)}>
+              <button
+                type="button"
+                className="btn btn-secondary"
+                onClick={() => setAchPayment(null)}
+              >
                 {achResult ? 'Close' : 'Cancel'}
               </button>
               {!achResult && (
@@ -796,22 +1050,30 @@ export default function PaymentsPage() {
           <div className="modal" onClick={(e) => e.stopPropagation()} style={{ maxWidth: '420px' }}>
             <div className="modal-header">
               <h2>Mark as Paid</h2>
-              <button className="btn btn-sm btn-secondary" onClick={closeMarkPaid}>X</button>
+              <button className="btn btn-sm btn-secondary" onClick={closeMarkPaid}>
+                X
+              </button>
             </div>
             <div className="modal-body">
               {markPaidError && (
-                <div style={{ color: 'var(--color-danger)', marginBottom: '12px', fontSize: '14px' }}>
+                <div
+                  style={{ color: 'var(--color-danger)', marginBottom: '12px', fontSize: '14px' }}
+                >
                   {markPaidError}
                 </div>
               )}
               <p style={{ marginBottom: '16px', fontSize: '14px' }}>
-                Recording payment of <strong>${Number(markPaidPayment.amount).toLocaleString()}</strong> for{' '}
+                Recording payment of{' '}
+                <strong>${Number(markPaidPayment.amount).toLocaleString()}</strong> for{' '}
                 <strong>{markPaidPayment.tenant.name}</strong>
               </p>
               <div className="form-row">
                 <div className="form-group">
                   <label>Payment Method</label>
-                  <select value={markPaidMethod} onChange={(e) => setMarkPaidMethod(e.target.value)}>
+                  <select
+                    value={markPaidMethod}
+                    onChange={(e) => setMarkPaidMethod(e.target.value)}
+                  >
                     <option value="cash">Cash</option>
                     <option value="check">Check</option>
                     <option value="money_order">Money Order</option>
@@ -865,16 +1127,26 @@ export default function PaymentsPage() {
           <div className="modal" onClick={(e) => e.stopPropagation()} style={{ maxWidth: '480px' }}>
             <div className="modal-header">
               <h2>Edit Payment</h2>
-              <button className="btn btn-sm btn-secondary" onClick={closeEditModal}>X</button>
+              <button className="btn btn-sm btn-secondary" onClick={closeEditModal}>
+                X
+              </button>
             </div>
             <form onSubmit={handleEditSubmit}>
               <div className="modal-body">
                 {editError && (
-                  <div style={{ color: 'var(--color-danger)', marginBottom: '12px', fontSize: '14px' }}>
+                  <div
+                    style={{ color: 'var(--color-danger)', marginBottom: '12px', fontSize: '14px' }}
+                  >
                     {editError}
                   </div>
                 )}
-                <div style={{ marginBottom: '12px', fontSize: '13px', color: 'var(--color-text-muted)' }}>
+                <div
+                  style={{
+                    marginBottom: '12px',
+                    fontSize: '13px',
+                    color: 'var(--color-text-muted)',
+                  }}
+                >
                   {editPayment.tenant.name} — {TYPE_LABELS[editPayment.type] ?? editPayment.type}
                 </div>
                 <div className="form-row">
@@ -961,17 +1233,23 @@ export default function PaymentsPage() {
           <div className="modal" onClick={(e) => e.stopPropagation()} style={{ maxWidth: '520px' }}>
             <div className="modal-header">
               <h2>Log Payment</h2>
-              <button className="btn btn-sm btn-secondary" onClick={closeForm}>X</button>
+              <button className="btn btn-sm btn-secondary" onClick={closeForm}>
+                X
+              </button>
             </div>
             <form onSubmit={handleSubmit}>
               <div className="modal-body">
                 {formError && (
-                  <div style={{ color: 'var(--color-danger)', marginBottom: '12px', fontSize: '14px' }}>
+                  <div
+                    style={{ color: 'var(--color-danger)', marginBottom: '12px', fontSize: '14px' }}
+                  >
                     {formError}
                   </div>
                 )}
                 {formLoading ? (
-                  <div style={{ textAlign: 'center', padding: '16px', color: '#6b7280' }}>Loading…</div>
+                  <div style={{ textAlign: 'center', padding: '16px', color: '#6b7280' }}>
+                    Loading…
+                  </div>
                 ) : (
                   <>
                     <div className="form-group">
@@ -983,7 +1261,9 @@ export default function PaymentsPage() {
                       >
                         <option value="">— Select a lease —</option>
                         {leaseOptions.map((l) => (
-                          <option key={l.id} value={l.id}>{l.label}</option>
+                          <option key={l.id} value={l.id}>
+                            {l.label}
+                          </option>
                         ))}
                       </select>
                     </div>
@@ -998,7 +1278,9 @@ export default function PaymentsPage() {
                         >
                           <option value="">— Select a tenant —</option>
                           {selectedLeaseForForm.tenants.map((t) => (
-                            <option key={t.id} value={t.id}>{t.name} ({t.email})</option>
+                            <option key={t.id} value={t.id}>
+                              {t.name} ({t.email})
+                            </option>
                           ))}
                         </select>
                       </div>

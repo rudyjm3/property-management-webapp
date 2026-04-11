@@ -80,9 +80,30 @@ const CATEGORY_LABELS: Record<string, string> = {
   other: 'Other',
 };
 
-const FILTER_STATUSES = ['', 'new_order', 'assigned', 'in_progress', 'pending_parts', 'completed', 'closed', 'cancelled'];
+const FILTER_STATUSES = [
+  '',
+  'new_order',
+  'assigned',
+  'in_progress',
+  'pending_parts',
+  'completed',
+  'closed',
+  'cancelled',
+];
 const FILTER_PRIORITIES = ['', 'emergency', 'urgent', 'routine'];
-const FILTER_CATEGORIES = ['', 'plumbing', 'electrical', 'hvac', 'appliance', 'pest', 'structural', 'cosmetic', 'grounds', 'general', 'other'];
+const FILTER_CATEGORIES = [
+  '',
+  'plumbing',
+  'electrical',
+  'hvac',
+  'appliance',
+  'pest',
+  'structural',
+  'cosmetic',
+  'grounds',
+  'general',
+  'other',
+];
 
 export default function WorkOrdersPage() {
   const { profile } = useAuth();
@@ -92,6 +113,7 @@ export default function WorkOrdersPage() {
   const [filterStatus, setFilterStatus] = useState('');
   const [filterPriority, setFilterPriority] = useState('');
   const [filterCategory, setFilterCategory] = useState('');
+  const [searchWorkOrders, setSearchWorkOrders] = useState('');
 
   // Create form
   const [showForm, setShowForm] = useState(false);
@@ -146,7 +168,10 @@ export default function WorkOrdersPage() {
                 label: `Unit ${u.unitNumber} — ${p.name}`,
                 propertyId: p.id,
                 tenantId: primary?.tenant?.id ?? participants[0]?.tenant?.id ?? null,
-                leaseTenants: participants.map((p: any) => ({ id: p.tenant.id, name: p.tenant.name })),
+                leaseTenants: participants.map((p: any) => ({
+                  id: p.tenant.id,
+                  name: p.tenant.name,
+                })),
               };
             })
           )
@@ -208,8 +233,26 @@ export default function WorkOrdersPage() {
     }
   }
 
-  const openCount = workOrders.filter((w) => !['completed', 'closed', 'cancelled'].includes(w.status)).length;
+  const openCount = workOrders.filter(
+    (w) => !['completed', 'closed', 'cancelled'].includes(w.status)
+  ).length;
   const breachedCount = workOrders.filter((w) => w.slaBreached).length;
+  const visibleWorkOrders = workOrders.filter((workOrder) => {
+    if (!searchWorkOrders) return true;
+
+    const query = searchWorkOrders.toLowerCase();
+    return (
+      (workOrder.title ?? '').toLowerCase().includes(query) ||
+      workOrder.description.toLowerCase().includes(query) ||
+      workOrder.unit.unitNumber.toLowerCase().includes(query) ||
+      workOrder.unit.property.name.toLowerCase().includes(query) ||
+      (workOrder.tenant?.name ?? '').toLowerCase().includes(query) ||
+      (workOrder.assignedTo?.name ?? '').toLowerCase().includes(query)
+    );
+  });
+  const hasActiveWorkOrderFilters = Boolean(
+    searchWorkOrders || filterStatus || filterPriority || filterCategory
+  );
 
   return (
     <>
@@ -231,56 +274,146 @@ export default function WorkOrdersPage() {
       </div>
 
       {/* Filters */}
-      <div style={{ display: 'flex', gap: '12px', marginBottom: '20px', flexWrap: 'wrap' }}>
-        <select
-          value={filterStatus}
-          onChange={(e) => setFilterStatus(e.target.value)}
-          style={{ padding: '6px 12px', border: '1px solid var(--color-border)', borderRadius: 'var(--radius)', fontSize: '14px', background: 'white' }}
-        >
-          <option value="">All Statuses</option>
-          {FILTER_STATUSES.filter(Boolean).map((s) => (
-            <option key={s} value={s}>{STATUS_LABELS[s]}</option>
-          ))}
-        </select>
+      <div className="filter-bar">
+        <div className="filter-search">
+          <label className="filter-label" htmlFor="work-order-search">
+            Search
+          </label>
+          <div className="filter-search-input-wrap">
+            <svg
+              className="filter-search-icon"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2.5"
+            >
+              <circle cx="11" cy="11" r="8" />
+              <path d="m21 21-4.35-4.35" />
+            </svg>
+            <input
+              id="work-order-search"
+              type="text"
+              placeholder="Issue, unit, property, tenant or assignee..."
+              value={searchWorkOrders}
+              onChange={(e) => setSearchWorkOrders(e.target.value)}
+              className={`filter-search-input${searchWorkOrders ? ' has-clear' : ''}`}
+            />
+            {searchWorkOrders && (
+              <button
+                type="button"
+                aria-label="Clear work order search"
+                onClick={() => setSearchWorkOrders('')}
+                style={{
+                  position: 'absolute',
+                  right: '8px',
+                  top: '50%',
+                  transform: 'translateY(-50%)',
+                  background: 'none',
+                  border: 'none',
+                  cursor: 'pointer',
+                  color: 'var(--color-text-muted)',
+                  fontSize: '16px',
+                  lineHeight: 1,
+                  padding: '0 2px',
+                }}
+              >
+                &times;
+              </button>
+            )}
+          </div>
+        </div>
 
-        <select
-          value={filterPriority}
-          onChange={(e) => setFilterPriority(e.target.value)}
-          style={{ padding: '6px 12px', border: '1px solid var(--color-border)', borderRadius: 'var(--radius)', fontSize: '14px', background: 'white' }}
-        >
-          <option value="">All Priorities</option>
-          {FILTER_PRIORITIES.filter(Boolean).map((p) => (
-            <option key={p} value={p}>{p.charAt(0).toUpperCase() + p.slice(1)}</option>
-          ))}
-        </select>
+        <div className="filter-divider" />
 
-        <select
-          value={filterCategory}
-          onChange={(e) => setFilterCategory(e.target.value)}
-          style={{ padding: '6px 12px', border: '1px solid var(--color-border)', borderRadius: 'var(--radius)', fontSize: '14px', background: 'white' }}
-        >
-          <option value="">All Categories</option>
-          {FILTER_CATEGORIES.filter(Boolean).map((c) => (
-            <option key={c} value={c}>{CATEGORY_LABELS[c]}</option>
-          ))}
-        </select>
-
-        {(filterStatus || filterPriority || filterCategory) && (
-          <button
-            className="btn btn-sm btn-secondary"
-            onClick={() => { setFilterStatus(''); setFilterPriority(''); setFilterCategory(''); }}
+        <div className="filter-group">
+          <label className="filter-label" htmlFor="work-order-status-filter">
+            Status
+          </label>
+          <select
+            id="work-order-status-filter"
+            value={filterStatus}
+            onChange={(e) => setFilterStatus(e.target.value)}
+            className={`filter-select${filterStatus ? ' filter-select-active-primary' : ''}`}
           >
-            Clear Filters
-          </button>
+            <option value="">All Statuses</option>
+            {FILTER_STATUSES.filter(Boolean).map((s) => (
+              <option key={s} value={s}>
+                {STATUS_LABELS[s]}
+              </option>
+            ))}
+          </select>
+        </div>
+
+        <div className="filter-group">
+          <label className="filter-label" htmlFor="work-order-priority-filter">
+            Priority
+          </label>
+          <select
+            id="work-order-priority-filter"
+            value={filterPriority}
+            onChange={(e) => setFilterPriority(e.target.value)}
+            className={`filter-select${filterPriority ? ' filter-select-active-warning' : ''}`}
+          >
+            <option value="">All Priorities</option>
+            {FILTER_PRIORITIES.filter(Boolean).map((p) => (
+              <option key={p} value={p}>
+                {p.charAt(0).toUpperCase() + p.slice(1)}
+              </option>
+            ))}
+          </select>
+        </div>
+
+        <div className="filter-group">
+          <label className="filter-label" htmlFor="work-order-category-filter">
+            Category
+          </label>
+          <select
+            id="work-order-category-filter"
+            value={filterCategory}
+            onChange={(e) => setFilterCategory(e.target.value)}
+            className={`filter-select${filterCategory ? ' filter-select-active-primary' : ''}`}
+          >
+            <option value="">All Categories</option>
+            {FILTER_CATEGORIES.filter(Boolean).map((c) => (
+              <option key={c} value={c}>
+                {CATEGORY_LABELS[c]}
+              </option>
+            ))}
+          </select>
+        </div>
+
+        {hasActiveWorkOrderFilters && (
+          <div className="filter-summary">
+            <span className="filter-label">Results</span>
+            <div className="filter-summary-row">
+              <span className="filter-count">{visibleWorkOrders.length}</span>
+              <button
+                type="button"
+                className="filter-clear-button"
+                onClick={() => {
+                  setSearchWorkOrders('');
+                  setFilterStatus('');
+                  setFilterPriority('');
+                  setFilterCategory('');
+                }}
+              >
+                Clear filters
+              </button>
+            </div>
+          </div>
         )}
       </div>
 
       {loading ? (
         <div className="loading">Loading work orders...</div>
-      ) : workOrders.length === 0 ? (
+      ) : visibleWorkOrders.length === 0 ? (
         <div className="empty-state">
           <h3>No work orders found</h3>
-          <p>{filterStatus || filterPriority || filterCategory ? 'Try adjusting your filters.' : 'Create the first work order to get started.'}</p>
+          <p>
+            {hasActiveWorkOrderFilters
+              ? 'Try adjusting your filters.'
+              : 'Create the first work order to get started.'}
+          </p>
         </div>
       ) : (
         <div className="table-container">
@@ -299,17 +432,24 @@ export default function WorkOrdersPage() {
               </tr>
             </thead>
             <tbody>
-              {workOrders.map((wo) => {
-                const isOverdue = wo.slaDeadlineAt && new Date(wo.slaDeadlineAt) < new Date() && !['completed', 'closed', 'cancelled'].includes(wo.status);
+              {visibleWorkOrders.map((wo) => {
+                const isOverdue =
+                  wo.slaDeadlineAt &&
+                  new Date(wo.slaDeadlineAt) < new Date() &&
+                  !['completed', 'closed', 'cancelled'].includes(wo.status);
                 return (
                   <tr key={wo.id} style={wo.slaBreached ? { background: '#fff5f5' } : undefined}>
                     <td>
-                      <Link href={`/work-orders/${wo.id}`} style={{ fontWeight: 500, fontSize: '14px' }}>
+                      <Link
+                        href={`/work-orders/${wo.id}`}
+                        style={{ fontWeight: 500, fontSize: '14px' }}
+                      >
                         {wo.title || wo.description.slice(0, 60)}
                       </Link>
                       {wo.title && (
                         <div style={{ fontSize: '12px', color: 'var(--color-text-muted)' }}>
-                          {wo.description.slice(0, 60)}{wo.description.length > 60 ? '…' : ''}
+                          {wo.description.slice(0, 60)}
+                          {wo.description.length > 60 ? '…' : ''}
                         </div>
                       )}
                     </td>
@@ -317,11 +457,15 @@ export default function WorkOrdersPage() {
                       <Link href={`/properties/${wo.unit.property.id}/units/${wo.unit.id}`}>
                         Unit {wo.unit.unitNumber}
                       </Link>
-                      <div style={{ fontSize: '12px', color: 'var(--color-text-muted)' }}>{wo.unit.property.name}</div>
+                      <div style={{ fontSize: '12px', color: 'var(--color-text-muted)' }}>
+                        {wo.unit.property.name}
+                      </div>
                     </td>
                     <td>
                       {wo.submittedByUser ? (
-                        <span style={{ color: 'var(--color-text-muted)', fontSize: '13px' }}>Staff created</span>
+                        <span style={{ color: 'var(--color-text-muted)', fontSize: '13px' }}>
+                          Staff created
+                        </span>
                       ) : wo.tenant ? (
                         <Link href={`/tenants/${wo.tenant.id}`}>{wo.tenant.name}</Link>
                       ) : (
@@ -340,11 +484,21 @@ export default function WorkOrdersPage() {
                       </span>
                     </td>
                     <td style={{ color: isOverdue ? 'var(--color-danger)' : undefined }}>
-                      {wo.slaDeadlineAt
-                        ? new Date(wo.slaDeadlineAt).toLocaleString()
-                        : <span style={{ color: 'var(--color-text-muted)' }}>—</span>}
+                      {wo.slaDeadlineAt ? (
+                        new Date(wo.slaDeadlineAt).toLocaleString()
+                      ) : (
+                        <span style={{ color: 'var(--color-text-muted)' }}>—</span>
+                      )}
                       {wo.slaBreached && (
-                        <div style={{ fontSize: '11px', color: 'var(--color-danger)', fontWeight: 600 }}>SLA BREACHED</div>
+                        <div
+                          style={{
+                            fontSize: '11px',
+                            color: 'var(--color-danger)',
+                            fontWeight: 600,
+                          }}
+                        >
+                          SLA BREACHED
+                        </div>
                       )}
                     </td>
                     <td style={{ fontSize: '13px', color: 'var(--color-text-muted)' }}>
@@ -380,30 +534,42 @@ export default function WorkOrdersPage() {
           <div className="modal" onClick={(e) => e.stopPropagation()} style={{ maxWidth: '520px' }}>
             <div className="modal-header">
               <h2>New Work Order</h2>
-              <button className="btn btn-sm btn-secondary" onClick={closeForm}>X</button>
+              <button className="btn btn-sm btn-secondary" onClick={closeForm}>
+                X
+              </button>
             </div>
             <form onSubmit={handleSubmit}>
               <div className="modal-body">
                 {formError && (
-                  <div style={{ color: 'var(--color-danger)', marginBottom: '12px', fontSize: '14px' }}>
+                  <div
+                    style={{ color: 'var(--color-danger)', marginBottom: '12px', fontSize: '14px' }}
+                  >
                     {formError}
                   </div>
                 )}
                 {formLoading ? (
-                  <div style={{ textAlign: 'center', padding: '16px', color: '#6b7280' }}>Loading…</div>
+                  <div style={{ textAlign: 'center', padding: '16px', color: '#6b7280' }}>
+                    Loading…
+                  </div>
                 ) : (
                   <>
                     <div className="form-group">
                       <label>Unit *</label>
-                      <select required value={unitId} onChange={(e) => {
-                        setUnitId(e.target.value);
-                        const opt = unitOptions.find((u) => u.id === e.target.value);
-                        setFormTenantId(opt?.tenantId ?? null);
-                        setLeaseTenantOptions(opt?.leaseTenants ?? []);
-                      }}>
+                      <select
+                        required
+                        value={unitId}
+                        onChange={(e) => {
+                          setUnitId(e.target.value);
+                          const opt = unitOptions.find((u) => u.id === e.target.value);
+                          setFormTenantId(opt?.tenantId ?? null);
+                          setLeaseTenantOptions(opt?.leaseTenants ?? []);
+                        }}
+                      >
                         <option value="">— Select a unit —</option>
                         {unitOptions.map((u) => (
-                          <option key={u.id} value={u.id}>{u.label}</option>
+                          <option key={u.id} value={u.id}>
+                            {u.label}
+                          </option>
                         ))}
                       </select>
                     </div>
@@ -411,9 +577,14 @@ export default function WorkOrdersPage() {
                     {leaseTenantOptions.length > 1 && (
                       <div className="form-group">
                         <label>Tenant</label>
-                        <select value={formTenantId ?? ''} onChange={(e) => setFormTenantId(e.target.value || null)}>
+                        <select
+                          value={formTenantId ?? ''}
+                          onChange={(e) => setFormTenantId(e.target.value || null)}
+                        >
                           {leaseTenantOptions.map((t) => (
-                            <option key={t.id} value={t.id}>{t.name}</option>
+                            <option key={t.id} value={t.id}>
+                              {t.name}
+                            </option>
                           ))}
                         </select>
                       </div>
@@ -433,15 +604,25 @@ export default function WorkOrdersPage() {
                     <div className="form-row">
                       <div className="form-group">
                         <label>Category *</label>
-                        <select required value={category} onChange={(e) => setCategory(e.target.value)}>
+                        <select
+                          required
+                          value={category}
+                          onChange={(e) => setCategory(e.target.value)}
+                        >
                           {FILTER_CATEGORIES.filter(Boolean).map((c) => (
-                            <option key={c} value={c}>{CATEGORY_LABELS[c]}</option>
+                            <option key={c} value={c}>
+                              {CATEGORY_LABELS[c]}
+                            </option>
                           ))}
                         </select>
                       </div>
                       <div className="form-group">
                         <label>Priority *</label>
-                        <select required value={priority} onChange={(e) => setPriority(e.target.value)}>
+                        <select
+                          required
+                          value={priority}
+                          onChange={(e) => setPriority(e.target.value)}
+                        >
                           <option value="routine">Routine (7 days)</option>
                           <option value="urgent">Urgent (24 hours)</option>
                           <option value="emergency">Emergency (1 hour)</option>
@@ -470,7 +651,10 @@ export default function WorkOrdersPage() {
                       />
                     </div>
 
-                    <div className="form-group" style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    <div
+                      className="form-group"
+                      style={{ display: 'flex', alignItems: 'center', gap: '8px' }}
+                    >
                       <input
                         type="checkbox"
                         id="entryPermission"
@@ -489,7 +673,11 @@ export default function WorkOrdersPage() {
                 <button type="button" className="btn btn-secondary" onClick={closeForm}>
                   Cancel
                 </button>
-                <button type="submit" className="btn btn-primary" disabled={submitting || formLoading}>
+                <button
+                  type="submit"
+                  className="btn btn-primary"
+                  disabled={submitting || formLoading}
+                >
                   {submitting ? 'Creating…' : 'Create Work Order'}
                 </button>
               </div>

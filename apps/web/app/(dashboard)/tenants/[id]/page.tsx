@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { api } from '@/lib/api';
@@ -69,6 +69,14 @@ interface TenantDetail {
   }>;
 }
 
+interface MessageThread {
+  threadId: string;
+  subject: string | null;
+  latestMessage: { createdAt: string; body: string };
+  tenant: { id: string; name: string } | null;
+  unreadCount: number;
+}
+
 export default function TenantDetailPage() {
   const params = useParams();
   const router = useRouter();
@@ -80,12 +88,23 @@ export default function TenantDetailPage() {
   const [editing, setEditing] = useState(false);
   const [error, setError] = useState('');
   const [inviting, setInviting] = useState(false);
+  const [threads, setThreads] = useState<MessageThread[]>([]);
+  const [showCompose, setShowCompose] = useState(false);
+  const [composeSubject, setComposeSubject] = useState('');
+  const [composeBody, setComposeBody] = useState('');
+  const [composeSending, setComposeSending] = useState(false);
+  const [composeError, setComposeError] = useState('');
+  const composeBodyRef = useRef<HTMLTextAreaElement>(null);
 
   useEffect(() => {
     async function load() {
       try {
-        const data = await api.tenants.get(tenantId);
+        const [data, threadData] = await Promise.all([
+          api.tenants.get(tenantId),
+          api.messages.threads.list(tenantId).catch(() => []),
+        ]);
         setTenant(data);
+        setThreads(threadData);
       } catch (err) {
         console.error('Failed to load tenant:', err);
       } finally {
@@ -94,6 +113,30 @@ export default function TenantDetailPage() {
     }
     load();
   }, [tenantId]);
+
+  async function handleSendMessage(e: React.FormEvent) {
+    e.preventDefault();
+    if (!composeBody.trim() || !profile?.userId) return;
+    setComposeError('');
+    setComposeSending(true);
+    try {
+      await api.messages.send({
+        senderUserId: profile.userId,
+        recipientTenantId: tenantId,
+        body: composeBody.trim(),
+        subject: composeSubject.trim() || null,
+      });
+      setComposeSubject('');
+      setComposeBody('');
+      setShowCompose(false);
+      const updated = await api.messages.threads.list(tenantId).catch(() => []);
+      setThreads(updated);
+    } catch (err: any) {
+      setComposeError(err.message || 'Failed to send message');
+    } finally {
+      setComposeSending(false);
+    }
+  }
 
   async function handleUpdate(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
@@ -398,6 +441,117 @@ export default function TenantDetailPage() {
           </div>
         </div>
       )}
+
+      {/* Payment History */}
+      <div className="card" style={{ marginTop: '24px' }}>
+        <div className="card-body">
+          <h3 style={{ marginBottom: '16px', fontSize: '16px', fontWeight: 600 }}>
+            Payment History ({tenant.payments.length})
+          </h3>
+          {tenant.payments.length === 0 ? (
+            <p style={{ color: 'var(--color-text-muted)', fontSize: '14px' }}>No payment records yet.</p>
+          ) : (
+            <div className="table-container">
+              <table>
+                <thead>
+                  <tr>
+                    <th>Due Date</th>
+                    <th>Type</th>
+                    <th>Amount</th>
+                    <th>Status</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {tenant.payments.map((p) => (
+                    <tr key={p.id}>
+                      <td>{new Date(p.dueDate).toLocaleDateString('en-US', { timeZone: 'UTC' })}</td>
+                      <td style={{ textTransform: 'capitalize' }}>{p.type.replace('_', ' ')}</td>
+                      <td style={{ fontWeight: 600 }}>${Number(p.amount).toLocaleString()}</td>
+                      <td>
+                        <span className={`badge badge-${p.status === 'completed' ? 'occupied' : p.status === 'pending' ? 'notice' : 'vacant'}`}>
+                          {p.status}
+                        </span>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* Messages */}
+      <div className="card" style={{ marginTop: '24px' }}>
+        <div className="card-body">
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
+            <h3 style={{ fontSize: '16px', fontWeight: 600 }}>Messages ({threads.length})</h3>
+            {!isMaintenance && (
+              <button className="btn btn-sm btn-primary" onClick={() => { setShowCompose(true); setTimeout(() => composeBodyRef.current?.focus(), 50); }}>
+                New Message
+              </button>
+            )}
+          </div>
+
+          {showCompose && (
+            <form onSubmit={handleSendMessage} style={{ marginBottom: '16px', padding: '16px', background: 'var(--color-bg-secondary)', borderRadius: '8px', border: '1px solid var(--color-border)' }}>
+              {composeError && <p style={{ color: 'var(--color-danger)', fontSize: '13px', marginBottom: '8px' }}>{composeError}</p>}
+              <div className="form-group" style={{ marginBottom: '10px' }}>
+                <label>Subject (optional)</label>
+                <input value={composeSubject} onChange={(e) => setComposeSubject(e.target.value)} placeholder="e.g. Rent reminder, Maintenance update..." />
+              </div>
+              <div className="form-group" style={{ marginBottom: '10px' }}>
+                <label>Message</label>
+                <textarea ref={composeBodyRef} value={composeBody} onChange={(e) => setComposeBody(e.target.value)} rows={3} required placeholder="Type your message..." style={{ resize: 'vertical' }} />
+              </div>
+              <div style={{ display: 'flex', gap: '8px' }}>
+                <button type="submit" className="btn btn-sm btn-primary" disabled={composeSending}>
+                  {composeSending ? 'Sending...' : 'Send'}
+                </button>
+                <button type="button" className="btn btn-sm btn-secondary" onClick={() => { setShowCompose(false); setComposeError(''); }}>
+                  Cancel
+                </button>
+              </div>
+            </form>
+          )}
+
+          {threads.length === 0 ? (
+            <p style={{ color: 'var(--color-text-muted)', fontSize: '14px' }}>No messages yet.</p>
+          ) : (
+            <div style={{ border: '1px solid var(--color-border)', borderRadius: '8px', overflow: 'hidden' }}>
+              {threads.map((thread, i) => (
+                <Link
+                  key={thread.threadId}
+                  href="/messages"
+                  style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '12px 16px', borderBottom: i < threads.length - 1 ? '1px solid var(--color-border)' : undefined, textDecoration: 'none', color: 'inherit', background: thread.unreadCount > 0 ? 'var(--color-bg-secondary)' : undefined }}
+                >
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '10px', minWidth: 0 }}>
+                    {thread.unreadCount > 0 && (
+                      <span style={{ width: '8px', height: '8px', borderRadius: '50%', background: 'var(--color-primary)', flexShrink: 0, display: 'inline-block' }} />
+                    )}
+                    <div style={{ minWidth: 0 }}>
+                      <div style={{ fontWeight: thread.unreadCount > 0 ? 600 : 400, fontSize: '14px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                        {thread.subject || (thread.tenant?.name ? `Message from ${thread.tenant.name}` : 'No subject')}
+                      </div>
+                      <div style={{ fontSize: '12px', color: 'var(--color-text-muted)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                        {thread.latestMessage.body}
+                      </div>
+                    </div>
+                    {thread.unreadCount > 0 && (
+                      <span style={{ background: 'var(--color-primary)', color: 'white', borderRadius: '12px', padding: '1px 7px', fontSize: '11px', fontWeight: 600, flexShrink: 0 }}>
+                        {thread.unreadCount}
+                      </span>
+                    )}
+                  </div>
+                  <span style={{ fontSize: '12px', color: 'var(--color-text-muted)', flexShrink: 0, marginLeft: '16px' }}>
+                    {thread.latestMessage?.createdAt ? new Date(thread.latestMessage.createdAt).toLocaleDateString() : ''}
+                  </span>
+                </Link>
+              ))}
+            </div>
+          )}
+        </div>
+      </div>
 
       {/* Edit Modal */}
       {editing && (

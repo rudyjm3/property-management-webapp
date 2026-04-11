@@ -13,9 +13,12 @@ const messageInclude = {
 
 // ─── List threads ─────────────────────────────────────────────────────────────
 
-export async function listThreads(organizationId: string) {
+export async function listThreads(organizationId: string, tenantId?: string) {
   const messages = await prisma.message.findMany({
-    where: { organizationId },
+    where: {
+      organizationId,
+      ...(tenantId ? { recipientTenantId: tenantId } : {}),
+    },
     include: messageInclude,
     orderBy: { createdAt: 'desc' },
   });
@@ -41,6 +44,7 @@ export async function listThreads(organizationId: string) {
       threadId: { in: threadIds },
       senderUserId: null,
       readAt: null,
+      ...(tenantId ? { recipientTenantId: tenantId } : {}),
     },
     _count: { id: true },
   });
