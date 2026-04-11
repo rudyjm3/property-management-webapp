@@ -36,7 +36,7 @@ type Step = 'org' | 'logo' | 'billing' | 'property';
 
 export default function OnboardingPage() {
   const router = useRouter();
-  const { profile, refreshProfile } = useAuth();
+  const { profile, session, loading, refreshProfile } = useAuth();
   const [step, setStep] = useState<Step>('org');
 
   // Org step
@@ -79,16 +79,61 @@ export default function OnboardingPage() {
     return () => URL.revokeObjectURL(objectUrl);
   }, [logoFile]);
 
+  useEffect(() => {
+    if (loading) return;
+    if (!session) {
+      router.replace('/login');
+    }
+  }, [loading, router, session]);
+
+  useEffect(() => {
+    if (!profile) return;
+    setName((prev) => prev || profile.name || '');
+    setOrgName((prev) => prev || profile.organization?.name || '');
+    setTimezone((prev) =>
+      prev === 'America/Chicago' ? profile.organization?.timezone || prev : prev
+    );
+  }, [profile]);
+
   async function handleOrgSubmit(e: React.FormEvent) {
     e.preventDefault();
     setOrgLoading(true);
     setOrgError(null);
 
     try {
+      if (profile?.orgId) {
+        await api.organizations.update({
+          name: orgName,
+          phone: orgPhone || undefined,
+          timezone,
+        });
+        await refreshProfile();
+        setStep('logo');
+        return;
+      }
+
       await api.auth.register({ name, orgName, orgPhone: orgPhone || undefined, timezone });
       await refreshProfile();
       setStep('logo');
     } catch (err: any) {
+      if (
+        typeof err?.message === 'string' &&
+        err.message.toLowerCase().includes('already registered')
+      ) {
+        try {
+          await refreshProfile();
+          await api.organizations.update({
+            name: orgName,
+            phone: orgPhone || undefined,
+            timezone,
+          });
+          await refreshProfile();
+          setStep('logo');
+          return;
+        } catch {
+          // Fall through to the standard error message below if hydration/update fails.
+        }
+      }
       setOrgError(err.message || 'Failed to create account. Please try again.');
     } finally {
       setOrgLoading(false);
@@ -306,7 +351,7 @@ export default function OnboardingPage() {
                 <button
                   type="submit"
                   className="btn btn-primary"
-                  style={{ width: '100%' }}
+                  style={{ width: '100%', display: 'flex', justifyContent: 'center' }}
                   disabled={orgLoading}
                 >
                   {orgLoading ? 'Setting up...' : 'Continue'}
@@ -376,7 +421,7 @@ export default function OnboardingPage() {
                 <button
                   type="button"
                   className="btn btn-secondary"
-                  style={{ flex: 1 }}
+                  style={{ flex: 1, display: 'flex', justifyContent: 'center' }}
                   onClick={() => setStep('org')}
                 >
                   Back
@@ -384,7 +429,7 @@ export default function OnboardingPage() {
                 <button
                   type="button"
                   className="btn btn-secondary"
-                  style={{ flex: 1 }}
+                  style={{ flex: 1, display: 'flex', justifyContent: 'center' }}
                   onClick={() => handleLogoContinue(true)}
                   disabled={logoLoading}
                 >
@@ -393,7 +438,7 @@ export default function OnboardingPage() {
                 <button
                   type="button"
                   className="btn btn-primary"
-                  style={{ flex: 1 }}
+                  style={{ flex: 1, display: 'flex', justifyContent: 'center' }}
                   onClick={() => handleLogoContinue(false)}
                   disabled={logoLoading}
                 >
@@ -475,7 +520,7 @@ export default function OnboardingPage() {
                   <button
                     type="button"
                     className="btn btn-secondary"
-                    style={{ flex: 1 }}
+                    style={{ flex: 1, display: 'flex', justifyContent: 'center' }}
                     onClick={() => setStep('logo')}
                   >
                     Back
@@ -483,7 +528,7 @@ export default function OnboardingPage() {
                   <button
                     type="submit"
                     className="btn btn-primary"
-                    style={{ flex: 1 }}
+                    style={{ flex: 1, display: 'flex', justifyContent: 'center' }}
                     disabled={billingLoading}
                   >
                     {billingLoading ? 'Saving...' : 'Continue'}
@@ -594,7 +639,7 @@ export default function OnboardingPage() {
                   <button
                     type="button"
                     className="btn btn-secondary"
-                    style={{ flex: 1 }}
+                    style={{ flex: 1, display: 'flex', justifyContent: 'center' }}
                     onClick={() => setStep('billing')}
                   >
                     Back
@@ -602,7 +647,7 @@ export default function OnboardingPage() {
                   <button
                     type="button"
                     className="btn btn-secondary"
-                    style={{ flex: 1 }}
+                    style={{ flex: 1, display: 'flex', justifyContent: 'center' }}
                     onClick={() => router.push('/dashboard')}
                   >
                     Skip for now
@@ -610,7 +655,7 @@ export default function OnboardingPage() {
                   <button
                     type="submit"
                     className="btn btn-primary"
-                    style={{ flex: 1 }}
+                    style={{ flex: 1, display: 'flex', justifyContent: 'center' }}
                     disabled={propLoading}
                   >
                     {propLoading ? 'Saving...' : 'Go to dashboard'}
