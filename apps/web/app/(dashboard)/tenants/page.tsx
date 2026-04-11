@@ -76,7 +76,8 @@ export default function TenantsPage() {
         currentAddress: (formData.get('currentAddress') as string) || null,
         emergencyContactName: formData.get('emergencyContactName') || null,
         emergencyContactPhone: formData.get('emergencyContactPhone') || null,
-        emergencyContact1Relationship: (formData.get('emergencyContact1Relationship') as string) || null,
+        emergencyContact1Relationship:
+          (formData.get('emergencyContact1Relationship') as string) || null,
       });
       setShowForm(false);
       loadTenants();
@@ -88,10 +89,13 @@ export default function TenantsPage() {
   if (loading) return <div className="loading">Loading tenants...</div>;
 
   const now = new Date();
-  const in30 = new Date(now); in30.setDate(now.getDate() + 30);
-  const in60 = new Date(now); in60.setDate(now.getDate() + 60);
+  const in30 = new Date(now);
+  in30.setDate(now.getDate() + 30);
+  const in60 = new Date(now);
+  in60.setDate(now.getDate() + 60);
 
   const activeTenants = tenants.filter((t) => t.leaseParticipants.length > 0);
+  const hasActiveFilters = Boolean(search || leaseFilter !== 'all' || expiryFilter !== 'all');
 
   const filteredTenants = tenants.filter((t) => {
     const lp = t.leaseParticipants[0];
@@ -141,37 +145,65 @@ export default function TenantsPage() {
 
       {/* Filter bar */}
       {tenants.length > 0 && (
-        <div style={{ background: 'var(--color-surface)', border: '1px solid var(--color-border)', borderRadius: 'var(--radius)', padding: '12px 16px', marginBottom: '16px', boxShadow: 'var(--shadow-sm)', display: 'flex', gap: '12px', alignItems: 'flex-end', flexWrap: 'wrap' }}>
+        <div className="filter-bar">
           {/* Search */}
-          <div style={{ flex: '1', minWidth: '200px' }}>
-            <div style={{ fontSize: '11px', fontWeight: 600, color: 'var(--color-text-muted)', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: '4px' }}>Search</div>
-            <div style={{ position: 'relative' }}>
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" style={{ position: 'absolute', left: '10px', top: '50%', transform: 'translateY(-50%)', color: 'var(--color-text-muted)', pointerEvents: 'none' }}>
-                <circle cx="11" cy="11" r="8" /><path d="m21 21-4.35-4.35" />
+          <div className="filter-search">
+            <label className="filter-label" htmlFor="tenant-search">
+              Search
+            </label>
+            <div className="filter-search-input-wrap">
+              <svg
+                className="filter-search-icon"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2.5"
+              >
+                <circle cx="11" cy="11" r="8" />
+                <path d="m21 21-4.35-4.35" />
               </svg>
               <input
+                id="tenant-search"
                 type="text"
                 placeholder="Name, email, unit or property..."
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
-                style={{ width: '100%', paddingLeft: '30px', paddingRight: search ? '28px' : '10px', padding: '8px 10px 8px 30px', border: '1px solid var(--color-border)', borderRadius: 'var(--radius)', fontSize: '14px', fontFamily: 'inherit', background: 'var(--color-bg)' }}
+                className={`filter-search-input${search ? ' has-clear' : ''}`}
               />
               {search && (
-                <button onClick={() => setSearch('')} style={{ position: 'absolute', right: '8px', top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', cursor: 'pointer', color: 'var(--color-text-muted)', fontSize: '16px', lineHeight: 1, padding: '0 2px' }}>×</button>
+                <button
+                  onClick={() => setSearch('')}
+                  style={{
+                    position: 'absolute',
+                    right: '8px',
+                    top: '50%',
+                    transform: 'translateY(-50%)',
+                    background: 'none',
+                    border: 'none',
+                    cursor: 'pointer',
+                    color: 'var(--color-text-muted)',
+                    fontSize: '16px',
+                    lineHeight: 1,
+                    padding: '0 2px',
+                  }}
+                >
+                  ×
+                </button>
               )}
             </div>
           </div>
 
-          {/* Vertical divider */}
-          <div style={{ width: '1px', background: 'var(--color-border)', alignSelf: 'stretch', margin: '0 4px' }} />
+          <div className="filter-divider" />
 
-          {/* Lease Status */}
-          <div style={{ minWidth: '145px' }}>
-            <div style={{ fontSize: '11px', fontWeight: 600, color: 'var(--color-text-muted)', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: '4px' }}>Lease Status</div>
+          <div className="filter-group">
+            <label className="filter-label" htmlFor="tenant-lease-filter">
+              Lease Status
+            </label>
             <select
+              id="tenant-lease-filter"
               value={leaseFilter}
               onChange={(e) => setLeaseFilter(e.target.value as typeof leaseFilter)}
-              style={{ width: '100%', padding: '8px 10px', border: `1px solid ${leaseFilter !== 'all' ? 'var(--color-primary)' : 'var(--color-border)'}`, borderRadius: 'var(--radius)', fontSize: '14px', fontFamily: 'inherit', background: leaseFilter !== 'all' ? 'rgba(37,99,235,0.05)' : 'var(--color-bg)', color: leaseFilter !== 'all' ? 'var(--color-primary)' : 'var(--color-text)', cursor: 'pointer', fontWeight: leaseFilter !== 'all' ? 500 : 400 }}
+              className={`filter-select${leaseFilter !== 'all' ? ' filter-select-active-primary' : ''}`}
             >
               <option value="all">All Tenants</option>
               <option value="active">Active Lease</option>
@@ -179,13 +211,15 @@ export default function TenantsPage() {
             </select>
           </div>
 
-          {/* Expiry */}
-          <div style={{ minWidth: '160px' }}>
-            <div style={{ fontSize: '11px', fontWeight: 600, color: 'var(--color-text-muted)', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: '4px' }}>Lease Expiry</div>
+          <div className="filter-group">
+            <label className="filter-label" htmlFor="tenant-expiry-filter">
+              Lease Expiry
+            </label>
             <select
+              id="tenant-expiry-filter"
               value={expiryFilter}
               onChange={(e) => setExpiryFilter(e.target.value as typeof expiryFilter)}
-              style={{ width: '100%', padding: '8px 10px', border: `1px solid ${expiryFilter !== 'all' ? 'var(--color-warning)' : 'var(--color-border)'}`, borderRadius: 'var(--radius)', fontSize: '14px', fontFamily: 'inherit', background: expiryFilter !== 'all' ? 'rgba(217,119,6,0.05)' : 'var(--color-bg)', color: expiryFilter !== 'all' ? 'var(--color-warning)' : 'var(--color-text)', cursor: 'pointer', fontWeight: expiryFilter !== 'all' ? 500 : 400 }}
+              className={`filter-select${expiryFilter !== 'all' ? ' filter-select-active-warning' : ''}`}
             >
               <option value="all">Any Expiry</option>
               <option value="30d">Expiring ≤ 30 Days</option>
@@ -194,16 +228,19 @@ export default function TenantsPage() {
           </div>
 
           {/* Clear + result count — only when filtered */}
-          {(search || leaseFilter !== 'all' || expiryFilter !== 'all') && (
-            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '4px', marginLeft: 'auto' }}>
-              <div style={{ fontSize: '11px', fontWeight: 600, color: 'var(--color-text-muted)', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Results</div>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                <span style={{ background: 'var(--color-bg)', border: '1px solid var(--color-border)', borderRadius: '12px', padding: '3px 10px', fontSize: '13px', fontWeight: 600, color: 'var(--color-text)' }}>
-                  {filteredTenants.length}
-                </span>
+          {hasActiveFilters && (
+            <div className="filter-summary">
+              <span className="filter-label">Results</span>
+              <div className="filter-summary-row">
+                <span className="filter-count">{filteredTenants.length}</span>
                 <button
-                  onClick={() => { setSearch(''); setLeaseFilter('all'); setExpiryFilter('all'); }}
-                  style={{ background: 'none', border: 'none', fontSize: '13px', color: 'var(--color-primary)', cursor: 'pointer', padding: '4px 0', fontWeight: 500 }}
+                  type="button"
+                  onClick={() => {
+                    setSearch('');
+                    setLeaseFilter('all');
+                    setExpiryFilter('all');
+                  }}
+                  className="filter-clear-button"
                 >
                   Clear filters
                 </button>
@@ -245,7 +282,11 @@ export default function TenantsPage() {
                     <td>
                       <Link
                         href={`/tenants/${tenant.id}`}
-                        style={{ color: 'var(--color-primary)', textDecoration: 'none', fontWeight: 500 }}
+                        style={{
+                          color: 'var(--color-primary)',
+                          textDecoration: 'none',
+                          fontWeight: 500,
+                        }}
                       >
                         {tenant.name}
                       </Link>
@@ -266,7 +307,9 @@ export default function TenantsPage() {
                     </td>
                     <td>{activeLease?.lease.unit.property.name || '--'}</td>
                     <td>
-                      <span className={`badge badge-${PORTAL_STATUS_BADGE[tenant.portalStatus] ?? 'vacant'}`}>
+                      <span
+                        className={`badge badge-${PORTAL_STATUS_BADGE[tenant.portalStatus] ?? 'vacant'}`}
+                      >
                         {PORTAL_STATUS_LABELS[tenant.portalStatus] ?? tenant.portalStatus}
                       </span>
                     </td>
@@ -295,7 +338,9 @@ export default function TenantsPage() {
             <form onSubmit={handleCreate}>
               <div className="modal-body">
                 {error && (
-                  <div style={{ color: 'var(--color-danger)', marginBottom: '12px', fontSize: '14px' }}>
+                  <div
+                    style={{ color: 'var(--color-danger)', marginBottom: '12px', fontSize: '14px' }}
+                  >
                     {error}
                   </div>
                 )}
@@ -327,8 +372,23 @@ export default function TenantsPage() {
                   <label>Current Address</label>
                   <input name="currentAddress" placeholder="123 Main St, City, ST 00000" />
                 </div>
-                <div style={{ marginTop: '16px', paddingTop: '16px', borderTop: '1px solid var(--color-border)' }}>
-                  <p style={{ fontSize: '12px', color: 'var(--color-text-muted)', marginBottom: '12px', fontWeight: 500, textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+                <div
+                  style={{
+                    marginTop: '16px',
+                    paddingTop: '16px',
+                    borderTop: '1px solid var(--color-border)',
+                  }}
+                >
+                  <p
+                    style={{
+                      fontSize: '12px',
+                      color: 'var(--color-text-muted)',
+                      marginBottom: '12px',
+                      fontWeight: 500,
+                      textTransform: 'uppercase',
+                      letterSpacing: '0.5px',
+                    }}
+                  >
                     Emergency Contact 1
                   </p>
                   <div className="form-row">
@@ -343,12 +403,19 @@ export default function TenantsPage() {
                   </div>
                   <div className="form-group">
                     <label>Relationship</label>
-                    <input name="emergencyContact1Relationship" placeholder="e.g. Spouse, Parent, Sibling" />
+                    <input
+                      name="emergencyContact1Relationship"
+                      placeholder="e.g. Spouse, Parent, Sibling"
+                    />
                   </div>
                 </div>
               </div>
               <div className="modal-footer">
-                <button type="button" className="btn btn-secondary" onClick={() => setShowForm(false)}>
+                <button
+                  type="button"
+                  className="btn btn-secondary"
+                  onClick={() => setShowForm(false)}
+                >
                   Cancel
                 </button>
                 <button type="submit" className="btn btn-primary">

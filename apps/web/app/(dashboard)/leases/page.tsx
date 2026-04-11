@@ -43,7 +43,10 @@ function expiryColorClass(endDate: string, status: string): string {
   return 'lease-expiry-green';
 }
 
-function expiryBadge(endDate: string, status: string): { label: string; bg: string; color: string } | null {
+function expiryBadge(
+  endDate: string,
+  status: string
+): { label: string; bg: string; color: string } | null {
   if (status === 'expired') return { label: 'Expired', bg: '#f3f4f6', color: '#6b7280' };
   const days = daysUntilExpiry(endDate);
   if (days < 0) return { label: 'Expired', bg: '#f3f4f6', color: '#6b7280' };
@@ -55,13 +58,20 @@ function expiryBadge(endDate: string, status: string): { label: string; bg: stri
 
 function statusBadgeClass(status: string): string {
   switch (status) {
-    case 'active': return 'badge-occupied';
-    case 'month_to_month': return 'badge-maintenance';
-    case 'notice_given': return 'badge-notice';
-    case 'expired': return 'badge-vacant';
-    case 'draft': return 'badge-neutral';
-    case 'terminated': return 'badge-vacant';
-    default: return 'badge-vacant';
+    case 'active':
+      return 'badge-occupied';
+    case 'month_to_month':
+      return 'badge-maintenance';
+    case 'notice_given':
+      return 'badge-notice';
+    case 'expired':
+      return 'badge-vacant';
+    case 'draft':
+      return 'badge-neutral';
+    case 'terminated':
+      return 'badge-vacant';
+    default:
+      return 'badge-vacant';
   }
 }
 
@@ -86,6 +96,8 @@ export default function LeasesPage() {
   const [showForm, setShowForm] = useState(false);
   const [error, setError] = useState('');
   const [filterExpiry, setFilterExpiry] = useState(searchParams.get('expiry') ?? '');
+  const [filterStatus, setFilterStatus] = useState('');
+  const [searchLease, setSearchLease] = useState('');
 
   // Dropdown data for new lease form
   const [unitOptions, setUnitOptions] = useState<UnitOption[]>([]);
@@ -136,29 +148,35 @@ export default function LeasesPage() {
         api.tenants.list(),
       ]);
       const unitLists = await Promise.all(
-        properties.map((p: any) => api.units.list(p.id).then((units: any[]) =>
-          units.map((u) => ({
-            id: u.id,
-            label: `Unit ${u.unitNumber} — ${p.name} (${u.status})`,
-            rentAmount: Number(u.rentAmount),
-            depositAmount: Number(u.depositAmount),
-          }))
-        ))
+        properties.map((p: any) =>
+          api.units.list(p.id).then((units: any[]) =>
+            units.map((u) => ({
+              id: u.id,
+              label: `Unit ${u.unitNumber} — ${p.name} (${u.status})`,
+              rentAmount: Number(u.rentAmount),
+              depositAmount: Number(u.depositAmount),
+            }))
+          )
+        )
       );
       setUnitOptions(unitLists.flat());
-      setTenantOptions(allTenants.map((t: any) => {
-        const lp = t.leaseParticipants?.[0];
-        return {
-          id: t.id,
-          name: t.name,
-          email: t.email,
-          activeLease: lp ? {
-            unitNumber: lp.lease.unit.unitNumber,
-            propertyName: lp.lease.unit.property.name,
-            status: lp.lease.status,
-          } : null,
-        };
-      }));
+      setTenantOptions(
+        allTenants.map((t: any) => {
+          const lp = t.leaseParticipants?.[0];
+          return {
+            id: t.id,
+            name: t.name,
+            email: t.email,
+            activeLease: lp
+              ? {
+                  unitNumber: lp.lease.unit.unitNumber,
+                  propertyName: lp.lease.unit.property.name,
+                  status: lp.lease.status,
+                }
+              : null,
+          };
+        })
+      );
     } catch (err) {
       console.error('Failed to load form data:', err);
     } finally {
@@ -182,7 +200,8 @@ export default function LeasesPage() {
 
     if (conflicts.length > 0) {
       const lines = conflicts.map(
-        (t) => `• ${t.name} — Unit ${t.activeLease!.unitNumber} at ${t.activeLease!.propertyName} (${t.activeLease!.status.replace(/_/g, ' ')})`
+        (t) =>
+          `• ${t.name} — Unit ${t.activeLease!.unitNumber} at ${t.activeLease!.propertyName} (${t.activeLease!.status.replace(/_/g, ' ')})`
       );
       const confirmed = window.confirm(
         `The following tenant(s) already have an active lease:\n\n${lines.join('\n')}\n\nCreate this lease anyway?`
@@ -261,14 +280,28 @@ export default function LeasesPage() {
 
   if (loading) return <div className="loading">Loading leases...</div>;
 
-  const activeCount = leases.filter((l) => l.status === 'active' || l.status === 'month_to_month').length;
+  const activeCount = leases.filter(
+    (l) => l.status === 'active' || l.status === 'month_to_month'
+  ).length;
   const expiringCount = leases.filter((l) => {
     if (l.status === 'expired') return false;
     const days = daysUntilExpiry(l.endDate);
     return days >= 0 && days <= 60;
   }).length;
+  const hasActiveFilters = Boolean(searchLease || filterStatus || filterExpiry);
 
   const filteredLeases = leases.filter((l) => {
+    if (searchLease) {
+      const q = searchLease.toLowerCase();
+      const tenant = l.participants.find((p) => p.isPrimary)?.tenant ?? l.participants[0]?.tenant;
+      if (
+        !tenant?.name.toLowerCase().includes(q) &&
+        !l.unit.unitNumber.toLowerCase().includes(q) &&
+        !l.unit.property.name.toLowerCase().includes(q)
+      )
+        return false;
+    }
+    if (filterStatus && l.status !== filterStatus) return false;
     if (!filterExpiry) return true;
     if (filterExpiry === 'expired') return l.status === 'expired' || daysUntilExpiry(l.endDate) < 0;
     const days = daysUntilExpiry(l.endDate);
@@ -289,26 +322,124 @@ export default function LeasesPage() {
         <div>
           <h1 className="page-title">Leases</h1>
           <p className="page-subtitle">
-            {leases.length} total &middot; {activeCount} active &middot; {expiringCount} expiring within 60 days
+            {leases.length} total &middot; {activeCount} active &middot; {expiringCount} expiring
+            within 60 days
           </p>
         </div>
-        <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
-          <select
-            value={filterExpiry}
-            onChange={(e) => setFilterExpiry(e.target.value)}
-            style={{ padding: '6px 12px', border: '1px solid var(--color-border)', borderRadius: 'var(--radius)', fontSize: '14px', background: 'white' }}
-          >
-            <option value="">All Leases</option>
-            <option value="14">Expiring within 14 days</option>
-            <option value="30">Expiring within 30 days</option>
-            <option value="60">Expiring within 60 days</option>
-            <option value="expired">Expired</option>
-          </select>
-          <button className="btn btn-primary" onClick={openForm}>
-            + New Lease
-          </button>
-        </div>
+        <button className="btn btn-primary" onClick={openForm}>
+          + New Lease
+        </button>
       </div>
+
+      {/* Filter bar */}
+      {leases.length > 0 && (
+        <div className="filter-bar">
+          <div className="filter-search">
+            <label className="filter-label" htmlFor="lease-search">
+              Search
+            </label>
+            <div className="filter-search-input-wrap">
+              <svg
+                className="filter-search-icon"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2.5"
+              >
+                <circle cx="11" cy="11" r="8" />
+                <path d="m21 21-4.35-4.35" />
+              </svg>
+              <input
+                id="lease-search"
+                type="text"
+                placeholder="Tenant, unit or property..."
+                value={searchLease}
+                onChange={(e) => setSearchLease(e.target.value)}
+                className={`filter-search-input${searchLease ? ' has-clear' : ''}`}
+              />
+              {searchLease && (
+                <button
+                  onClick={() => setSearchLease('')}
+                  style={{
+                    position: 'absolute',
+                    right: '8px',
+                    top: '50%',
+                    transform: 'translateY(-50%)',
+                    background: 'none',
+                    border: 'none',
+                    cursor: 'pointer',
+                    color: 'var(--color-text-muted)',
+                    fontSize: '16px',
+                    lineHeight: 1,
+                    padding: '0 2px',
+                  }}
+                >
+                  ×
+                </button>
+              )}
+            </div>
+          </div>
+
+          <div className="filter-divider" />
+
+          <div className="filter-group">
+            <label className="filter-label" htmlFor="lease-status-filter">
+              Status
+            </label>
+            <select
+              id="lease-status-filter"
+              value={filterStatus}
+              onChange={(e) => setFilterStatus(e.target.value)}
+              className={`filter-select${filterStatus ? ' filter-select-active-primary' : ''}`}
+            >
+              <option value="">All Statuses</option>
+              <option value="active">Active</option>
+              <option value="month_to_month">Month-to-Month</option>
+              <option value="notice_given">Notice Given</option>
+              <option value="expired">Expired</option>
+              <option value="terminated">Terminated</option>
+            </select>
+          </div>
+
+          <div className="filter-group">
+            <label className="filter-label" htmlFor="lease-expiry-filter">
+              Expiry Window
+            </label>
+            <select
+              id="lease-expiry-filter"
+              value={filterExpiry}
+              onChange={(e) => setFilterExpiry(e.target.value)}
+              className={`filter-select${filterExpiry ? ' filter-select-active-warning' : ''}`}
+            >
+              <option value="">Any Expiry</option>
+              <option value="14">Expiring ≤ 14 Days</option>
+              <option value="30">Expiring ≤ 30 Days</option>
+              <option value="60">Expiring ≤ 60 Days</option>
+              <option value="expired">Expired</option>
+            </select>
+          </div>
+
+          {hasActiveFilters && (
+            <div className="filter-summary">
+              <span className="filter-label">Results</span>
+              <div className="filter-summary-row">
+                <span className="filter-count">{filteredLeases.length}</span>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setSearchLease('');
+                    setFilterStatus('');
+                    setFilterExpiry('');
+                  }}
+                  className="filter-clear-button"
+                >
+                  Clear filters
+                </button>
+              </div>
+            </div>
+          )}
+        </div>
+      )}
 
       {leases.length === 0 ? (
         <div className="empty-state">
@@ -333,358 +464,476 @@ export default function LeasesPage() {
             <tbody>
               {filteredLeases.length === 0 ? (
                 <tr>
-                  <td colSpan={8} style={{ textAlign: 'center', padding: '32px', color: 'var(--color-text-muted)' }}>
+                  <td
+                    colSpan={8}
+                    style={{
+                      textAlign: 'center',
+                      padding: '32px',
+                      color: 'var(--color-text-muted)',
+                    }}
+                  >
                     No leases match the selected filter.
                   </td>
                 </tr>
-              ) : filteredLeases.map((lease) => {
-                const primaryTenant = lease.participants.find((p) => p.isPrimary) ?? lease.participants[0];
-                const colorClass = expiryColorClass(lease.endDate, lease.status);
-                const badge = expiryBadge(lease.endDate, lease.status);
-                return (
-                  <tr key={lease.id}>
-                    <td>
-                      <Link
-                        href={`/properties/${lease.unit.property.id}/units/${lease.unit.id}`}
-                        style={{ color: 'var(--color-primary)', textDecoration: 'none' }}
-                      >
-                        Unit {lease.unit.unitNumber}
-                      </Link>
-                    </td>
-                    <td>
-                      <Link
-                        href={`/properties/${lease.unit.property.id}`}
-                        style={{ color: 'var(--color-primary)', textDecoration: 'none' }}
-                      >
-                        {lease.unit.property.name}
-                      </Link>
-                    </td>
-                    <td>
-                      {primaryTenant ? (
+              ) : (
+                filteredLeases.map((lease) => {
+                  const primaryTenant =
+                    lease.participants.find((p) => p.isPrimary) ?? lease.participants[0];
+                  const colorClass = expiryColorClass(lease.endDate, lease.status);
+                  const badge = expiryBadge(lease.endDate, lease.status);
+                  return (
+                    <tr key={lease.id}>
+                      <td>
                         <Link
-                          href={`/tenants/${primaryTenant.tenant.id}`}
+                          href={`/properties/${lease.unit.property.id}/units/${lease.unit.id}`}
                           style={{ color: 'var(--color-primary)', textDecoration: 'none' }}
                         >
-                          {primaryTenant.tenant.name}
-                          {lease.participants.length > 1 && (
-                            <span style={{ color: '#6b7280', fontSize: '12px' }}>
-                              {' '}+{lease.participants.length - 1} more
+                          Unit {lease.unit.unitNumber}
+                        </Link>
+                      </td>
+                      <td>
+                        <Link
+                          href={`/properties/${lease.unit.property.id}`}
+                          style={{ color: 'var(--color-primary)', textDecoration: 'none' }}
+                        >
+                          {lease.unit.property.name}
+                        </Link>
+                      </td>
+                      <td>
+                        {primaryTenant ? (
+                          <Link
+                            href={`/tenants/${primaryTenant.tenant.id}`}
+                            style={{ color: 'var(--color-primary)', textDecoration: 'none' }}
+                          >
+                            {primaryTenant.tenant.name}
+                            {lease.participants.length > 1 && (
+                              <span style={{ color: '#6b7280', fontSize: '12px' }}>
+                                {' '}
+                                +{lease.participants.length - 1} more
+                              </span>
+                            )}
+                          </Link>
+                        ) : (
+                          '--'
+                        )}
+                      </td>
+                      <td>${Number(lease.rentAmount).toLocaleString()}</td>
+                      <td>
+                        {new Date(lease.startDate).toLocaleDateString('en-US', { timeZone: 'UTC' })}
+                      </td>
+                      <td>
+                        <div
+                          style={{
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: '8px',
+                            flexWrap: 'wrap',
+                          }}
+                        >
+                          <span className={colorClass}>
+                            {new Date(lease.endDate).toLocaleDateString('en-US', {
+                              timeZone: 'UTC',
+                            })}
+                          </span>
+                          {badge && (
+                            <span
+                              style={{
+                                background: badge.bg,
+                                color: badge.color,
+                                borderRadius: '12px',
+                                padding: '1px 8px',
+                                fontSize: '11px',
+                                fontWeight: 600,
+                                whiteSpace: 'nowrap',
+                              }}
+                            >
+                              {badge.label}
                             </span>
                           )}
-                        </Link>
-                      ) : (
-                        '--'
-                      )}
-                    </td>
-                    <td>${Number(lease.rentAmount).toLocaleString()}</td>
-                    <td>{new Date(lease.startDate).toLocaleDateString('en-US', { timeZone: 'UTC' })}</td>
-                    <td>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
-                        <span className={colorClass}>{new Date(lease.endDate).toLocaleDateString('en-US', { timeZone: 'UTC' })}</span>
-                        {badge && (
-                          <span style={{
-                            background: badge.bg,
-                            color: badge.color,
-                            borderRadius: '12px',
-                            padding: '1px 8px',
-                            fontSize: '11px',
-                            fontWeight: 600,
-                            whiteSpace: 'nowrap',
-                          }}>
-                            {badge.label}
+                        </div>
+                      </td>
+                      <td>
+                        <span className={`badge ${statusBadgeClass(lease.status)}`}>
+                          {lease.status.replace(/_/g, ' ')}
+                        </span>
+                        {lease.renewalOfLeaseId && (
+                          <span className="badge badge-maintenance" style={{ marginLeft: '6px' }}>
+                            Renewal
                           </span>
                         )}
-                      </div>
-                    </td>
-                    <td>
-                      <span className={`badge ${statusBadgeClass(lease.status)}`}>
-                        {lease.status.replace(/_/g, ' ')}
-                      </span>
-                      {lease.renewalOfLeaseId && (
-                        <span className="badge badge-maintenance" style={{ marginLeft: '6px' }}>
-                          Renewal
-                        </span>
-                      )}
-                      {lease.renewals.length > 0 && (
-                        <span className="badge badge-notice" style={{ marginLeft: '6px' }}>
-                          Superseded
-                        </span>
-                      )}
-                    </td>
-                    <td>
-                      <Link
-                        href={`/leases/${lease.id}`}
-                        className="btn btn-sm btn-secondary"
-                        style={{ textDecoration: 'none' }}
-                      >
-                        Edit
-                      </Link>
-                    </td>
-                  </tr>
-                );
-              })}
+                        {lease.renewals.length > 0 && (
+                          <span className="badge badge-notice" style={{ marginLeft: '6px' }}>
+                            Superseded
+                          </span>
+                        )}
+                      </td>
+                      <td>
+                        <Link
+                          href={`/leases/${lease.id}`}
+                          className="btn btn-sm btn-secondary"
+                          style={{ textDecoration: 'none' }}
+                        >
+                          Edit
+                        </Link>
+                      </td>
+                    </tr>
+                  );
+                })
+              )}
             </tbody>
           </table>
         </div>
       )}
 
       {showForm && (
-        <div className="modal-overlay" onClick={() => { setShowForm(false); resetForm(); }}>
+        <div
+          className="modal-overlay"
+          onClick={() => {
+            setShowForm(false);
+            resetForm();
+          }}
+        >
           <div className="modal" onClick={(e) => e.stopPropagation()} style={{ maxWidth: '560px' }}>
             <div className="modal-header">
               <h2>New Lease</h2>
-              <button className="btn btn-sm btn-secondary" onClick={() => { setShowForm(false); resetForm(); }}>
+              <button
+                className="btn btn-sm btn-secondary"
+                onClick={() => {
+                  setShowForm(false);
+                  resetForm();
+                }}
+              >
                 X
               </button>
             </div>
             <form onSubmit={handleCreate}>
               <div className="modal-body">
                 {error && (
-                  <div style={{ color: 'var(--color-danger)', marginBottom: '12px', fontSize: '14px' }}>
+                  <div
+                    style={{ color: 'var(--color-danger)', marginBottom: '12px', fontSize: '14px' }}
+                  >
                     {error}
                   </div>
                 )}
                 {formLoading ? (
-                  <div style={{ textAlign: 'center', padding: '16px', color: '#6b7280' }}>Loading…</div>
+                  <div style={{ textAlign: 'center', padding: '16px', color: '#6b7280' }}>
+                    Loading…
+                  </div>
                 ) : (
                   <>
-                <div className="form-group">
-                  <label>Unit</label>
-                  <select required value={unitId} onChange={(e) => {
-                    const opt = unitOptions.find((u) => u.id === e.target.value);
-                    setUnitId(e.target.value);
-                    if (opt) { setRentAmount(String(opt.rentAmount)); setDepositAmount(String(opt.depositAmount)); }
-                  }}>
-                    <option value="">— Select a unit —</option>
-                    {unitOptions.map((u) => (
-                      <option key={u.id} value={u.id}>{u.label}</option>
-                    ))}
-                  </select>
-                </div>
-                <div className="form-group">
-                  {tenantOptions.length === 0 ? (
-                    <p style={{ fontSize: '13px', color: '#6b7280', margin: 0 }}>No tenants found. Add tenants first.</p>
-                  ) : (
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                      {selectedTenantIds.map((selectedId, index) => {
-                        const takenIds = new Set(selectedTenantIds.filter((_, i) => i !== index));
-                        const available = tenantOptions.filter((t) => !takenIds.has(t.id));
-                        return (
-                          <div key={index} style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                            <div style={{ flex: 1 }}>
-                              <label style={{ fontSize: '13px', color: '#6b7280', display: 'block', marginBottom: '4px' }}>
-                                {index === 0 ? 'Primary Tenant' : `Additional Tenant ${index + 1}`}
-                              </label>
-                              <select
-                                required={index === 0}
-                                value={selectedId}
-                                onChange={(e) => setTenantAtIndex(index, e.target.value)}
+                    <div className="form-group">
+                      <label>Unit</label>
+                      <select
+                        required
+                        value={unitId}
+                        onChange={(e) => {
+                          const opt = unitOptions.find((u) => u.id === e.target.value);
+                          setUnitId(e.target.value);
+                          if (opt) {
+                            setRentAmount(String(opt.rentAmount));
+                            setDepositAmount(String(opt.depositAmount));
+                          }
+                        }}
+                      >
+                        <option value="">— Select a unit —</option>
+                        {unitOptions.map((u) => (
+                          <option key={u.id} value={u.id}>
+                            {u.label}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                    <div className="form-group">
+                      {tenantOptions.length === 0 ? (
+                        <p style={{ fontSize: '13px', color: '#6b7280', margin: 0 }}>
+                          No tenants found. Add tenants first.
+                        </p>
+                      ) : (
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                          {selectedTenantIds.map((selectedId, index) => {
+                            const takenIds = new Set(
+                              selectedTenantIds.filter((_, i) => i !== index)
+                            );
+                            const available = tenantOptions.filter((t) => !takenIds.has(t.id));
+                            return (
+                              <div
+                                key={index}
+                                style={{ display: 'flex', alignItems: 'center', gap: '8px' }}
                               >
-                                <option value="">— Select a tenant —</option>
-                                {available.map((t) => (
-                                  <option key={t.id} value={t.id}>
-                                    {t.activeLease
-                                      ? `⚠ ${t.name} (${t.email}) — Unit ${t.activeLease.unitNumber}, ${t.activeLease.propertyName}`
-                                      : `${t.name} (${t.email})`}
-                                  </option>
-                                ))}
-                              </select>
-                            </div>
-                            {index > 0 && (
-                              <button
-                                type="button"
-                                className="btn btn-sm btn-secondary"
-                                style={{ color: 'var(--color-danger)', marginTop: '20px', flexShrink: 0 }}
-                                onClick={() => removeTenantSlot(index)}
-                              >
-                                Remove
-                              </button>
-                            )}
-                          </div>
-                        );
-                      })}
-                      {selectedTenantIds.length < tenantOptions.length && (
-                        <button
-                          type="button"
-                          className="btn btn-sm btn-secondary"
-                          style={{ alignSelf: 'flex-start' }}
-                          onClick={addTenantSlot}
-                        >
-                          + Add Another Person
-                        </button>
+                                <div style={{ flex: 1 }}>
+                                  <label
+                                    style={{
+                                      fontSize: '13px',
+                                      color: '#6b7280',
+                                      display: 'block',
+                                      marginBottom: '4px',
+                                    }}
+                                  >
+                                    {index === 0
+                                      ? 'Primary Tenant'
+                                      : `Additional Tenant ${index + 1}`}
+                                  </label>
+                                  <select
+                                    required={index === 0}
+                                    value={selectedId}
+                                    onChange={(e) => setTenantAtIndex(index, e.target.value)}
+                                  >
+                                    <option value="">— Select a tenant —</option>
+                                    {available.map((t) => (
+                                      <option key={t.id} value={t.id}>
+                                        {t.activeLease
+                                          ? `⚠ ${t.name} (${t.email}) — Unit ${t.activeLease.unitNumber}, ${t.activeLease.propertyName}`
+                                          : `${t.name} (${t.email})`}
+                                      </option>
+                                    ))}
+                                  </select>
+                                </div>
+                                {index > 0 && (
+                                  <button
+                                    type="button"
+                                    className="btn btn-sm btn-secondary"
+                                    style={{
+                                      color: 'var(--color-danger)',
+                                      marginTop: '20px',
+                                      flexShrink: 0,
+                                    }}
+                                    onClick={() => removeTenantSlot(index)}
+                                  >
+                                    Remove
+                                  </button>
+                                )}
+                              </div>
+                            );
+                          })}
+                          {selectedTenantIds.length < tenantOptions.length && (
+                            <button
+                              type="button"
+                              className="btn btn-sm btn-secondary"
+                              style={{ alignSelf: 'flex-start' }}
+                              onClick={addTenantSlot}
+                            >
+                              + Add Another Person
+                            </button>
+                          )}
+                        </div>
                       )}
                     </div>
-                  )}
-                </div>
-                <div className="form-row">
-                  <div className="form-group">
-                    <label>Lease Type</label>
-                    <select value={leaseType} onChange={(e) => setLeaseType(e.target.value)}>
-                      <option value="fixed_term">Fixed Term</option>
-                      <option value="month_to_month">Month-to-Month</option>
-                    </select>
-                  </div>
-                  <div className="form-group">
-                    <label>Move-In Date</label>
-                    <input
-                      type="date"
-                      value={moveInDate}
-                      onChange={(e) => setMoveInDate(e.target.value)}
-                    />
-                  </div>
-                </div>
-                <div className="form-row">
-                  <div className="form-group">
-                    <label>Monthly Rent ($)</label>
-                    <input
-                      type="number"
-                      min="0"
-                      step="0.01"
-                      required
-                      placeholder="1500"
-                      value={rentAmount}
-                      onChange={(e) => setRentAmount(e.target.value)}
-                    />
-                  </div>
-                  <div className="form-group">
-                    <label>Deposit ($)</label>
-                    <input
-                      type="number"
-                      min="0"
-                      step="0.01"
-                      placeholder="1500"
-                      value={depositAmount}
-                      onChange={(e) => setDepositAmount(e.target.value)}
-                    />
-                  </div>
-                </div>
-                <div className="form-row">
-                  <div className="form-group">
-                    <label>Start Date</label>
-                    <input
-                      type="date"
-                      required
-                      value={startDate}
-                      onChange={(e) => setStartDate(e.target.value)}
-                    />
-                  </div>
-                  <div className="form-group">
-                    <label>End Date</label>
-                    <input
-                      type="date"
-                      required
-                      value={endDate}
-                      onChange={(e) => setEndDate(e.target.value)}
-                    />
-                  </div>
-                </div>
-                <div className="form-row">
-                  <div className="form-group">
-                    <label>Rent Due Day (1–28)</label>
-                    <input
-                      type="number"
-                      min="1"
-                      max="28"
-                      value={rentDueDay}
-                      onChange={(e) => setRentDueDay(e.target.value)}
-                    />
-                  </div>
-                  <div className="form-group">
-                    <label>Notice Period (days)</label>
-                    <input
-                      type="number"
-                      min="0"
-                      value={noticePeriodDays}
-                      onChange={(e) => setNoticePeriodDays(e.target.value)}
-                    />
-                  </div>
-                </div>
-                <div className="form-row">
-                  <div className="form-group">
-                    <label>Late Fee ($)</label>
-                    <input
-                      type="number"
-                      min="0"
-                      step="0.01"
-                      value={lateFeeAmount}
-                      onChange={(e) => setLateFeeAmount(e.target.value)}
-                    />
-                  </div>
-                  <div className="form-group">
-                    <label>Grace Period (days)</label>
-                    <input
-                      type="number"
-                      min="0"
-                      value={lateFeeGraceDays}
-                      onChange={(e) => setLateFeeGraceDays(e.target.value)}
-                    />
-                  </div>
-                </div>
-                <div className="form-group">
-                  <label>Utilities Included</label>
-                  <div style={{ display: 'flex', gap: '16px', flexWrap: 'wrap', marginTop: '4px' }}>
-                    {['Water', 'Gas', 'Electric', 'Trash'].map((util) => (
-                      <label key={util} style={{ display: 'flex', alignItems: 'center', gap: '6px', fontWeight: 400, fontSize: '14px', cursor: 'pointer' }}>
+                    <div className="form-row">
+                      <div className="form-group">
+                        <label>Lease Type</label>
+                        <select value={leaseType} onChange={(e) => setLeaseType(e.target.value)}>
+                          <option value="fixed_term">Fixed Term</option>
+                          <option value="month_to_month">Month-to-Month</option>
+                        </select>
+                      </div>
+                      <div className="form-group">
+                        <label>Move-In Date</label>
+                        <input
+                          type="date"
+                          value={moveInDate}
+                          onChange={(e) => setMoveInDate(e.target.value)}
+                        />
+                      </div>
+                    </div>
+                    <div className="form-row">
+                      <div className="form-group">
+                        <label>Monthly Rent ($)</label>
+                        <input
+                          type="number"
+                          min="0"
+                          step="0.01"
+                          required
+                          placeholder="1500"
+                          value={rentAmount}
+                          onChange={(e) => setRentAmount(e.target.value)}
+                        />
+                      </div>
+                      <div className="form-group">
+                        <label>Deposit ($)</label>
+                        <input
+                          type="number"
+                          min="0"
+                          step="0.01"
+                          placeholder="1500"
+                          value={depositAmount}
+                          onChange={(e) => setDepositAmount(e.target.value)}
+                        />
+                      </div>
+                    </div>
+                    <div className="form-row">
+                      <div className="form-group">
+                        <label>Start Date</label>
+                        <input
+                          type="date"
+                          required
+                          value={startDate}
+                          onChange={(e) => setStartDate(e.target.value)}
+                        />
+                      </div>
+                      <div className="form-group">
+                        <label>End Date</label>
+                        <input
+                          type="date"
+                          required
+                          value={endDate}
+                          onChange={(e) => setEndDate(e.target.value)}
+                        />
+                      </div>
+                    </div>
+                    <div className="form-row">
+                      <div className="form-group">
+                        <label>Rent Due Day (1–28)</label>
+                        <input
+                          type="number"
+                          min="1"
+                          max="28"
+                          value={rentDueDay}
+                          onChange={(e) => setRentDueDay(e.target.value)}
+                        />
+                      </div>
+                      <div className="form-group">
+                        <label>Notice Period (days)</label>
+                        <input
+                          type="number"
+                          min="0"
+                          value={noticePeriodDays}
+                          onChange={(e) => setNoticePeriodDays(e.target.value)}
+                        />
+                      </div>
+                    </div>
+                    <div className="form-row">
+                      <div className="form-group">
+                        <label>Late Fee ($)</label>
+                        <input
+                          type="number"
+                          min="0"
+                          step="0.01"
+                          value={lateFeeAmount}
+                          onChange={(e) => setLateFeeAmount(e.target.value)}
+                        />
+                      </div>
+                      <div className="form-group">
+                        <label>Grace Period (days)</label>
+                        <input
+                          type="number"
+                          min="0"
+                          value={lateFeeGraceDays}
+                          onChange={(e) => setLateFeeGraceDays(e.target.value)}
+                        />
+                      </div>
+                    </div>
+                    <div className="form-group">
+                      <label>Utilities Included</label>
+                      <div
+                        style={{ display: 'flex', gap: '16px', flexWrap: 'wrap', marginTop: '4px' }}
+                      >
+                        {['Water', 'Gas', 'Electric', 'Trash'].map((util) => (
+                          <label
+                            key={util}
+                            style={{
+                              display: 'flex',
+                              alignItems: 'center',
+                              gap: '6px',
+                              fontWeight: 400,
+                              fontSize: '14px',
+                              cursor: 'pointer',
+                            }}
+                          >
+                            <input
+                              type="checkbox"
+                              checked={utilitiesIncluded.includes(util.toLowerCase())}
+                              onChange={() => toggleUtility(util.toLowerCase())}
+                            />
+                            {util}
+                          </label>
+                        ))}
+                      </div>
+                    </div>
+                    <div style={{ marginTop: '4px' }}>
+                      <label
+                        style={{
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: '8px',
+                          fontWeight: 400,
+                          fontSize: '14px',
+                          cursor: 'pointer',
+                          marginBottom: '8px',
+                        }}
+                      >
                         <input
                           type="checkbox"
-                          checked={utilitiesIncluded.includes(util.toLowerCase())}
-                          onChange={() => toggleUtility(util.toLowerCase())}
+                          checked={hasPetAddendum}
+                          onChange={(e) => setHasPetAddendum(e.target.checked)}
                         />
-                        {util}
+                        Pet Addendum
                       </label>
-                    ))}
-                  </div>
-                </div>
-                <div style={{ marginTop: '4px' }}>
-                  <label style={{ display: 'flex', alignItems: 'center', gap: '8px', fontWeight: 400, fontSize: '14px', cursor: 'pointer', marginBottom: '8px' }}>
-                    <input type="checkbox" checked={hasPetAddendum} onChange={(e) => setHasPetAddendum(e.target.checked)} />
-                    Pet Addendum
-                  </label>
-                  {hasPetAddendum && (
-                    <div className="form-group" style={{ marginLeft: '24px' }}>
-                      <label>Pet Deposit ($)</label>
-                      <input
-                        type="number"
-                        min="0"
-                        step="0.01"
-                        placeholder="300"
-                        value={petDepositAmount}
-                        onChange={(e) => setPetDepositAmount(e.target.value)}
+                      {hasPetAddendum && (
+                        <div className="form-group" style={{ marginLeft: '24px' }}>
+                          <label>Pet Deposit ($)</label>
+                          <input
+                            type="number"
+                            min="0"
+                            step="0.01"
+                            placeholder="300"
+                            value={petDepositAmount}
+                            onChange={(e) => setPetDepositAmount(e.target.value)}
+                          />
+                        </div>
+                      )}
+                      <label
+                        style={{
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: '8px',
+                          fontWeight: 400,
+                          fontSize: '14px',
+                          cursor: 'pointer',
+                          marginBottom: '8px',
+                        }}
+                      >
+                        <input
+                          type="checkbox"
+                          checked={hasParkingAddendum}
+                          onChange={(e) => setHasParkingAddendum(e.target.checked)}
+                        />
+                        Parking Addendum
+                      </label>
+                      {hasParkingAddendum && (
+                        <div className="form-group" style={{ marginLeft: '24px' }}>
+                          <label>Parking Fee ($/mo)</label>
+                          <input
+                            type="number"
+                            min="0"
+                            step="0.01"
+                            placeholder="75"
+                            value={parkingFee}
+                            onChange={(e) => setParkingFee(e.target.value)}
+                          />
+                        </div>
+                      )}
+                    </div>
+                    <div className="form-group">
+                      <label>Notes</label>
+                      <textarea
+                        rows={3}
+                        placeholder="Optional notes..."
+                        value={notes}
+                        onChange={(e) => setNotes(e.target.value)}
                       />
                     </div>
-                  )}
-                  <label style={{ display: 'flex', alignItems: 'center', gap: '8px', fontWeight: 400, fontSize: '14px', cursor: 'pointer', marginBottom: '8px' }}>
-                    <input type="checkbox" checked={hasParkingAddendum} onChange={(e) => setHasParkingAddendum(e.target.checked)} />
-                    Parking Addendum
-                  </label>
-                  {hasParkingAddendum && (
-                    <div className="form-group" style={{ marginLeft: '24px' }}>
-                      <label>Parking Fee ($/mo)</label>
-                      <input
-                        type="number"
-                        min="0"
-                        step="0.01"
-                        placeholder="75"
-                        value={parkingFee}
-                        onChange={(e) => setParkingFee(e.target.value)}
-                      />
-                    </div>
-                  )}
-                </div>
-                <div className="form-group">
-                  <label>Notes</label>
-                  <textarea
-                    rows={3}
-                    placeholder="Optional notes..."
-                    value={notes}
-                    onChange={(e) => setNotes(e.target.value)}
-                  />
-                </div>
                   </>
                 )}
               </div>
               <div className="modal-footer">
-                <button type="button" className="btn btn-secondary" onClick={() => { setShowForm(false); resetForm(); }}>
+                <button
+                  type="button"
+                  className="btn btn-secondary"
+                  onClick={() => {
+                    setShowForm(false);
+                    resetForm();
+                  }}
+                >
                   Cancel
                 </button>
                 <button type="submit" className="btn btn-primary">
