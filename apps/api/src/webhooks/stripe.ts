@@ -52,11 +52,17 @@ export default async function stripeWebhookHandler(req: Request, res: Response):
 
       case 'payment_intent.succeeded': {
         const pi = event.data.object as Stripe.PaymentIntent;
-        const paymentId = pi.metadata?.paymentId;
-        if (!paymentId) break;
+        // Support multi-payment (paymentIds) and legacy single-payment (paymentId)
+        const resolvedIds = pi.metadata?.paymentIds
+          ? pi.metadata.paymentIds.split(',').filter(Boolean)
+          : pi.metadata?.paymentId
+            ? [pi.metadata.paymentId]
+            : [];
+        if (resolvedIds.length === 0) break;
 
-        const payment = await prisma.payment.findFirst({
-          where: { id: paymentId },
+        // Load all payments; use first to get the lease/org
+        const payments = await prisma.payment.findMany({
+          where: { id: { in: resolvedIds } },
           include: {
             lease: {
               select: {
@@ -66,56 +72,75 @@ export default async function stripeWebhookHandler(req: Request, res: Response):
             },
           },
         });
-        if (!payment) break;
+        if (payments.length === 0) break;
 
-        const orgId = payment.lease.unit.property.organizationId;
+        const orgId = payments[0]!.lease.unit.property.organizationId;
+        const now = new Date();
 
-        await prisma.$transaction(async (tx) => {
-          if (payment.status !== 'completed') {
-            await tx.payment.update({
-              where: { id: paymentId },
-              data: { status: 'completed', paidAt: new Date() },
-            });
-          }
+        // Update all payment statuses atomically (skip if all already completed)
+        const toComplete = payments.filter((p) => p.status !== 'completed');
+        if (toComplete.length > 0) {
+          await prisma.$transaction(
+            toComplete.map((p) =>
+              prisma.payment.update({
+                where: { id: p.id },
+                data: { status: 'completed', paidAt: now },
+              })
+            )
+          );
+        }
+
+        // Create ledger entries — suffix event ID with paymentId so each line
+        // item gets a unique stripeEventId (the column has a @unique constraint)
+        // while still being idempotent on re-delivery.
+        for (const payment of payments) {
           await ledgerService.createLedgerEntry({
             organizationId: orgId,
-            paymentId,
+            paymentId: payment.id,
             type: 'credit',
             amount: Number(payment.amount),
             description: `ACH payment received — ${payment.type} for lease ${payment.leaseId}`,
-            stripeEventId: event.id,
+            stripeEventId: `${event.id}:${payment.id}`,
           });
-        });
+        }
 
-        console.log(`[stripe-webhook] PaymentIntent succeeded for payment ${paymentId}`);
+        console.log(`[stripe-webhook] PaymentIntent succeeded for payments: ${resolvedIds.join(', ')}`);
         break;
       }
 
       case 'payment_intent.payment_failed': {
         const pi = event.data.object as Stripe.PaymentIntent;
-        const paymentId = pi.metadata?.paymentId;
-        if (!paymentId) break;
+        const resolvedIds = pi.metadata?.paymentIds
+          ? pi.metadata.paymentIds.split(',').filter(Boolean)
+          : pi.metadata?.paymentId
+            ? [pi.metadata.paymentId]
+            : [];
+        if (resolvedIds.length === 0) break;
 
         await prisma.payment.updateMany({
-          where: { id: paymentId, status: { not: 'completed' } },
+          where: { id: { in: resolvedIds }, status: { not: 'completed' } },
           data: { status: 'failed' },
         });
 
-        console.log(`[stripe-webhook] PaymentIntent failed for payment ${paymentId}`);
+        console.log(`[stripe-webhook] PaymentIntent failed for payments: ${resolvedIds.join(', ')}`);
         break;
       }
 
       case 'payment_intent.processing': {
         const pi = event.data.object as Stripe.PaymentIntent;
-        const paymentId = pi.metadata?.paymentId;
-        if (!paymentId) break;
+        const resolvedIds = pi.metadata?.paymentIds
+          ? pi.metadata.paymentIds.split(',').filter(Boolean)
+          : pi.metadata?.paymentId
+            ? [pi.metadata.paymentId]
+            : [];
+        if (resolvedIds.length === 0) break;
 
         await prisma.payment.updateMany({
-          where: { id: paymentId, status: 'pending' },
+          where: { id: { in: resolvedIds }, status: 'pending' },
           data: { notes: 'ACH debit processing via Stripe' },
         });
 
-        console.log(`[stripe-webhook] PaymentIntent processing for payment ${paymentId}`);
+        console.log(`[stripe-webhook] PaymentIntent processing for payments: ${resolvedIds.join(', ')}`);
         break;
       }
 

@@ -4,6 +4,7 @@ import type {
   TenantDashboard,
   TenantPaymentListItem,
   InitiatePaymentResponse,
+  InitiateMultiPaymentResponse,
   TenantWorkOrderListItem,
   SubmitWorkOrderInput,
   TenantUploadUrlResponse,
@@ -63,6 +64,12 @@ export const tenantApi = {
     apiFetch('/api/v1/tenant/payments/initiate', {
       method: 'POST',
       body: JSON.stringify({ paymentId }),
+    }),
+
+  initiateMultiPayment: (paymentIds: string[]): Promise<InitiateMultiPaymentResponse> =>
+    apiFetch('/api/v1/tenant/payments/initiate-multi', {
+      method: 'POST',
+      body: JSON.stringify({ paymentIds }),
     }),
 
   workOrders: (cursor?: string): Promise<{ data: TenantWorkOrderListItem[]; nextCursor: string | null }> =>

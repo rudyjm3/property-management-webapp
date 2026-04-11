@@ -59,26 +59,44 @@ export default function PaymentsScreen() {
         keyExtractor={(item) => item.id}
         contentContainerStyle={styles.list}
         refreshControl={<RefreshControl refreshing={isRefetching} onRefresh={() => { refetch(); refetchDashboard(); }} tintColor="#6366f1" />}
-        ListHeaderComponent={() => (
-          <View style={{ gap: 16, marginBottom: 8 }}>
-            <Text style={styles.heading}>Payments</Text>
-            {dashboard?.nextPayment && (
-              <Card>
-                <Text style={styles.muted}>Balance due</Text>
-                <Text style={styles.balanceAmount}>{formatCurrency(dashboard.nextPayment.amount)}</Text>
-                <Button title="Pay Now" onPress={() => setPaySheetVisible(true)} style={{ marginTop: 12 }} />
-              </Card>
-            )}
-            <Text style={styles.sectionTitle}>History</Text>
-          </View>
-        )}
+        ListHeaderComponent={() => {
+          const pending = dashboard?.pendingPayments ?? [];
+          const total = pending.reduce((sum, p) => sum + p.amount, 0);
+          return (
+            <View style={{ gap: 16, marginBottom: 8 }}>
+              <Text style={styles.heading}>Payments</Text>
+              {pending.length > 0 && (
+                <Card>
+                  <Text style={styles.muted}>Balance due</Text>
+                  {pending.map((p) => (
+                    <View key={p.id} style={styles.lineRow}>
+                      <Text style={styles.lineLabel}>{p.type.replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase())}</Text>
+                      <Text style={styles.lineAmt}>{formatCurrency(p.amount)}</Text>
+                    </View>
+                  ))}
+                  {pending.length > 1 && (
+                    <View style={[styles.lineRow, styles.totalRow]}>
+                      <Text style={styles.totalLabel}>Total</Text>
+                      <Text style={styles.balanceAmount}>{formatCurrency(total)}</Text>
+                    </View>
+                  )}
+                  {pending.length === 1 && (
+                    <Text style={styles.balanceAmount}>{formatCurrency(total)}</Text>
+                  )}
+                  <Button title="Pay Now" onPress={() => setPaySheetVisible(true)} style={{ marginTop: 12 }} />
+                </Card>
+              )}
+              <Text style={styles.sectionTitle}>History</Text>
+            </View>
+          );
+        }}
         renderItem={({ item }) => <PaymentRow item={item} onPress={() => setSelectedPayment(item)} />}
         ListEmptyComponent={() => <Text style={styles.empty}>{isLoading ? 'Loading...' : 'No payment history yet.'}</Text>}
         ListFooterComponent={() => hasNextPage ? <Button title={isFetchingNextPage ? 'Loading...' : 'Load more'} onPress={() => fetchNextPage()} loading={isFetchingNextPage} variant="secondary" style={{ marginTop: 16 }} /> : null}
       />
 
-      {dashboard?.nextPayment && (
-        <PayNowSheet visible={paySheetVisible} payment={dashboard.nextPayment} onClose={() => setPaySheetVisible(false)} onSuccess={() => { refetch(); refetchDashboard(); }} />
+      {!!dashboard?.pendingPayments?.length && (
+        <PayNowSheet visible={paySheetVisible} payments={dashboard.pendingPayments} onClose={() => setPaySheetVisible(false)} onSuccess={() => { refetch(); refetchDashboard(); }} />
       )}
 
       <Modal visible={!!selectedPayment} transparent animationType="slide" onRequestClose={() => setSelectedPayment(null)}>
@@ -111,6 +129,11 @@ const styles = StyleSheet.create({
   heading: { fontSize: 24, fontWeight: '700', color: '#111827' },
   muted: { color: '#6b7280', fontSize: 14 },
   balanceAmount: { fontSize: 32, fontWeight: '700', color: '#111827', marginTop: 4 },
+  lineRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginTop: 6 },
+  lineLabel: { fontSize: 14, color: '#374151' },
+  lineAmt: { fontSize: 14, fontWeight: '500', color: '#111827' },
+  totalRow: { borderTopWidth: 1, borderTopColor: '#e5e7eb', paddingTop: 8, marginTop: 4 },
+  totalLabel: { fontSize: 15, fontWeight: '700', color: '#111827' },
   sectionTitle: { fontSize: 17, fontWeight: '600', color: '#111827' },
   row: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: '#f3f4f6' },
   rowLeft: { flex: 1 },

@@ -437,14 +437,17 @@ export interface TenantPortalProfile {
   };
 }
 
+export interface TenantPendingPayment {
+  id: string;
+  amount: number;
+  dueDate: Date | null;
+  status: PaymentStatus;
+  type: PaymentType;
+  stripePaymentIntentId: string | null;
+}
+
 export interface TenantDashboard {
-  nextPayment: {
-    id: string;
-    amount: number;
-    dueDate: Date;
-    status: PaymentStatus;
-    stripePaymentIntentId: string | null;
-  } | null;
+  pendingPayments: TenantPendingPayment[];
   openWorkOrdersCount: number;
   unreadMessagesCount: number;
   activeLease: {
@@ -475,6 +478,13 @@ export interface InitiatePaymentResponse {
   clientSecret: string;
   paymentIntentId: string;
   status: string;
+}
+
+export interface InitiateMultiPaymentResponse {
+  clientSecret: string;
+  paymentIntentId: string;
+  status: string;
+  paymentIds: string[];
 }
 
 // ─── Tenant Work Orders ───────────────────────────────────────────────────────

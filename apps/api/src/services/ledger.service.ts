@@ -23,7 +23,7 @@ export async function createLedgerEntry(input: CreateLedgerEntryInput) {
 
     // Serialize all writes per org — advisory lock covers the empty-table case
     // where SELECT FOR UPDATE would lock nothing and allow duplicate zero-balance reads.
-    await tx.$queryRaw`SELECT pg_advisory_xact_lock(hashtext(${input.organizationId})::bigint)`;
+    await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${input.organizationId})::bigint)`;
 
     const latest = await tx.ledgerEntry.findFirst({
       where: { organizationId: input.organizationId },
