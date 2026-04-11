@@ -64,7 +64,7 @@ router.patch('/read-all', async (req: Request, res: Response, next: NextFunction
 // No cron secret required — intended to be triggered from the dashboard UI.
 router.post('/jobs/late-fees', async (req: Request, res: Response, next: NextFunction) => {
   try {
-    const { applyLateFees } = await import('../jobs/lateFeeJob');
+    const { applyLateFees } = await import('../jobs/lateFeeJob.js');
     const applyResult = await applyLateFees(req.params.orgId as string);
     const notifResult = await notifService.runLateFeeNotificationJob(req.params.orgId as string);
     res.json({ data: { lateFees: applyResult, notifications: notifResult } });
@@ -97,3 +97,4 @@ router.post(`/jobs/lease-expiry`, async (req: Request, res: Response, next: Next
 });
 
 export default router;
+

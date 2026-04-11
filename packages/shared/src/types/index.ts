@@ -9,7 +9,13 @@ export type ConnectAccountStatus = 'not_connected' | 'pending' | 'active' | 'res
 
 export type PropertyType = 'multifamily' | 'single_family' | 'commercial' | 'mixed_use';
 
-export type UnitType = 'studio' | 'one_bed' | 'two_bed' | 'three_bed' | 'four_plus_bed' | 'commercial';
+export type UnitType =
+  | 'studio'
+  | 'one_bed'
+  | 'two_bed'
+  | 'three_bed'
+  | 'four_plus_bed'
+  | 'commercial';
 export type UnitStatus = 'vacant' | 'occupied' | 'notice' | 'maintenance' | 'unlisted';
 
 export type PortalStatus = 'invited' | 'active' | 'never_logged_in';
@@ -17,12 +23,29 @@ export type PreferredContact = 'email' | 'sms' | 'call';
 export type GovernmentIdType = 'drivers_license' | 'state_id' | 'passport';
 export type IncomeSource = 'employment' | 'self_employed' | 'benefits' | 'other';
 
-export type LeaseStatus = 'draft' | 'active' | 'month_to_month' | 'notice_given' | 'expired' | 'terminated';
+export type LeaseStatus =
+  | 'draft'
+  | 'active'
+  | 'month_to_month'
+  | 'notice_given'
+  | 'expired'
+  | 'terminated';
 export type LeaseType = 'fixed_term' | 'month_to_month';
-export type SecurityDepositStatus = 'held' | 'partial_return' | 'full_return' | 'applied_to_balance';
+export type SecurityDepositStatus =
+  | 'held'
+  | 'partial_return'
+  | 'full_return'
+  | 'applied_to_balance';
 export type EsignatureStatus = 'pending' | 'partially_signed' | 'completed';
 
-export type PaymentType = 'rent' | 'deposit' | 'late_fee' | 'pet_deposit' | 'parking' | 'credit' | 'other';
+export type PaymentType =
+  | 'rent'
+  | 'deposit'
+  | 'late_fee'
+  | 'pet_deposit'
+  | 'parking'
+  | 'credit'
+  | 'other';
 export type PaymentStatus = 'pending' | 'completed' | 'failed' | 'waived' | 'refunded';
 export type PaymentMethod = 'ach' | 'card' | 'check' | 'cash' | 'money_order' | 'other';
 
@@ -51,7 +74,14 @@ export type WorkOrderStatus =
 
 export type VendorStatus = 'active' | 'inactive';
 
-export type DocumentEntityType = 'property' | 'unit' | 'lease' | 'tenant' | 'work_order' | 'vendor';
+export type DocumentEntityType =
+  | 'organization'
+  | 'property'
+  | 'unit'
+  | 'lease'
+  | 'tenant'
+  | 'work_order'
+  | 'vendor';
 export type DocumentCategory = 'lease' | 'inspection' | 'insurance' | 'id' | 'photo' | 'other';
 
 export type LedgerEntryType = 'credit' | 'debit';
