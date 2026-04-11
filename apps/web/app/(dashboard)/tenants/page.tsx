@@ -141,24 +141,75 @@ export default function TenantsPage() {
 
       {/* Filter bar */}
       {tenants.length > 0 && (
-        <div style={{ display: 'flex', gap: '12px', marginBottom: '16px', flexWrap: 'wrap' }}>
-          <input
-            type="text"
-            placeholder="Search by name, email, unit, property..."
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            style={{ flex: '1', minWidth: '220px' }}
-          />
-          <select value={leaseFilter} onChange={(e) => setLeaseFilter(e.target.value as typeof leaseFilter)} style={{ width: '160px' }}>
-            <option value="all">All Tenants</option>
-            <option value="active">Active Lease</option>
-            <option value="none">No Lease</option>
-          </select>
-          <select value={expiryFilter} onChange={(e) => setExpiryFilter(e.target.value as typeof expiryFilter)} style={{ width: '170px' }}>
-            <option value="all">Any Expiry</option>
-            <option value="30d">Expiring in 30 Days</option>
-            <option value="60d">Expiring in 60 Days</option>
-          </select>
+        <div style={{ background: 'var(--color-surface)', border: '1px solid var(--color-border)', borderRadius: 'var(--radius)', padding: '12px 16px', marginBottom: '16px', boxShadow: 'var(--shadow-sm)', display: 'flex', gap: '12px', alignItems: 'flex-end', flexWrap: 'wrap' }}>
+          {/* Search */}
+          <div style={{ flex: '1', minWidth: '200px' }}>
+            <div style={{ fontSize: '11px', fontWeight: 600, color: 'var(--color-text-muted)', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: '4px' }}>Search</div>
+            <div style={{ position: 'relative' }}>
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" style={{ position: 'absolute', left: '10px', top: '50%', transform: 'translateY(-50%)', color: 'var(--color-text-muted)', pointerEvents: 'none' }}>
+                <circle cx="11" cy="11" r="8" /><path d="m21 21-4.35-4.35" />
+              </svg>
+              <input
+                type="text"
+                placeholder="Name, email, unit or property..."
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                style={{ width: '100%', paddingLeft: '30px', paddingRight: search ? '28px' : '10px', padding: '8px 10px 8px 30px', border: '1px solid var(--color-border)', borderRadius: 'var(--radius)', fontSize: '14px', fontFamily: 'inherit', background: 'var(--color-bg)' }}
+              />
+              {search && (
+                <button onClick={() => setSearch('')} style={{ position: 'absolute', right: '8px', top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', cursor: 'pointer', color: 'var(--color-text-muted)', fontSize: '16px', lineHeight: 1, padding: '0 2px' }}>×</button>
+              )}
+            </div>
+          </div>
+
+          {/* Vertical divider */}
+          <div style={{ width: '1px', background: 'var(--color-border)', alignSelf: 'stretch', margin: '0 4px' }} />
+
+          {/* Lease Status */}
+          <div style={{ minWidth: '145px' }}>
+            <div style={{ fontSize: '11px', fontWeight: 600, color: 'var(--color-text-muted)', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: '4px' }}>Lease Status</div>
+            <select
+              value={leaseFilter}
+              onChange={(e) => setLeaseFilter(e.target.value as typeof leaseFilter)}
+              style={{ width: '100%', padding: '8px 10px', border: `1px solid ${leaseFilter !== 'all' ? 'var(--color-primary)' : 'var(--color-border)'}`, borderRadius: 'var(--radius)', fontSize: '14px', fontFamily: 'inherit', background: leaseFilter !== 'all' ? 'rgba(37,99,235,0.05)' : 'var(--color-bg)', color: leaseFilter !== 'all' ? 'var(--color-primary)' : 'var(--color-text)', cursor: 'pointer', fontWeight: leaseFilter !== 'all' ? 500 : 400 }}
+            >
+              <option value="all">All Tenants</option>
+              <option value="active">Active Lease</option>
+              <option value="none">No Lease</option>
+            </select>
+          </div>
+
+          {/* Expiry */}
+          <div style={{ minWidth: '160px' }}>
+            <div style={{ fontSize: '11px', fontWeight: 600, color: 'var(--color-text-muted)', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: '4px' }}>Lease Expiry</div>
+            <select
+              value={expiryFilter}
+              onChange={(e) => setExpiryFilter(e.target.value as typeof expiryFilter)}
+              style={{ width: '100%', padding: '8px 10px', border: `1px solid ${expiryFilter !== 'all' ? 'var(--color-warning)' : 'var(--color-border)'}`, borderRadius: 'var(--radius)', fontSize: '14px', fontFamily: 'inherit', background: expiryFilter !== 'all' ? 'rgba(217,119,6,0.05)' : 'var(--color-bg)', color: expiryFilter !== 'all' ? 'var(--color-warning)' : 'var(--color-text)', cursor: 'pointer', fontWeight: expiryFilter !== 'all' ? 500 : 400 }}
+            >
+              <option value="all">Any Expiry</option>
+              <option value="30d">Expiring ≤ 30 Days</option>
+              <option value="60d">Expiring ≤ 60 Days</option>
+            </select>
+          </div>
+
+          {/* Clear + result count — only when filtered */}
+          {(search || leaseFilter !== 'all' || expiryFilter !== 'all') && (
+            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '4px', marginLeft: 'auto' }}>
+              <div style={{ fontSize: '11px', fontWeight: 600, color: 'var(--color-text-muted)', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Results</div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                <span style={{ background: 'var(--color-bg)', border: '1px solid var(--color-border)', borderRadius: '12px', padding: '3px 10px', fontSize: '13px', fontWeight: 600, color: 'var(--color-text)' }}>
+                  {filteredTenants.length}
+                </span>
+                <button
+                  onClick={() => { setSearch(''); setLeaseFilter('all'); setExpiryFilter('all'); }}
+                  style={{ background: 'none', border: 'none', fontSize: '13px', color: 'var(--color-primary)', cursor: 'pointer', padding: '4px 0', fontWeight: 500 }}
+                >
+                  Clear filters
+                </button>
+              </div>
+            </div>
+          )}
         </div>
       )}
 
