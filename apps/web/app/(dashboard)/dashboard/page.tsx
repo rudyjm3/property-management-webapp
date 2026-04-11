@@ -55,9 +55,10 @@ interface ExpiringLease {
 }
 
 interface MessageThread {
-  id: string;
+  threadId: string;
   subject: string | null;
-  updatedAt: string;
+  latestMessage: { createdAt: string };
+  tenant: { id: string; name: string } | null;
   unreadCount: number;
 }
 
@@ -110,7 +111,7 @@ export default function DashboardPage() {
         const now = new Date();
         const in30 = new Date(now); in30.setDate(now.getDate() + 30);
         const in60 = new Date(now); in60.setDate(now.getDate() + 60);
-        const activeLeases = leases.filter((l: any) => l.status === 'active' && l.endDate);
+        const activeLeases = leases.filter((l: any) => ['active', 'month_to_month', 'notice_given'].includes(l.status) && l.endDate);
         // expiring30: leases ending within 0–30 days
         const expiring30 = activeLeases.filter((l: any) => new Date(l.endDate) <= in30).length;
         // expiring60: leases ending within 0–60 days (matches the "Expiring (60D)" filter)
@@ -474,7 +475,7 @@ export default function DashboardPage() {
               <div>
                 {recentThreads.map((thread, index) => (
                   <Link
-                    key={`${thread.id}-${index}`}
+                    key={`${thread.threadId}-${index}`}
                     href="/messages"
                     style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '12px 20px', borderBottom: '1px solid var(--color-border)', textDecoration: 'none', color: 'inherit' }}
                   >
@@ -483,7 +484,7 @@ export default function DashboardPage() {
                         <span style={{ width: '8px', height: '8px', borderRadius: '50%', background: 'var(--color-primary)', display: 'inline-block', flexShrink: 0 }} />
                       )}
                       <span style={{ fontWeight: thread.unreadCount > 0 ? 600 : 400, fontSize: '14px' }}>
-                        {thread.subject || 'No subject'}
+                        {thread.subject || (thread.tenant?.name ? `Message from ${thread.tenant.name}` : 'No subject')}
                       </span>
                       {thread.unreadCount > 0 && (
                         <span style={{ background: 'var(--color-primary)', color: 'white', borderRadius: '12px', padding: '1px 7px', fontSize: '11px', fontWeight: 600 }}>
@@ -492,7 +493,7 @@ export default function DashboardPage() {
                       )}
                     </div>
                     <span style={{ fontSize: '12px', color: 'var(--color-text-muted)' }}>
-                      {new Date(thread.updatedAt).toLocaleDateString()}
+                      {thread.latestMessage?.createdAt ? new Date(thread.latestMessage.createdAt).toLocaleDateString() : ''}
                     </span>
                   </Link>
                 ))}
