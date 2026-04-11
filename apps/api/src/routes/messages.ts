@@ -9,7 +9,7 @@ const requireManagerAccess = requireRoles(['owner', 'manager']);
 // GET /api/v1/organizations/:orgId/messages/threads
 router.get('/threads', requireManagerAccess, async (req: Request, res: Response, next: NextFunction) => {
   try {
-    const threads = await messageService.listThreads(req.params.orgId as string);
+    const threads = await messageService.listThreads(req.params.orgId as string, req.query.tenantId as string | undefined);
     res.json({ data: threads });
   } catch (err) {
     next(err);

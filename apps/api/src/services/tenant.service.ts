@@ -12,7 +12,9 @@ export async function listTenants(organizationId: string) {
         },
         include: {
           lease: {
-            include: {
+            select: {
+              status: true,
+              endDate: true,
               unit: {
                 select: {
                   id: true,

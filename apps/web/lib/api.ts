@@ -270,7 +270,7 @@ export const api = {
   },
   messages: {
     threads: {
-      list: () => apiFetch<any[]>(`/api/v1/organizations/${_orgId}/messages/threads`),
+      list: (tenantId?: string) => apiFetch<any[]>(`/api/v1/organizations/${_orgId}/messages/threads${tenantId ? `?tenantId=${tenantId}` : ''}`),
       get: (threadId: string) => apiFetch<any[]>(`/api/v1/organizations/${_orgId}/messages/threads/${threadId}`),
     },
     send: (data: { senderUserId: string; recipientTenantId: string; body: string; threadId?: string | null; subject?: string | null; unitId?: string | null; workOrderId?: string | null }) =>

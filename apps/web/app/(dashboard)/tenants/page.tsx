@@ -28,6 +28,7 @@ interface Tenant {
   leaseParticipants: Array<{
     lease: {
       status: string;
+      endDate: string;
       unit: {
         id: string;
         unitNumber: string;
@@ -42,6 +43,9 @@ export default function TenantsPage() {
   const [loading, setLoading] = useState(true);
   const [showForm, setShowForm] = useState(false);
   const [error, setError] = useState('');
+  const [search, setSearch] = useState('');
+  const [leaseFilter, setLeaseFilter] = useState<'all' | 'active' | 'none'>('all');
+  const [expiryFilter, setExpiryFilter] = useState<'all' | '30d' | '60d'>('all');
 
   useEffect(() => {
     loadTenants();
@@ -83,8 +87,36 @@ export default function TenantsPage() {
 
   if (loading) return <div className="loading">Loading tenants...</div>;
 
+  const now = new Date();
+  const in30 = new Date(now); in30.setDate(now.getDate() + 30);
+  const in60 = new Date(now); in60.setDate(now.getDate() + 60);
+
   const activeTenants = tenants.filter((t) => t.leaseParticipants.length > 0);
-  const inactiveTenants = tenants.filter((t) => t.leaseParticipants.length === 0);
+
+  const filteredTenants = tenants.filter((t) => {
+    const lp = t.leaseParticipants[0];
+    // search
+    if (search) {
+      const q = search.toLowerCase();
+      const matchName = t.name.toLowerCase().includes(q);
+      const matchEmail = t.email.toLowerCase().includes(q);
+      const matchUnit = lp?.lease.unit.unitNumber.toLowerCase().includes(q);
+      const matchProp = lp?.lease.unit.property.name.toLowerCase().includes(q);
+      if (!matchName && !matchEmail && !matchUnit && !matchProp) return false;
+    }
+    // lease status filter
+    if (leaseFilter === 'active' && t.leaseParticipants.length === 0) return false;
+    if (leaseFilter === 'none' && t.leaseParticipants.length > 0) return false;
+    // expiry filter
+    if (expiryFilter !== 'all' && lp?.lease.endDate) {
+      const end = new Date(lp.lease.endDate);
+      const cutoff = expiryFilter === '30d' ? in30 : in60;
+      if (end > cutoff) return false;
+    } else if (expiryFilter !== 'all' && !lp?.lease.endDate) {
+      return false;
+    }
+    return true;
+  });
 
   return (
     <>
@@ -92,7 +124,9 @@ export default function TenantsPage() {
         <div>
           <h1 className="page-title">Tenants</h1>
           <p className="page-subtitle">
-            {tenants.length} tenants &middot; {activeTenants.length} with active leases
+            {filteredTenants.length === tenants.length
+              ? `${tenants.length} tenants \u00b7 ${activeTenants.length} with active leases`
+              : `${filteredTenants.length} of ${tenants.length} tenants`}
           </p>
         </div>
         <div style={{ display: 'flex', gap: '8px' }}>
@@ -105,10 +139,38 @@ export default function TenantsPage() {
         </div>
       </div>
 
+      {/* Filter bar */}
+      {tenants.length > 0 && (
+        <div style={{ display: 'flex', gap: '12px', marginBottom: '16px', flexWrap: 'wrap' }}>
+          <input
+            type="text"
+            placeholder="Search by name, email, unit, property..."
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            style={{ flex: '1', minWidth: '220px' }}
+          />
+          <select value={leaseFilter} onChange={(e) => setLeaseFilter(e.target.value as typeof leaseFilter)} style={{ width: '160px' }}>
+            <option value="all">All Tenants</option>
+            <option value="active">Active Lease</option>
+            <option value="none">No Lease</option>
+          </select>
+          <select value={expiryFilter} onChange={(e) => setExpiryFilter(e.target.value as typeof expiryFilter)} style={{ width: '170px' }}>
+            <option value="all">Any Expiry</option>
+            <option value="30d">Expiring in 30 Days</option>
+            <option value="60d">Expiring in 60 Days</option>
+          </select>
+        </div>
+      )}
+
       {tenants.length === 0 ? (
         <div className="empty-state">
           <h3>No tenants yet</h3>
           <p>Add your first tenant to get started.</p>
+        </div>
+      ) : filteredTenants.length === 0 ? (
+        <div className="empty-state">
+          <h3>No tenants match your filters</h3>
+          <p>Try adjusting your search or filter criteria.</p>
         </div>
       ) : (
         <div className="table-container">
@@ -125,7 +187,7 @@ export default function TenantsPage() {
               </tr>
             </thead>
             <tbody>
-              {tenants.map((tenant) => {
+              {filteredTenants.map((tenant) => {
                 const activeLease = tenant.leaseParticipants[0];
                 return (
                   <tr key={tenant.id}>
