@@ -29,6 +29,7 @@ export default function OrganizationSettingsPage() {
   const [phone, setPhone] = useState('');
   const [email, setEmail] = useState('');
   const [logoUrl, setLogoUrl] = useState<string | null>(null);
+  const [logoImageSrc, setLogoImageSrc] = useState<string | null>(null);
   const [logoFile, setLogoFile] = useState<File | null>(null);
   const [logoPreviewUrl, setLogoPreviewUrl] = useState<string | null>(null);
   const [timezone, setTimezone] = useState('America/Chicago');
@@ -49,6 +50,23 @@ export default function OrganizationSettingsPage() {
         setRentDueDay(org.rentDueDay ?? 1);
         setGracePeriodDays(org.gracePeriodDays ?? 5);
         setLateFeeAmount(Number(org.lateFeeAmount) ?? 50);
+
+        if (org.logoUrl) {
+          if (typeof org.logoUrl === 'string' && /^https?:\/\//i.test(org.logoUrl)) {
+            setLogoImageSrc(org.logoUrl);
+          } else {
+            const docs = await api.documents.list({ entityType: 'organization', entityId: org.id });
+            const matchedDoc = docs.find((doc: any) => doc.s3Key === org.logoUrl);
+            if (matchedDoc?.id) {
+              const { downloadUrl } = await api.documents.getDownloadUrl(matchedDoc.id);
+              setLogoImageSrc(downloadUrl);
+            } else {
+              setLogoImageSrc(null);
+            }
+          }
+        } else {
+          setLogoImageSrc(null);
+        }
       } catch (err) {
         console.error('Failed to load org settings:', err);
       } finally {
@@ -121,7 +139,7 @@ export default function OrganizationSettingsPage() {
       });
 
       await api.documents.uploadToS3(uploadUrl, logoFile, resolvedMimeType);
-      await api.documents.confirmUpload({
+      const confirmedDoc = await api.documents.confirmUpload({
         s3Key,
         entityType: 'organization',
         entityId,
@@ -136,6 +154,10 @@ export default function OrganizationSettingsPage() {
       await api.organizations.update({ logoUrl: s3Key });
       await refreshProfile();
       setLogoUrl(s3Key);
+      if (confirmedDoc?.id) {
+        const { downloadUrl } = await api.documents.getDownloadUrl(confirmedDoc.id);
+        setLogoImageSrc(downloadUrl);
+      }
       setLogoFile(null);
       setSaved(true);
       setTimeout(() => setSaved(false), 3000);
@@ -230,10 +252,10 @@ export default function OrganizationSettingsPage() {
               Upload your organization logo for use across the app.
             </div>
 
-            {(logoPreviewUrl || logoUrl) && (
+            {(logoPreviewUrl || logoImageSrc) && (
               <div style={{ marginBottom: '12px', textAlign: 'center' }}>
                 <img
-                  src={logoPreviewUrl || logoUrl || ''}
+                  src={logoPreviewUrl || logoImageSrc || ''}
                   alt="Organization logo preview"
                   style={{ maxHeight: '120px', maxWidth: '100%' }}
                 />

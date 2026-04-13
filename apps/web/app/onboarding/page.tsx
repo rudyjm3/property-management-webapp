@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useMemo, useState } from 'react';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { api } from '@/lib/api';
 import { useAuth } from '@/contexts/AuthContext';
 
@@ -36,6 +36,7 @@ type Step = 'org' | 'logo' | 'billing' | 'property';
 
 export default function OnboardingPage() {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const { profile, session, loading, refreshProfile } = useAuth();
   const [step, setStep] = useState<Step>('org');
 
@@ -81,10 +82,27 @@ export default function OnboardingPage() {
 
   useEffect(() => {
     if (loading) return;
+
+    const code = searchParams.get('code');
+    const tokenHash = searchParams.get('token_hash');
+    const type = searchParams.get('type');
+    if (!session && (code || (tokenHash && type))) {
+      const callbackParams = new URLSearchParams();
+      if (code) callbackParams.set('code', code);
+      if (tokenHash) callbackParams.set('token_hash', tokenHash);
+      if (type) callbackParams.set('type', type);
+      callbackParams.set(
+        'next',
+        searchParams.get('invited') === 'true' ? '/onboarding?invited=true' : '/onboarding'
+      );
+      router.replace(`/auth/callback?${callbackParams.toString()}`);
+      return;
+    }
+
     if (!session) {
       router.replace('/login');
     }
-  }, [loading, router, session]);
+  }, [loading, router, searchParams, session]);
 
   useEffect(() => {
     if (!profile) return;
