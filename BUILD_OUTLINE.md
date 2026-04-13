@@ -7,49 +7,55 @@ This is the living technical blueprint for the PropFlow property management plat
 ## 1. Project Overview
 
 ### Mission
+
 Build the go-to property management platform for small-to-mid apartment managers (20–300 units) — one that handles the full operational workflow without the complexity or cost of enterprise tools like AppFolio or Buildium.
 
 ### Target Personas
 
 **Property Manager**
+
 - Manages 1–20 properties, 20–300 units
 - Currently splits work across multiple tools (spreadsheet for rents, email for maintenance, paper for appliances)
 - Needs one place to check every morning: who paid, what's broken, what lease is expiring
 
 **Tenant**
+
 - Rents an apartment unit
 - Wants to pay rent from their phone, submit maintenance with a photo, and not have to call the office
 
 ### Business Model
+
 - SaaS, monthly subscription
 - Base app + optional add-on modules
 - Tiered pricing: flat rate for small portfolios, per-unit above threshold
 - Revenue streams: subscription fees + ACH/card payment processing margin
 
 ### MVP Success Criteria
+
 A manager can: create an organization, add a property with units, invite tenants, collect ACH rent, and receive a work order submission — all in under 30 minutes from sign-up.
 
 ---
 
 ## 2. Tech Stack
 
-| Layer | Technology | Version | Rationale |
-|---|---|---|---|
-| Manager Web App | Next.js (App Router) | 14+ | SSR performance, file-based routing, React ecosystem |
-| Tenant Mobile App | React Native (Expo) | SDK 51+ | Single codebase for iOS + Android, shared types with web |
-| Backend API | Node.js + Express | Node 20 LTS | Real-time capability (WebSocket), JS across full stack |
-| Primary Database | PostgreSQL | 15 | ACID compliance, relational integrity for financial data |
-| Cache / Sessions | Redis | 7 | Session tokens, notification queuing, rate limiting |
-| Auth | Supabase Auth | Latest | Managed JWT auth, row-level security, no custom auth risk |
-| ORM | Prisma | 5+ | Type-safe queries, migration management, schema as code |
-| Payments | Stripe | Latest API | ACH bank transfers, card payments, webhook events |
-| File Storage | AWS S3 | - | Presigned URL upload pattern, cost-effective at scale |
-| Email | Resend | - | Developer-friendly, reliable transactional delivery |
-| SMS | Twilio | - | Programmatic SMS for rent and maintenance alerts |
-| Hosting (staging) | Vercel + Railway | - | Zero-config CI/CD, easy environment management |
-| Monorepo | Turborepo | Latest | Parallel task execution, shared packages, build caching |
+| Layer             | Technology           | Version     | Rationale                                                 |
+| ----------------- | -------------------- | ----------- | --------------------------------------------------------- |
+| Manager Web App   | Next.js (App Router) | 14+         | SSR performance, file-based routing, React ecosystem      |
+| Tenant Mobile App | React Native (Expo)  | SDK 51+     | Single codebase for iOS + Android, shared types with web  |
+| Backend API       | Node.js + Express    | Node 20 LTS | Real-time capability (WebSocket), JS across full stack    |
+| Primary Database  | PostgreSQL           | 15          | ACID compliance, relational integrity for financial data  |
+| Cache / Sessions  | Redis                | 7           | Session tokens, notification queuing, rate limiting       |
+| Auth              | Supabase Auth        | Latest      | Managed JWT auth, row-level security, no custom auth risk |
+| ORM               | Prisma               | 5+          | Type-safe queries, migration management, schema as code   |
+| Payments          | Stripe               | Latest API  | ACH bank transfers, card payments, webhook events         |
+| File Storage      | AWS S3               | -           | Presigned URL upload pattern, cost-effective at scale     |
+| Email             | Resend               | -           | Developer-friendly, reliable transactional delivery       |
+| SMS               | Twilio               | -           | Programmatic SMS for rent and maintenance alerts          |
+| Hosting (staging) | Vercel + Railway     | -           | Zero-config CI/CD, easy environment management            |
+| Monorepo          | Turborepo            | Latest      | Parallel task execution, shared packages, build caching   |
 
 ### Third-Party Accounts Needed Before Development
+
 - [ ] Supabase project (free tier to start)
 - [ ] Stripe account (test mode)
 - [ ] AWS account + S3 bucket
@@ -134,57 +140,58 @@ Organization (Management company or individual landlord)
 ```
 
 ### Multi-Tenancy Pattern
+
 Every manager-facing query must filter by `organization_id`. This is enforced at the API middleware layer (not just ORM) — every protected route validates that the requesting user belongs to the organization being queried.
 
 ### Key Entities
 
-> **Status legend:** **Required** = must be present at creation. *Optional* = collected when available. `Module` = nullable column added now, populated when the module ships.
+> **Status legend:** **Required** = must be present at creation. _Optional_ = collected when available. `Module` = nullable column added now, populated when the module ships.
 
 ---
 
 **Organization** — Top-level account (management company or individual landlord)
 
-| Field | Type | Status | Notes |
-|---|---|---|---|
-| `id` | UUID | **Required** | Primary key |
-| `name` | string | **Required** | Company or owner name |
-| `slug` | string | **Required** | URL-safe identifier |
-| `logo_url` | string | *Optional* | Uploaded logo for branding |
-| `email` | string | **Required** | Primary contact email |
-| `phone` | string | **Required** | Primary contact phone |
-| `timezone` | string | **Required** | Defaults all date/time display |
-| `date_format` | enum | *Optional* | `MM/DD/YYYY` or `DD/MM/YYYY` |
-| `plan_tier` | enum | **Required** | `starter / pro / enterprise` |
-| `stripe_customer_id` | string | **Required** | Stripe billing reference |
-| `stripe_subscription_id` | string | **Required** | Active subscription ID |
-| `subscription_status` | enum | **Required** | `active / trialing / past_due / canceled` |
-| `trial_ends_at` | timestamp | *Optional* | Null if not on trial |
-| `late_fee_amount` | decimal | **Required** | Default late fee — overridable per lease |
-| `grace_period_days` | integer | **Required** | Days after due date before late fee applies |
-| `rent_due_day` | integer | **Required** | Day of month rent is due (e.g. 1) |
-| `created_at` | timestamp | **Required** | |
+| Field                    | Type      | Status       | Notes                                       |
+| ------------------------ | --------- | ------------ | ------------------------------------------- |
+| `id`                     | UUID      | **Required** | Primary key                                 |
+| `name`                   | string    | **Required** | Company or owner name                       |
+| `slug`                   | string    | **Required** | URL-safe identifier                         |
+| `logo_url`               | string    | _Optional_   | Uploaded logo for branding                  |
+| `email`                  | string    | **Required** | Primary contact email                       |
+| `phone`                  | string    | **Required** | Primary contact phone                       |
+| `timezone`               | string    | **Required** | Defaults all date/time display              |
+| `date_format`            | enum      | _Optional_   | `MM/DD/YYYY` or `DD/MM/YYYY`                |
+| `plan_tier`              | enum      | **Required** | `starter / pro / enterprise`                |
+| `stripe_customer_id`     | string    | **Required** | Stripe billing reference                    |
+| `stripe_subscription_id` | string    | **Required** | Active subscription ID                      |
+| `subscription_status`    | enum      | **Required** | `active / trialing / past_due / canceled`   |
+| `trial_ends_at`          | timestamp | _Optional_   | Null if not on trial                        |
+| `late_fee_amount`        | decimal   | **Required** | Default late fee — overridable per lease    |
+| `grace_period_days`      | integer   | **Required** | Days after due date before late fee applies |
+| `rent_due_day`           | integer   | **Required** | Day of month rent is due (e.g. 1)           |
+| `created_at`             | timestamp | **Required** |                                             |
 
 ---
 
 **User** — Staff accounts (managers, admins, maintenance workers — not tenants)
 
-| Field | Type | Status | Notes |
-|---|---|---|---|
-| `id` | UUID | **Required** | |
-| `organization_id` | UUID FK | **Required** | Links to Organization |
-| `name` | string | **Required** | Display name |
-| `email` | string | **Required** | Used for login and notifications |
-| `phone` | string | *Optional* | For urgent maintenance alerts |
-| `avatar_url` | string | *Optional* | |
-| `role` | enum | **Required** | `owner / manager / maintenance` |
-| `status` | enum | **Required** | `active / invited / deactivated` |
-| `invited_at` | timestamp | **Required** | |
-| `last_login_at` | timestamp | *Optional* | Useful for audit trail |
-| `notif_rent_overdue` | enum | *Optional* | `email / in_app / both / none` |
-| `notif_work_order` | enum | *Optional* | `email / in_app / both / none` |
-| `notif_lease_expiry` | enum | *Optional* | `email / in_app / both / none` |
-| `notif_new_message` | enum | *Optional* | `email / in_app / both / none` |
-| `created_at` | timestamp | **Required** | |
+| Field                | Type      | Status       | Notes                            |
+| -------------------- | --------- | ------------ | -------------------------------- |
+| `id`                 | UUID      | **Required** |                                  |
+| `organization_id`    | UUID FK   | **Required** | Links to Organization            |
+| `name`               | string    | **Required** | Display name                     |
+| `email`              | string    | **Required** | Used for login and notifications |
+| `phone`              | string    | _Optional_   | For urgent maintenance alerts    |
+| `avatar_url`         | string    | _Optional_   |                                  |
+| `role`               | enum      | **Required** | `owner / manager / maintenance`  |
+| `status`             | enum      | **Required** | `active / invited / deactivated` |
+| `invited_at`         | timestamp | **Required** |                                  |
+| `last_login_at`      | timestamp | _Optional_   | Useful for audit trail           |
+| `notif_rent_overdue` | enum      | _Optional_   | `email / in_app / both / none`   |
+| `notif_work_order`   | enum      | _Optional_   | `email / in_app / both / none`   |
+| `notif_lease_expiry` | enum      | _Optional_   | `email / in_app / both / none`   |
+| `notif_new_message`  | enum      | _Optional_   | `email / in_app / both / none`   |
+| `created_at`         | timestamp | **Required** |                                  |
 
 Index: `organization_id`
 
@@ -192,28 +199,28 @@ Index: `organization_id`
 
 **Property** — A physical address containing one or more units
 
-| Field | Type | Status | Notes |
-|---|---|---|---|
-| `id` | UUID | **Required** | |
-| `organization_id` | UUID FK | **Required** | |
-| `name` | string | **Required** | Display name, e.g. Elm Street Apartments |
-| `type` | enum | **Required** | `multifamily / single_family / commercial / mixed_use` |
-| `address` | string | **Required** | Street address |
-| `city` | string | **Required** | |
-| `state` | string | **Required** | 2-letter state code — drives compliance rules |
-| `zip` | string | **Required** | |
-| `country` | string | **Required** | Default `US` |
-| `jurisdiction_notes` | text | *Optional* | Free-text field for local ordinance notes |
-| `year_built` | integer | *Optional* | Useful for maintenance context |
-| `unit_count` | integer | **Required** | Computed or manually set |
-| `amenities` | string[] | *Optional* | Pool, gym, laundry, etc. |
-| `photo_url` | string | *Optional* | |
-| `notes` | text | *Optional* | |
-| `tax_parcel_id` | string | `Module` | Accounting module |
-| `insurance_policy_number` | string | `Module` | Insurance module |
-| `insurance_expires_at` | date | `Module` | Insurance module |
-| `created_at` | timestamp | **Required** | |
-| `updated_at` | timestamp | **Required** | |
+| Field                     | Type      | Status       | Notes                                                  |
+| ------------------------- | --------- | ------------ | ------------------------------------------------------ |
+| `id`                      | UUID      | **Required** |                                                        |
+| `organization_id`         | UUID FK   | **Required** |                                                        |
+| `name`                    | string    | **Required** | Display name, e.g. Elm Street Apartments               |
+| `type`                    | enum      | **Required** | `multifamily / single_family / commercial / mixed_use` |
+| `address`                 | string    | **Required** | Street address                                         |
+| `city`                    | string    | **Required** |                                                        |
+| `state`                   | string    | **Required** | 2-letter state code — drives compliance rules          |
+| `zip`                     | string    | **Required** |                                                        |
+| `country`                 | string    | **Required** | Default `US`                                           |
+| `jurisdiction_notes`      | text      | _Optional_   | Free-text field for local ordinance notes              |
+| `year_built`              | integer   | _Optional_   | Useful for maintenance context                         |
+| `unit_count`              | integer   | **Required** | Computed or manually set                               |
+| `amenities`               | string[]  | _Optional_   | Pool, gym, laundry, etc.                               |
+| `photo_url`               | string    | _Optional_   |                                                        |
+| `notes`                   | text      | _Optional_   |                                                        |
+| `tax_parcel_id`           | string    | `Module`     | Accounting module                                      |
+| `insurance_policy_number` | string    | `Module`     | Insurance module                                       |
+| `insurance_expires_at`    | date      | `Module`     | Insurance module                                       |
+| `created_at`              | timestamp | **Required** |                                                        |
+| `updated_at`              | timestamp | **Required** |                                                        |
 
 Index: `organization_id`
 
@@ -223,36 +230,36 @@ Index: `organization_id`
 
 **Unit** — An individual rentable space within a property
 
-| Field | Type | Status | Notes |
-|---|---|---|---|
-| `id` | UUID | **Required** | |
-| `property_id` | UUID FK | **Required** | |
-| `unit_number` | string | **Required** | e.g. 4B, 101, Upper |
-| `floor` | integer | *Optional* | |
-| `type` | enum | **Required** | `studio / 1br / 2br / 3br / 4br+ / commercial` |
-| `bedrooms` | integer | **Required** | |
-| `bathrooms` | decimal | **Required** | 1.5 = one full + one half bath |
-| `sq_ft` | integer | *Optional* | |
-| `status` | enum | **Required** | `occupied / vacant / notice / maintenance / unlisted` |
-| `market_rent` | decimal | **Required** | What the unit should rent for |
-| `rent_amount` | decimal | **Required** | What the current lease charges — may differ from market_rent |
-| `deposit_amount` | decimal | **Required** | |
-| `available_date` | date | *Optional* | When unit will be ready if vacant |
-| `parking_spaces` | string[] | *Optional* | e.g. `['P12', 'P13']` |
-| `storage_unit` | string | *Optional* | |
-| `utility_meter_electric` | string | *Optional* | Meter number |
-| `utility_meter_gas` | string | *Optional* | Meter number |
-| `utility_meter_water` | string | *Optional* | Meter number |
-| `address` | string | *Optional* | Address override if different from property |
-| `city` | string | *Optional* | Address override |
-| `state` | string | *Optional* | Address override |
-| `zip` | string | *Optional* | Address override |
-| `notes` | text | *Optional* | |
-| `last_inspection_at` | timestamp | `Module` | Updated by Inspections module |
-| `last_renovation_at` | date | *Optional* | |
-| `appliance_count` | integer | `Module` | Maintained by Unit Intelligence module |
-| `created_at` | timestamp | **Required** | |
-| `updated_at` | timestamp | **Required** | |
+| Field                    | Type      | Status       | Notes                                                        |
+| ------------------------ | --------- | ------------ | ------------------------------------------------------------ |
+| `id`                     | UUID      | **Required** |                                                              |
+| `property_id`            | UUID FK   | **Required** |                                                              |
+| `unit_number`            | string    | **Required** | e.g. 4B, 101, Upper                                          |
+| `floor`                  | integer   | _Optional_   |                                                              |
+| `type`                   | enum      | **Required** | `studio / 1br / 2br / 3br / 4br+ / commercial`               |
+| `bedrooms`               | integer   | **Required** |                                                              |
+| `bathrooms`              | decimal   | **Required** | 1.5 = one full + one half bath                               |
+| `sq_ft`                  | integer   | _Optional_   |                                                              |
+| `status`                 | enum      | **Required** | `occupied / vacant / notice / maintenance / unlisted`        |
+| `market_rent`            | decimal   | **Required** | What the unit should rent for                                |
+| `rent_amount`            | decimal   | **Required** | What the current lease charges — may differ from market_rent |
+| `deposit_amount`         | decimal   | **Required** |                                                              |
+| `available_date`         | date      | _Optional_   | When unit will be ready if vacant                            |
+| `parking_spaces`         | string[]  | _Optional_   | e.g. `['P12', 'P13']`                                        |
+| `storage_unit`           | string    | _Optional_   |                                                              |
+| `utility_meter_electric` | string    | _Optional_   | Meter number                                                 |
+| `utility_meter_gas`      | string    | _Optional_   | Meter number                                                 |
+| `utility_meter_water`    | string    | _Optional_   | Meter number                                                 |
+| `address`                | string    | _Optional_   | Address override if different from property                  |
+| `city`                   | string    | _Optional_   | Address override                                             |
+| `state`                  | string    | _Optional_   | Address override                                             |
+| `zip`                    | string    | _Optional_   | Address override                                             |
+| `notes`                  | text      | _Optional_   |                                                              |
+| `last_inspection_at`     | timestamp | `Module`     | Updated by Inspections module                                |
+| `last_renovation_at`     | date      | _Optional_   |                                                              |
+| `appliance_count`        | integer   | `Module`     | Maintained by Unit Intelligence module                       |
+| `created_at`             | timestamp | **Required** |                                                              |
+| `updated_at`             | timestamp | **Required** |                                                              |
 
 Index: `property_id, status`
 
@@ -260,53 +267,53 @@ Index: `property_id, status`
 
 **Tenant** — A person who rents or has rented a unit (separate from their lease record)
 
-| Field | Type | Status | Notes |
-|---|---|---|---|
-| `id` | UUID | **Required** | |
-| `organization_id` | UUID FK | **Required** | |
-| **Identity** | | | |
-| `full_legal_name` | string | **Required** | Used on lease documents — not a display name |
-| `preferred_name` | string | *Optional* | What to call them day-to-day |
-| `date_of_birth` | date | **Required** | Required for background/credit screening |
-| `email` | string | **Required** | Portal login and notifications |
-| `phone_primary` | string | **Required** | |
-| `phone_secondary` | string | *Optional* | |
-| `preferred_contact` | enum | *Optional* | `email / sms / call` |
-| `language_preference` | string | *Optional* | ISO code, e.g. `en / es` — for future i18n |
-| `avatar_url` | string | *Optional* | |
-| **Screening Data** | | | |
-| `ssn_last4` | string | **Required** | Minimum for identity confirmation |
-| `ssn_full_encrypted` | string | `Module` | Full SSN — Screening module only, encrypted at rest |
-| `govt_id_type` | enum | *Optional* | `drivers_license / state_id / passport` |
-| `govt_id_number` | string | `Module` | Store encrypted — Screening module |
-| `screening_consent_at` | timestamp | `Module` | Legally required before running a credit/background check |
-| **Address History** | | | |
-| `current_address` | string | **Required** | Where they live before moving in |
-| `previous_address` | string | *Optional* | One prior address minimum for screening |
-| **Employment & Income** | | | |
-| `employer_name` | string | *Optional* | Collected during application |
-| `employer_phone` | string | *Optional* | |
-| `monthly_gross_income` | decimal | *Optional* | Used to verify rent-to-income ratio (standard: rent ≤ 30% of gross) |
-| `income_source` | enum | *Optional* | `employment / self_employed / benefits / other` |
-| **Emergency Contacts** | | | |
-| `emergency_contact_1_name` | string | **Required** | |
-| `emergency_contact_1_phone` | string | **Required** | |
-| `emergency_contact_1_relationship` | string | **Required** | |
-| `emergency_contact_1_email` | string | *Optional* | |
-| `emergency_contact_2_name` | string | *Optional* | Second contact strongly recommended |
-| `emergency_contact_2_phone` | string | *Optional* | |
-| `emergency_contact_2_relationship` | string | *Optional* | |
-| **Vehicles & Pets** | | | |
-| `vehicles` | JSONB | *Optional* | Array: `{make, model, color, plate, state}` |
-| `pets` | JSONB | *Optional* | Array: `{type, breed, weight, name}` |
-| **Portal** | | | |
-| `portal_status` | enum | **Required** | `invited / active / never_logged_in` |
-| `portal_invited_at` | timestamp | **Required** | |
-| `notif_payment_confirm` | enum | *Optional* | `email / push / both` |
-| `notif_work_order_update` | enum | *Optional* | `email / push / both` |
-| `notif_message` | enum | *Optional* | `email / push / both` |
-| `created_at` | timestamp | **Required** | |
-| `updated_at` | timestamp | **Required** | |
+| Field                              | Type      | Status       | Notes                                                               |
+| ---------------------------------- | --------- | ------------ | ------------------------------------------------------------------- |
+| `id`                               | UUID      | **Required** |                                                                     |
+| `organization_id`                  | UUID FK   | **Required** |                                                                     |
+| **Identity**                       |           |              |                                                                     |
+| `full_legal_name`                  | string    | **Required** | Used on lease documents — not a display name                        |
+| `preferred_name`                   | string    | _Optional_   | What to call them day-to-day                                        |
+| `date_of_birth`                    | date      | **Required** | Required for background/credit screening                            |
+| `email`                            | string    | **Required** | Portal login and notifications                                      |
+| `phone_primary`                    | string    | **Required** |                                                                     |
+| `phone_secondary`                  | string    | _Optional_   |                                                                     |
+| `preferred_contact`                | enum      | _Optional_   | `email / sms / call`                                                |
+| `language_preference`              | string    | _Optional_   | ISO code, e.g. `en / es` — for future i18n                          |
+| `avatar_url`                       | string    | _Optional_   |                                                                     |
+| **Screening Data**                 |           |              |                                                                     |
+| `ssn_last4`                        | string    | **Required** | Minimum for identity confirmation                                   |
+| `ssn_full_encrypted`               | string    | `Module`     | Full SSN — Screening module only, encrypted at rest                 |
+| `govt_id_type`                     | enum      | _Optional_   | `drivers_license / state_id / passport`                             |
+| `govt_id_number`                   | string    | `Module`     | Store encrypted — Screening module                                  |
+| `screening_consent_at`             | timestamp | `Module`     | Legally required before running a credit/background check           |
+| **Address History**                |           |              |                                                                     |
+| `current_address`                  | string    | **Required** | Where they live before moving in                                    |
+| `previous_address`                 | string    | _Optional_   | One prior address minimum for screening                             |
+| **Employment & Income**            |           |              |                                                                     |
+| `employer_name`                    | string    | _Optional_   | Collected during application                                        |
+| `employer_phone`                   | string    | _Optional_   |                                                                     |
+| `monthly_gross_income`             | decimal   | _Optional_   | Used to verify rent-to-income ratio (standard: rent ≤ 30% of gross) |
+| `income_source`                    | enum      | _Optional_   | `employment / self_employed / benefits / other`                     |
+| **Emergency Contacts**             |           |              |                                                                     |
+| `emergency_contact_1_name`         | string    | **Required** |                                                                     |
+| `emergency_contact_1_phone`        | string    | **Required** |                                                                     |
+| `emergency_contact_1_relationship` | string    | **Required** |                                                                     |
+| `emergency_contact_1_email`        | string    | _Optional_   |                                                                     |
+| `emergency_contact_2_name`         | string    | _Optional_   | Second contact strongly recommended                                 |
+| `emergency_contact_2_phone`        | string    | _Optional_   |                                                                     |
+| `emergency_contact_2_relationship` | string    | _Optional_   |                                                                     |
+| **Vehicles & Pets**                |           |              |                                                                     |
+| `vehicles`                         | JSONB     | _Optional_   | Array: `{make, model, color, plate, state}`                         |
+| `pets`                             | JSONB     | _Optional_   | Array: `{type, breed, weight, name}`                                |
+| **Portal**                         |           |              |                                                                     |
+| `portal_status`                    | enum      | **Required** | `invited / active / never_logged_in`                                |
+| `portal_invited_at`                | timestamp | **Required** |                                                                     |
+| `notif_payment_confirm`            | enum      | _Optional_   | `email / push / both`                                               |
+| `notif_work_order_update`          | enum      | _Optional_   | `email / push / both`                                               |
+| `notif_message`                    | enum      | _Optional_   | `email / push / both`                                               |
+| `created_at`                       | timestamp | **Required** |                                                                     |
+| `updated_at`                       | timestamp | **Required** |                                                                     |
 
 Index: `organization_id, email`
 
@@ -318,47 +325,47 @@ Index: `organization_id, email`
 
 **Lease** — One lease per occupancy period. A unit can have many leases over time.
 
-| Field | Type | Status | Notes |
-|---|---|---|---|
-| `id` | UUID | **Required** | |
-| `unit_id` | UUID FK | **Required** | |
-| `status` | enum | **Required** | `draft / active / month_to_month / notice_given / expired / terminated` |
-| `type` | enum | **Required** | `fixed_term / month_to_month` |
-| **Dates & Terms** | | | |
-| `start_date` | date | **Required** | |
-| `end_date` | date | **Required** | Null if month-to-month |
-| `move_in_date` | date | **Required** | May differ from lease start date |
-| `move_out_date` | date | *Optional* | Populated at move-out |
-| `notice_period_days` | integer | **Required** | Days notice required to vacate |
-| `rent_amount` | decimal | **Required** | Monthly rent for this lease |
-| `rent_due_day` | integer | **Required** | Overrides organization default |
-| `grace_period_days` | integer | **Required** | Overrides organization default |
-| `late_fee_amount` | decimal | **Required** | Overrides organization default |
-| **Security Deposit** | | | |
-| `deposit_amount` | decimal | **Required** | |
-| `security_deposit_paid_at` | date | **Required** | |
-| `security_deposit_status` | enum | **Required** | `held / partial_return / full_return / applied_to_balance` |
-| `security_deposit_returned_at` | date | *Optional* | Populated at move-out |
-| `security_deposit_return_amount` | decimal | *Optional* | |
-| `security_deposit_deductions` | JSONB | *Optional* | Itemized deductions with amounts and reasons |
-| **Utilities & Addenda** | | | |
-| `utilities_included` | string[] | *Optional* | `water / gas / electric / trash` |
-| `has_pet_addendum` | boolean | *Optional* | |
-| `pet_deposit_amount` | decimal | *Optional* | |
-| `has_parking_addendum` | boolean | *Optional* | |
-| `parking_fee` | decimal | *Optional* | |
-| **Occupancy** | | | |
-| `occupant_count` | integer | **Required** | Total number of people living in unit |
-| `occupant_names` | string[] | *Optional* | Including minors — for headcount compliance |
-| **Documents & Signing** | | | |
-| `document_url` | string | **Required** | S3 path to signed lease PDF |
-| `esignature_status` | enum | **Required** | `pending / partially_signed / completed` |
-| `tenant_signed_at` | timestamp | *Optional* | |
-| `manager_signed_at` | timestamp | *Optional* | |
-| `renewal_of_lease_id` | UUID FK | *Optional* | Links to prior lease if this is a renewal |
-| `notes` | text | *Optional* | |
-| `created_at` | timestamp | **Required** | |
-| `updated_at` | timestamp | **Required** | |
+| Field                            | Type      | Status       | Notes                                                                   |
+| -------------------------------- | --------- | ------------ | ----------------------------------------------------------------------- |
+| `id`                             | UUID      | **Required** |                                                                         |
+| `unit_id`                        | UUID FK   | **Required** |                                                                         |
+| `status`                         | enum      | **Required** | `draft / active / month_to_month / notice_given / expired / terminated` |
+| `type`                           | enum      | **Required** | `fixed_term / month_to_month`                                           |
+| **Dates & Terms**                |           |              |                                                                         |
+| `start_date`                     | date      | **Required** |                                                                         |
+| `end_date`                       | date      | **Required** | Null if month-to-month                                                  |
+| `move_in_date`                   | date      | **Required** | May differ from lease start date                                        |
+| `move_out_date`                  | date      | _Optional_   | Populated at move-out                                                   |
+| `notice_period_days`             | integer   | **Required** | Days notice required to vacate                                          |
+| `rent_amount`                    | decimal   | **Required** | Monthly rent for this lease                                             |
+| `rent_due_day`                   | integer   | **Required** | Overrides organization default                                          |
+| `grace_period_days`              | integer   | **Required** | Overrides organization default                                          |
+| `late_fee_amount`                | decimal   | **Required** | Overrides organization default                                          |
+| **Security Deposit**             |           |              |                                                                         |
+| `deposit_amount`                 | decimal   | **Required** |                                                                         |
+| `security_deposit_paid_at`       | date      | **Required** |                                                                         |
+| `security_deposit_status`        | enum      | **Required** | `held / partial_return / full_return / applied_to_balance`              |
+| `security_deposit_returned_at`   | date      | _Optional_   | Populated at move-out                                                   |
+| `security_deposit_return_amount` | decimal   | _Optional_   |                                                                         |
+| `security_deposit_deductions`    | JSONB     | _Optional_   | Itemized deductions with amounts and reasons                            |
+| **Utilities & Addenda**          |           |              |                                                                         |
+| `utilities_included`             | string[]  | _Optional_   | `water / gas / electric / trash`                                        |
+| `has_pet_addendum`               | boolean   | _Optional_   |                                                                         |
+| `pet_deposit_amount`             | decimal   | _Optional_   |                                                                         |
+| `has_parking_addendum`           | boolean   | _Optional_   |                                                                         |
+| `parking_fee`                    | decimal   | _Optional_   |                                                                         |
+| **Occupancy**                    |           |              |                                                                         |
+| `occupant_count`                 | integer   | **Required** | Total number of people living in unit                                   |
+| `occupant_names`                 | string[]  | _Optional_   | Including minors — for headcount compliance                             |
+| **Documents & Signing**          |           |              |                                                                         |
+| `document_url`                   | string    | **Required** | S3 path to signed lease PDF                                             |
+| `esignature_status`              | enum      | **Required** | `pending / partially_signed / completed`                                |
+| `tenant_signed_at`               | timestamp | _Optional_   |                                                                         |
+| `manager_signed_at`              | timestamp | _Optional_   |                                                                         |
+| `renewal_of_lease_id`            | UUID FK   | _Optional_   | Links to prior lease if this is a renewal                               |
+| `notes`                          | text      | _Optional_   |                                                                         |
+| `created_at`                     | timestamp | **Required** |                                                                         |
+| `updated_at`                     | timestamp | **Required** |                                                                         |
 
 Index: `unit_id, status, end_date`
 
@@ -368,42 +375,42 @@ Index: `unit_id, status, end_date`
 
 **LeaseParticipant** — Junction table linking tenants to a lease
 
-| Field | Type | Status | Notes |
-|---|---|---|---|
-| `id` | UUID | **Required** | |
-| `lease_id` | UUID FK | **Required** | |
-| `tenant_id` | UUID FK | **Required** | |
+| Field        | Type    | Status       | Notes                             |
+| ------------ | ------- | ------------ | --------------------------------- |
+| `id`         | UUID    | **Required** |                                   |
+| `lease_id`   | UUID FK | **Required** |                                   |
+| `tenant_id`  | UUID FK | **Required** |                                   |
 | `is_primary` | boolean | **Required** | One primary leaseholder per lease |
 
 ---
 
 **Payment** — All money movements (rent, fees, deposits). One record per transaction.
 
-| Field | Type | Status | Notes |
-|---|---|---|---|
-| `id` | UUID | **Required** | |
-| `lease_id` | UUID FK | **Required** | |
-| `tenant_id` | UUID FK | **Required** | |
-| `amount` | decimal | **Required** | |
-| `type` | enum | **Required** | `rent / late_fee / deposit / pet_deposit / parking / credit / other` |
-| `status` | enum | **Required** | `pending / completed / failed / waived / refunded` |
-| **Timing** | | | |
-| `due_date` | date | **Required** | |
-| `paid_at` | timestamp | *Optional* | Null until payment clears |
-| `period_start` | date | **Required** | First day of the period this payment covers |
-| `period_end` | date | **Required** | Last day of the period |
-| **Payment Method** | | | |
-| `method` | enum | **Required** | `ach / card / check / cash / money_order / other` |
-| `stripe_payment_intent_id` | string | *Optional* | Null for offline payments |
-| `check_number` | string | *Optional* | For check payments |
-| `reference_note` | string | *Optional* | Manager notes on manual payments |
-| **Late Fees** | | | |
-| `is_late` | boolean | **Required** | Auto-set by system |
-| `late_fee_applied` | boolean | **Required** | |
-| `late_fee_waived` | boolean | *Optional* | Manager can override |
-| `late_fee_waived_reason` | string | *Optional* | |
-| `notes` | text | *Optional* | |
-| `created_at` | timestamp | **Required** | |
+| Field                      | Type      | Status       | Notes                                                                |
+| -------------------------- | --------- | ------------ | -------------------------------------------------------------------- |
+| `id`                       | UUID      | **Required** |                                                                      |
+| `lease_id`                 | UUID FK   | **Required** |                                                                      |
+| `tenant_id`                | UUID FK   | **Required** |                                                                      |
+| `amount`                   | decimal   | **Required** |                                                                      |
+| `type`                     | enum      | **Required** | `rent / late_fee / deposit / pet_deposit / parking / credit / other` |
+| `status`                   | enum      | **Required** | `pending / completed / failed / waived / refunded`                   |
+| **Timing**                 |           |              |                                                                      |
+| `due_date`                 | date      | **Required** |                                                                      |
+| `paid_at`                  | timestamp | _Optional_   | Null until payment clears                                            |
+| `period_start`             | date      | **Required** | First day of the period this payment covers                          |
+| `period_end`               | date      | **Required** | Last day of the period                                               |
+| **Payment Method**         |           |              |                                                                      |
+| `method`                   | enum      | **Required** | `ach / card / check / cash / money_order / other`                    |
+| `stripe_payment_intent_id` | string    | _Optional_   | Null for offline payments                                            |
+| `check_number`             | string    | _Optional_   | For check payments                                                   |
+| `reference_note`           | string    | _Optional_   | Manager notes on manual payments                                     |
+| **Late Fees**              |           |              |                                                                      |
+| `is_late`                  | boolean   | **Required** | Auto-set by system                                                   |
+| `late_fee_applied`         | boolean   | **Required** |                                                                      |
+| `late_fee_waived`          | boolean   | _Optional_   | Manager can override                                                 |
+| `late_fee_waived_reason`   | string    | _Optional_   |                                                                      |
+| `notes`                    | text      | _Optional_   |                                                                      |
+| `created_at`               | timestamp | **Required** |                                                                      |
 
 Index: `lease_id, status, due_date`
 
@@ -411,41 +418,41 @@ Index: `lease_id, status, due_date`
 
 **WorkOrder** — Maintenance requests submitted by tenants or initiated by managers
 
-| Field | Type | Status | Notes |
-|---|---|---|---|
-| `id` | UUID | **Required** | |
-| `unit_id` | UUID FK | **Required** | |
-| `property_id` | UUID FK | **Required** | Enables property-level (common area) work orders |
-| `submitted_by_tenant_id` | UUID FK | *Optional* | Null if manager-initiated |
-| `submitted_by_user_id` | UUID FK | *Optional* | Null if tenant-submitted |
-| `assigned_to_user_id` | UUID FK | *Optional* | Internal staff if assigned |
-| `vendor_id` | UUID FK | *Optional* | External contractor if assigned |
-| `title` | string | **Required** | Short description |
-| `description` | text | **Required** | Full details from submitter |
-| `category` | enum | **Required** | `plumbing / electrical / hvac / appliance / pest / structural / cosmetic / grounds / other` |
-| **Priority & Status** | | | |
-| `priority` | enum | **Required** | `emergency / urgent / routine` |
-| `status` | enum | **Required** | `open / assigned / in_progress / pending_parts / completed / closed / cancelled` |
-| `sla_deadline_at` | timestamp | **Required** | Auto-computed from priority at creation |
-| `sla_breached` | boolean | **Required** | Auto-set if deadline passes without completion |
-| **Access & Scheduling** | | | |
-| `entry_permission_granted` | boolean | **Required** | Has tenant authorized entry without being present |
-| `preferred_contact_window` | string | *Optional* | e.g. Weekdays 9am–5pm |
-| `scheduled_at` | timestamp | *Optional* | |
-| **Completion & Cost** | | | |
-| `completed_at` | timestamp | *Optional* | |
-| `resolution_notes` | text | *Optional* | What was done |
-| `labor_cost` | decimal | *Optional* | |
-| `parts_cost` | decimal | *Optional* | |
-| `total_cost` | decimal | *Optional* | Computed: labor + parts |
-| `charged_to_tenant` | boolean | *Optional* | |
-| `tenant_charge_amount` | decimal | *Optional* | |
-| **Media** | | | |
-| `photos_before` | string[] | *Optional* | S3 URLs |
-| `photos_after` | string[] | *Optional* | S3 URLs |
-| `video_url` | string | *Optional* | Tenant-submitted video |
-| `created_at` | timestamp | **Required** | |
-| `updated_at` | timestamp | **Required** | |
+| Field                      | Type      | Status       | Notes                                                                                       |
+| -------------------------- | --------- | ------------ | ------------------------------------------------------------------------------------------- |
+| `id`                       | UUID      | **Required** |                                                                                             |
+| `unit_id`                  | UUID FK   | **Required** |                                                                                             |
+| `property_id`              | UUID FK   | **Required** | Enables property-level (common area) work orders                                            |
+| `submitted_by_tenant_id`   | UUID FK   | _Optional_   | Null if manager-initiated                                                                   |
+| `submitted_by_user_id`     | UUID FK   | _Optional_   | Null if tenant-submitted                                                                    |
+| `assigned_to_user_id`      | UUID FK   | _Optional_   | Internal staff if assigned                                                                  |
+| `vendor_id`                | UUID FK   | _Optional_   | External contractor if assigned                                                             |
+| `title`                    | string    | **Required** | Short description                                                                           |
+| `description`              | text      | **Required** | Full details from submitter                                                                 |
+| `category`                 | enum      | **Required** | `plumbing / electrical / hvac / appliance / pest / structural / cosmetic / grounds / other` |
+| **Priority & Status**      |           |              |                                                                                             |
+| `priority`                 | enum      | **Required** | `emergency / urgent / routine`                                                              |
+| `status`                   | enum      | **Required** | `open / assigned / in_progress / pending_parts / completed / closed / cancelled`            |
+| `sla_deadline_at`          | timestamp | **Required** | Auto-computed from priority at creation                                                     |
+| `sla_breached`             | boolean   | **Required** | Auto-set if deadline passes without completion                                              |
+| **Access & Scheduling**    |           |              |                                                                                             |
+| `entry_permission_granted` | boolean   | **Required** | Has tenant authorized entry without being present                                           |
+| `preferred_contact_window` | string    | _Optional_   | e.g. Weekdays 9am–5pm                                                                       |
+| `scheduled_at`             | timestamp | _Optional_   |                                                                                             |
+| **Completion & Cost**      |           |              |                                                                                             |
+| `completed_at`             | timestamp | _Optional_   |                                                                                             |
+| `resolution_notes`         | text      | _Optional_   | What was done                                                                               |
+| `labor_cost`               | decimal   | _Optional_   |                                                                                             |
+| `parts_cost`               | decimal   | _Optional_   |                                                                                             |
+| `total_cost`               | decimal   | _Optional_   | Computed: labor + parts                                                                     |
+| `charged_to_tenant`        | boolean   | _Optional_   |                                                                                             |
+| `tenant_charge_amount`     | decimal   | _Optional_   |                                                                                             |
+| **Media**                  |           |              |                                                                                             |
+| `photos_before`            | string[]  | _Optional_   | S3 URLs                                                                                     |
+| `photos_after`             | string[]  | _Optional_   | S3 URLs                                                                                     |
+| `video_url`                | string    | _Optional_   | Tenant-submitted video                                                                      |
+| `created_at`               | timestamp | **Required** |                                                                                             |
+| `updated_at`               | timestamp | **Required** |                                                                                             |
 
 Index: `unit_id, status, priority, created_at`
 
@@ -453,30 +460,30 @@ Index: `unit_id, status, priority, created_at`
 
 **Vendor** — External contractors and service providers assigned to work orders
 
-| Field | Type | Status | Notes |
-|---|---|---|---|
-| `id` | UUID | **Required** | |
-| `organization_id` | UUID FK | **Required** | |
-| **Identity** | | | |
-| `company_name` | string | **Required** | |
-| `contact_name` | string | **Required** | Primary contact person |
-| `email` | string | **Required** | |
-| `phone_primary` | string | **Required** | |
-| `phone_emergency` | string | *Optional* | For after-hours emergency call-outs |
-| **Specialty & Status** | | | |
-| `specialties` | string[] | **Required** | `plumbing / electrical / hvac / general / etc.` |
-| `status` | enum | **Required** | `active / inactive` |
-| `preferred` | boolean | *Optional* | Flag for go-to vendor by category |
-| `rating` | decimal | *Optional* | Internal 1–5 rating |
-| `notes` | text | *Optional* | |
-| **Compliance** | | | |
-| `license_number` | string | *Optional* | |
-| `license_expires_at` | date | *Optional* | Expiry alert hook |
-| `insurance_on_file` | boolean | **Required** | Flag — actual doc stored in Documents table |
-| `insurance_expires_at` | date | *Optional* | Expiry alert hook |
-| `w9_on_file` | boolean | `Module` | Needed for Accounting/1099 module |
-| `created_at` | timestamp | **Required** | |
-| `updated_at` | timestamp | **Required** | |
+| Field                  | Type      | Status       | Notes                                           |
+| ---------------------- | --------- | ------------ | ----------------------------------------------- |
+| `id`                   | UUID      | **Required** |                                                 |
+| `organization_id`      | UUID FK   | **Required** |                                                 |
+| **Identity**           |           |              |                                                 |
+| `company_name`         | string    | **Required** |                                                 |
+| `contact_name`         | string    | **Required** | Primary contact person                          |
+| `email`                | string    | **Required** |                                                 |
+| `phone_primary`        | string    | **Required** |                                                 |
+| `phone_emergency`      | string    | _Optional_   | For after-hours emergency call-outs             |
+| **Specialty & Status** |           |              |                                                 |
+| `specialties`          | string[]  | **Required** | `plumbing / electrical / hvac / general / etc.` |
+| `status`               | enum      | **Required** | `active / inactive`                             |
+| `preferred`            | boolean   | _Optional_   | Flag for go-to vendor by category               |
+| `rating`               | decimal   | _Optional_   | Internal 1–5 rating                             |
+| `notes`                | text      | _Optional_   |                                                 |
+| **Compliance**         |           |              |                                                 |
+| `license_number`       | string    | _Optional_   |                                                 |
+| `license_expires_at`   | date      | _Optional_   | Expiry alert hook                               |
+| `insurance_on_file`    | boolean   | **Required** | Flag — actual doc stored in Documents table     |
+| `insurance_expires_at` | date      | _Optional_   | Expiry alert hook                               |
+| `w9_on_file`           | boolean   | `Module`     | Needed for Accounting/1099 module               |
+| `created_at`           | timestamp | **Required** |                                                 |
+| `updated_at`           | timestamp | **Required** |                                                 |
 
 Index: `organization_id`
 
@@ -484,48 +491,48 @@ Index: `organization_id`
 
 **Message** — In-app communication threads between manager and tenant
 
-*Thread record:*
+_Thread record:_
 
-| Field | Type | Status | Notes |
-|---|---|---|---|
-| `thread_id` | UUID | **Required** | Groups messages into a conversation |
-| `unit_id` | UUID FK | **Required** | Thread tied to a unit for context |
-| `lease_id` | UUID FK | *Optional* | |
-| `work_order_id` | UUID FK | *Optional* | Null unless thread is about a work order |
-| `subject` | string | *Optional* | Optional thread subject line |
+| Field           | Type    | Status       | Notes                                    |
+| --------------- | ------- | ------------ | ---------------------------------------- |
+| `thread_id`     | UUID    | **Required** | Groups messages into a conversation      |
+| `unit_id`       | UUID FK | **Required** | Thread tied to a unit for context        |
+| `lease_id`      | UUID FK | _Optional_   |                                          |
+| `work_order_id` | UUID FK | _Optional_   | Null unless thread is about a work order |
+| `subject`       | string  | _Optional_   | Optional thread subject line             |
 
-*Message record:*
+_Message record:_
 
-| Field | Type | Status | Notes |
-|---|---|---|---|
-| `id` | UUID | **Required** | |
-| `thread_id` | UUID FK | **Required** | |
-| `sender_tenant_id` | UUID FK | *Optional* | Null if sent by staff |
-| `sender_user_id` | UUID FK | *Optional* | Null if sent by tenant |
-| `body` | text | **Required** | |
-| `attachments` | string[] | *Optional* | S3 URLs |
-| `sent_at` | timestamp | **Required** | |
-| `read_at` | timestamp | *Optional* | Null until recipient opens it |
+| Field              | Type      | Status       | Notes                         |
+| ------------------ | --------- | ------------ | ----------------------------- |
+| `id`               | UUID      | **Required** |                               |
+| `thread_id`        | UUID FK   | **Required** |                               |
+| `sender_tenant_id` | UUID FK   | _Optional_   | Null if sent by staff         |
+| `sender_user_id`   | UUID FK   | _Optional_   | Null if sent by tenant        |
+| `body`             | text      | **Required** |                               |
+| `attachments`      | string[]  | _Optional_   | S3 URLs                       |
+| `sent_at`          | timestamp | **Required** |                               |
+| `read_at`          | timestamp | _Optional_   | Null until recipient opens it |
 
 ---
 
 **Document** — Files attached to any entity (leases, insurance certs, inspection photos, etc.)
 
-| Field | Type | Status | Notes |
-|---|---|---|---|
-| `id` | UUID | **Required** | |
-| `organization_id` | UUID FK | **Required** | |
-| `file_name` | string | **Required** | Original filename |
-| `file_url` | string | **Required** | S3 path |
-| `file_type` | string | **Required** | MIME type |
-| `file_size_bytes` | integer | **Required** | |
-| `uploaded_by_user_id` | UUID FK | *Optional* | Null if system-generated |
-| `uploaded_at` | timestamp | **Required** | |
-| `entity_type` | enum | **Required** | `lease / unit / tenant / property / work_order / vendor` |
-| `entity_id` | UUID | **Required** | FK to whichever entity this belongs to |
-| `doc_category` | enum | *Optional* | `lease / inspection / insurance / id / photo / other` |
-| `label` | string | *Optional* | Human-readable label |
-| `visible_to_tenant` | boolean | **Required** | Controls whether tenant portal can see this file |
+| Field                 | Type      | Status       | Notes                                                    |
+| --------------------- | --------- | ------------ | -------------------------------------------------------- |
+| `id`                  | UUID      | **Required** |                                                          |
+| `organization_id`     | UUID FK   | **Required** |                                                          |
+| `file_name`           | string    | **Required** | Original filename                                        |
+| `file_url`            | string    | **Required** | S3 path                                                  |
+| `file_type`           | string    | **Required** | MIME type                                                |
+| `file_size_bytes`     | integer   | **Required** |                                                          |
+| `uploaded_by_user_id` | UUID FK   | _Optional_   | Null if system-generated                                 |
+| `uploaded_at`         | timestamp | **Required** |                                                          |
+| `entity_type`         | enum      | **Required** | `lease / unit / tenant / property / work_order / vendor` |
+| `entity_id`           | UUID      | **Required** | FK to whichever entity this belongs to                   |
+| `doc_category`        | enum      | _Optional_   | `lease / inspection / insurance / id / photo / other`    |
+| `label`               | string    | _Optional_   | Human-readable label                                     |
+| `visible_to_tenant`   | boolean   | **Required** | Controls whether tenant portal can see this file         |
 
 Index: `organization_id, entity_type, entity_id`
 
@@ -540,6 +547,7 @@ Index: `organization_id, entity_type, entity_id`
 Index: `user_id, read_at`
 
 ### Soft Deletes
+
 Tenants, Leases, and Payments use soft deletes (`deleted_at` nullable timestamp) rather than hard deletes. This preserves financial history and prevents referential integrity issues.
 
 ---
@@ -549,6 +557,7 @@ Tenants, Leases, and Payments use soft deletes (`deleted_at` nullable timestamp)
 Beyond data fields, real-world property management requires the system to guide workflows. The base product must enforce these procedural flows.
 
 ### Move-In Process
+
 1. Application submitted → screening triggered → approved/denied
 2. Lease generated with correct dates and terms
 3. Security deposit payment collected and recorded
@@ -558,6 +567,7 @@ Beyond data fields, real-world property management requires the system to guide 
 7. First rent payment confirmed
 
 ### Move-Out Process
+
 1. Notice to vacate received and logged (with date — notice period compliance tracked)
 2. Move-out inspection scheduled and completed
 3. Move-out inspection compared against move-in inspection
@@ -566,6 +576,7 @@ Beyond data fields, real-world property management requires the system to guide 
 6. Unit status set to vacant and available
 
 ### Rent Collection Workflow
+
 1. Rent due date triggers reminder to tenant (configurable days before)
 2. Grace period tracked per lease (overrides org default)
 3. Late fee auto-applied after grace period — or flagged for manual application
@@ -573,13 +584,14 @@ Beyond data fields, real-world property management requires the system to guide 
 5. Pay-or-quit notice workflow — add-on module candidate (requires jurisdiction data)
 
 ### Maintenance Response SLAs
+
 The system auto-computes `sla_deadline_at` on work order creation and tracks whether SLAs are met. Breaches surface on the dashboard.
 
-| Priority | SLA | Trigger Examples |
-|---|---|---|
-| Emergency | Escalated within 1 hour | No heat, flooding, no hot water, gas leak |
-| Urgent | Response within 24 hours | Broken appliance, no AC in summer |
-| Routine | Acknowledged 48hr, scheduled within 7 days | Cosmetic repairs, minor plumbing |
+| Priority  | SLA                                        | Trigger Examples                          |
+| --------- | ------------------------------------------ | ----------------------------------------- |
+| Emergency | Escalated within 1 hour                    | No heat, flooding, no hot water, gas leak |
+| Urgent    | Response within 24 hours                   | Broken appliance, no AC in summer         |
+| Routine   | Acknowledged 48hr, scheduled within 7 days | Cosmetic repairs, minor plumbing          |
 
 ---
 
@@ -588,55 +600,61 @@ The system auto-computes `sla_deadline_at` on work order creation and tracks whe
 > **Note on schema:** The expanded Tenant and Lease schemas (Section 4) should be fully reflected in the Prisma schema, seed data, and Zod validators from Week 1 of Phase 1 — not incrementally. Adding nullable module-flagged columns now costs nothing and prevents breaking migrations later.
 
 ### Phase 1 — Foundation (Months 1–3)
+
 **Goal:** A manager can log in, add properties and units, add tenants with leases, and manually record a rent payment. The app becomes the system of record.
 
-| Week | Milestone |
-|---|---|
-| 1–2 | Monorepo scaffold, Prisma schema v1 (full expanded schema), Supabase Auth working, CI pipeline (GitHub Actions) |
-| 3–4 | Property + Unit CRUD — API routes + web UI |
-| 5–6 | Tenant + Lease CRUD — API routes + web UI |
-| 7–8 | Manual payment logging, basic dashboard with KPI widgets |
-| 9–10 | Email notifications via Resend (rent reminders, lease expiry alerts) |
-| 11–12 | Document upload to S3, QA, staging deploy |
+| Week  | Milestone                                                                                                       |
+| ----- | --------------------------------------------------------------------------------------------------------------- |
+| 1–2   | Monorepo scaffold, Prisma schema v1 (full expanded schema), Supabase Auth working, CI pipeline (GitHub Actions) |
+| 3–4   | Property + Unit CRUD — API routes + web UI                                                                      |
+| 5–6   | Tenant + Lease CRUD — API routes + web UI                                                                       |
+| 7–8   | Manual payment logging, basic dashboard with KPI widgets                                                        |
+| 9–10  | Email notifications via Resend (rent reminders, lease expiry alerts)                                            |
+| 11–12 | Document upload to S3, QA, staging deploy                                                                       |
 
 **Deliverable:** Internal demo-ready. Manager can populate their full portfolio.
 
 ### Phase 2 — Core Workflows (Months 3–5)
+
 **Goal:** Money moves through the platform. Maintenance is tracked. Manager and tenant can communicate.
 
-| Week | Milestone |
-|---|---|
-| 13–14 | Stripe Connect onboarding for manager bank accounts |
-| 15–16 | ACH payment initiation + Stripe webhook handling + ledger updates |
-| 17–18 | Work order creation flow (manager + tenant-facing web) |
+| Week  | Milestone                                                          |
+| ----- | ------------------------------------------------------------------ |
+| 13–14 | Stripe Connect onboarding for manager bank accounts                |
+| 15–16 | ACH payment initiation + Stripe webhook handling + ledger updates  |
+| 17–18 | Work order creation flow (manager + tenant-facing web)             |
 | 19–20 | Work order assignment, status updates, SLA tracking, notifications |
-| 21–22 | In-app messaging (REST polling first, WebSocket in Phase 3) |
-| 23–24 | Late fee automation, payment reminders, QA |
+| 21–22 | In-app messaging (REST polling first, WebSocket in Phase 3)        |
+| 23–24 | Late fee automation, payment reminders, QA                         |
 
 **Deliverable:** First paying customer can go live.
 
 ### Phase 3 — Tenant Mobile App (Months 5–7)
+
 **Goal:** Tenants can do everything from their phone.
 
-| Week | Milestone |
-|---|---|
+| Week  | Milestone                                       |
+| ----- | ----------------------------------------------- |
 | 25–26 | Expo app scaffold — auth, home screen, pay rent |
-| 27–28 | Work order submission with photo upload |
+| 27–28 | Work order submission with photo upload         |
 | 29–30 | Messaging, push notifications (Expo + APNs/FCM) |
-| 31–32 | Lease documents, payment history, profile |
-| 33–34 | Settings + admin screens, renewal workflow |
-| 35–36 | App store submission prep, QA |
+| 31–32 | Lease documents, payment history, profile       |
+| 33–34 | Settings + admin screens, renewal workflow      |
+| 35–36 | App store submission prep, QA                   |
 
 **Deliverable:** Tenant app live on iOS and Android.
 
 ### Phase 4 — First Add-on Module (Months 7–9)
+
 **Goal:** First module generating upsell revenue.
 
 Decision checkpoint at end of Phase 3: let early user feedback determine which module to build first. Leading candidates:
+
 - **Unit Intelligence & Appliance Registry** — strongest differentiator, nothing like it in market
 - **Advanced Tenant Onboarding** — high demand from managers still doing paper applications
 
 Module architecture:
+
 - Feature-flagged at API middleware (check `organization.active_modules` array)
 - Billed as additional Stripe Subscription Items
 - UI components behind `<ModuleGate module="unit_intelligence">` wrapper
@@ -645,33 +663,33 @@ Module architecture:
 
 ## 7. Module Roadmap
 
-| Module | Target Price | Key Features | Priority | Dependencies |
-|---|---|---|---|---|
-| Advanced Tenant Onboarding | $25–40/mo | Digital application, background/credit check (TransUnion), e-lease signing, move-in inspection with photos | High | Lease Mgmt, Stripe, Resend |
-| Unit Intelligence & Appliance Registry | $20–35/mo | Per-unit appliance records (make/model/serial/warranty), maintenance cost tracking, age-based replacement alerts, QR code labels | High | Unit Mgmt, S3 |
-| Grounds & Property Maintenance | $25–40/mo | Recurring task scheduling for common areas, vendor assignment, inspection logs, completion photo | Medium | Work Orders, Vendor |
-| Advanced Payments & Accounting | $30–50/mo | Card payments, partial payments, security deposit reconciliation, owner disbursements, P&L by property, Schedule E export | Medium | Stripe, Payment Ledger |
-| Vendor & Contractor Management | $20–30/mo | Vendor database, license/insurance expiry alerts, work history, ratings, preferred vendor by property | Medium | Work Orders |
-| Inspections & Compliance | $25–40/mo | Move-in/out templates, scheduled inspections, photo/video docs, digital signature, automated reports | Medium | Unit Mgmt, S3 |
-| Lease Renewal | $15–25/mo | Renewal offer tracking, rent increase history, market rate comparison, countersignature workflow | Medium | Lease Mgmt |
-| Eviction Management | $30–50/mo | Notice type tracking (pay-or-quit, cure-or-quit, unconditional quit), delivery method logging (certified mail, personal service, posting), court date tracking, jurisdiction-specific notice period lookup | Medium | Lease Mgmt, Property jurisdiction data |
-| Owner Portal | $25–40/mo | Owner entity above property level, ownership percentage for co-owned properties, distribution/disbursement records, owner-facing reporting | Low | Payments, Properties |
-| Communications & Resident Engagement | $20–30/mo | Bulk messaging, automated notices, SMS integration, community bulletin board, resident satisfaction surveys | Low | Messaging, Notifications |
-| Reporting & Analytics | $25–40/mo | Custom reports, portfolio performance trends, maintenance spend by unit, rent roll, vacancy rate history | Low | All modules |
+| Module                                 | Target Price | Key Features                                                                                                                                                                                               | Priority | Dependencies                           |
+| -------------------------------------- | ------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------- | -------------------------------------- |
+| Advanced Tenant Onboarding             | $25–40/mo    | Digital application, background/credit check (TransUnion), e-lease signing, move-in inspection with photos                                                                                                 | High     | Lease Mgmt, Stripe, Resend             |
+| Unit Intelligence & Appliance Registry | $20–35/mo    | Per-unit appliance records (make/model/serial/warranty), maintenance cost tracking, age-based replacement alerts, QR code labels                                                                           | High     | Unit Mgmt, S3                          |
+| Grounds & Property Maintenance         | $25–40/mo    | Recurring task scheduling for common areas, vendor assignment, inspection logs, completion photo                                                                                                           | Medium   | Work Orders, Vendor                    |
+| Advanced Payments & Accounting         | $30–50/mo    | Card payments, partial payments, security deposit reconciliation, owner disbursements, P&L by property, Schedule E export                                                                                  | Medium   | Stripe, Payment Ledger                 |
+| Vendor & Contractor Management         | $20–30/mo    | Vendor database, license/insurance expiry alerts, work history, ratings, preferred vendor by property                                                                                                      | Medium   | Work Orders                            |
+| Inspections & Compliance               | $25–40/mo    | Move-in/out templates, scheduled inspections, photo/video docs, digital signature, automated reports                                                                                                       | Medium   | Unit Mgmt, S3                          |
+| Lease Renewal                          | $15–25/mo    | Renewal offer tracking, rent increase history, market rate comparison, countersignature workflow                                                                                                           | Medium   | Lease Mgmt                             |
+| Eviction Management                    | $30–50/mo    | Notice type tracking (pay-or-quit, cure-or-quit, unconditional quit), delivery method logging (certified mail, personal service, posting), court date tracking, jurisdiction-specific notice period lookup | Medium   | Lease Mgmt, Property jurisdiction data |
+| Owner Portal                           | $25–40/mo    | Owner entity above property level, ownership percentage for co-owned properties, distribution/disbursement records, owner-facing reporting                                                                 | Low      | Payments, Properties                   |
+| Communications & Resident Engagement   | $20–30/mo    | Bulk messaging, automated notices, SMS integration, community bulletin board, resident satisfaction surveys                                                                                                | Low      | Messaging, Notifications               |
+| Reporting & Analytics                  | $25–40/mo    | Custom reports, portfolio performance trends, maintenance spend by unit, rent roll, vacancy rate history                                                                                                   | Low      | All modules                            |
 
 ### Module Data Hooks — Build Now, Use Later
 
 These nullable columns must exist in the base schema from day one. Adding them costs nothing. Not adding them forces a breaking migration when the module ships.
 
-| Column | Table | Used By | Notes |
-|---|---|---|---|
-| `ssn_full_encrypted` | Tenant | Screening module | Encrypted at rest — never logged or exposed |
-| `screening_consent_at` | Tenant | Screening module | Legally required before running any check |
-| `govt_id_number` | Tenant | Screening module | Store encrypted |
-| `tax_parcel_id` | Property | Accounting module | Needed for Schedule E and tax reporting |
-| `appliance_count` | Unit | Unit Intelligence module | Maintained by module, surfaced on unit detail |
-| `last_inspection_at` | Unit | Inspections module | Timestamp of last inspection — any type |
-| `w9_on_file` | Vendor | Accounting / 1099 module | Required for contractor tax reporting |
+| Column                 | Table    | Used By                  | Notes                                         |
+| ---------------------- | -------- | ------------------------ | --------------------------------------------- |
+| `ssn_full_encrypted`   | Tenant   | Screening module         | Encrypted at rest — never logged or exposed   |
+| `screening_consent_at` | Tenant   | Screening module         | Legally required before running any check     |
+| `govt_id_number`       | Tenant   | Screening module         | Store encrypted                               |
+| `tax_parcel_id`        | Property | Accounting module        | Needed for Schedule E and tax reporting       |
+| `appliance_count`      | Unit     | Unit Intelligence module | Maintained by module, surfaced on unit detail |
+| `last_inspection_at`   | Unit     | Inspections module       | Timestamp of last inspection — any type       |
+| `w9_on_file`           | Vendor   | Accounting / 1099 module | Required for contractor tax reporting         |
 
 ---
 
@@ -680,47 +698,58 @@ These nullable columns must exist in the base schema from day one. Adding them c
 ### Manager Web App (Next.js)
 
 **Auth**
+
 - `/login` — Email/password + Google SSO via Supabase
 - `/signup` — Create org account, choose plan
 - `/forgot-password` — Password reset email
 - `/onboarding` — Multi-step wizard: org name, logo, billing, first property
 
 **Dashboard**
+
 - `/dashboard` — KPI widgets: total units, occupancy %, rent collected this month vs expected, open work orders count, SLA breaches, leases expiring in 30/60 days, recent messages. All widgets are clickable.
 
 **Properties**
+
 - `/properties` — Card grid of all properties, add property button
 - `/properties/[id]` — Property detail: unit grid (vacant/occupied color-coded), occupancy stats, property-level docs
 - `/properties/[id]/units/[unitId]` — **Core screen.** Current tenant + lease summary, rent status, last 5 work orders, appliances (base list), documents, notes. Action buttons: Add Work Order, Message Tenant, View Lease.
 
 **Tenants**
+
 - `/tenants` — Searchable list. Filter by: late on rent, lease expiring, open work orders. Columns: name, unit, property, lease end, payment status.
 - `/tenants/[id]` — Profile: contact info, current lease, payment history (6 months), work order history, message thread, documents, move-out section.
 - `/tenants/invite` — Select property + unit, enter email, set lease terms. System sends invite link.
 
 **Leases**
+
 - `/leases` — List with expiration color coding (green 6mo+, yellow 60–90 days, red under 60 days)
 - `/leases/[id]` — Terms, parties, rent schedule, attached document, renewal status. One-click renewal action.
 
 **Payments**
+
 - `/payments` — Full ledger: all payments across all units. Filter by property/unit/tenant/date/status.
 - `/payments/new` — Manual payment entry form.
 
 **Work Orders**
+
 - `/work-orders` — Table view with status filters (New, Assigned, In Progress, Completed). SLA breach flag on overdue items.
 - `/work-orders/[id]` — Description, photos, category, priority, assigned to, vendor, status timeline with timestamps, SLA status, manager notes, resolution notes, cost breakdown.
 
 **Messages**
+
 - `/messages` — Conversation list, unread badges
 - `/messages/[threadId]` — Full thread with tenant, file attachment support
 
 **Documents**
+
 - `/documents` — Browse by property/unit/tenant/type. Upload button.
 
 **Notifications**
+
 - `/notifications` — Full history. Grouped by date. Mark all read.
 
 **Settings**
+
 - `/settings/organization` — Name, logo, contact info, timezone, org-level rent defaults (due day, grace period, late fee)
 - `/settings/team` — Invite by email, assign roles, deactivate
 - `/settings/billing` — Current plan, payment method, invoice history, module management
@@ -731,37 +760,44 @@ These nullable columns must exist in the base schema from day one. Adding them c
 ### Tenant Mobile App (Expo React Native)
 
 **Onboarding**
+
 - Splash / Welcome screen
 - Enter invite code (from manager email link)
 - Set password + complete profile (name, phone, emergency contact)
 
 **Home Tab**
+
 - Next rent payment: amount + due date + Pay Now button
 - Open work orders: count + quick list
 - Unread messages badge
 - Lease expiration reminder (when within 90 days)
 
 **Payments Tab**
+
 - Current balance due
 - Pay Now: link bank account via Stripe/Plaid, confirm amount
 - Set up autopay toggle
 - Full payment history with receipts
 
 **Maintenance Tab**
+
 - My open requests (status chips: Open, In Progress, Completed)
 - Submit New Request: category select, description, up to 5 photos, availability note, entry permission toggle
 - Request detail: status timeline, manager notes, SLA status
 
 **Messages Tab**
+
 - Conversation with property manager
 - Text + photo attachments
 
 **Documents Tab**
+
 - Lease agreement (PDF viewer)
 - Move-in inspection
 - Notices and letters (shared by manager)
 
 **Account Tab**
+
 - Profile info, photo
 - Notification preferences
 - Contact manager shortcut
@@ -772,6 +808,7 @@ These nullable columns must exist in the base schema from day one. Adding them c
 ## 9. API Design Conventions
 
 ### URL Structure
+
 ```
 /api/v1/organizations/:orgId/properties
 /api/v1/organizations/:orgId/properties/:propertyId/units
@@ -783,11 +820,13 @@ These nullable columns must exist in the base schema from day one. Adding them c
 ```
 
 ### Auth
+
 - All protected routes require `Authorization: Bearer <supabase_jwt>` header
 - Middleware decodes JWT, extracts `user_id`, looks up `organization_id` from `User` table
 - Org isolation check: every route handler verifies the resource belongs to `organization_id` from the token — not from the URL parameter alone
 
 ### Error Response Shape
+
 ```json
 {
   "error": {
@@ -799,13 +838,16 @@ These nullable columns must exist in the base schema from day one. Adding them c
 ```
 
 ### Pagination
+
 Cursor-based pagination for all list endpoints:
+
 ```
 GET /api/v1/.../work-orders?cursor=<id>&limit=25
 Response: { data: [...], nextCursor: "<id>" | null }
 ```
 
 ### Webhooks
+
 - Stripe events: `POST /api/webhooks/stripe` (no auth, verified by Stripe signature header)
 - Supabase auth events: `POST /api/webhooks/auth`
 
@@ -814,29 +856,33 @@ Response: { data: [...], nextCursor: "<id>" | null }
 ## 10. Environment & Infrastructure
 
 ### Local Development
+
 - Docker Desktop (Windows) runs PostgreSQL 15 + Redis 7 via `docker-compose.yml`
 - No XAMPP dependency — PostgreSQL replaces MySQL for this project
 - Each developer runs `docker compose up -d` before starting the dev servers
 
 ### Staging
+
 - Auto-deploys from `main` branch via Vercel (web) and Railway (API)
 - Separate Supabase project for staging
 - Stripe test mode
 
 ### Production
+
 - Manual promote from staging
 - Secrets managed via Vercel/Railway environment variables
 - AWS Secrets Manager for sensitive keys (Stripe secret, Supabase service role)
 - Daily automated backups of PostgreSQL via Railway or AWS RDS
 
 ### Port Map (local)
-| Service | Port |
-|---|---|
-| Next.js web | 3000 |
-| Node.js API | 3001 |
+
+| Service             | Port |
+| ------------------- | ---- |
+| Next.js web         | 3000 |
+| Node.js API         | 3001 |
 | Expo mobile (Metro) | 8081 |
-| PostgreSQL | 5432 |
-| Redis | 6379 |
+| PostgreSQL          | 5432 |
+| Redis               | 6379 |
 
 > **XAMPP conflict note:** If XAMPP Apache is running on port 80/443, there is no conflict with this stack. If XAMPP MySQL is running on 3306, there is also no conflict since Postgres uses 5432.
 
@@ -847,11 +893,13 @@ Response: { data: [...], nextCursor: "<id>" | null }
 This appendix captures what is currently implemented in the repo beyond or different from the original roadmap text.
 
 ### Stack / Versions
+
 - Manager web is currently on Next.js `15.1.7` (update 03-21-2026)
 - Tenant mobile is currently on Expo SDK `54` (update 03-31-2026)
 - Prisma runtime/tooling is currently on Prisma `6.x` (update 03-21-2026)
 
 ### API Surface Deltas
+
 - Tenant portal API surface exists under `/api/v1/tenant/*` with routes for profile, dashboard, payments, work orders, messaging, documents, and push token registration. (Added 03-28-2026)
 - Stripe Connect API routes are implemented at `/api/v1/organizations/:orgId/connect/*` for status, account link, and sync flows. (Added 03-26-2026)
 - Ledger API route is implemented at `/api/v1/organizations/:orgId/ledger` with manager/owner role gating. (Added 03-28-2026)
@@ -859,12 +907,14 @@ This appendix captures what is currently implemented in the repo beyond or diffe
 - Maintenance-role restrictions were enforced across API and web settings/admin surfaces after initial Phase 3 week 33-34 delivery. (update 04-05-2026)
 
 ### Manager Web Deltas
+
 - Settings now uses a shared settings shell/navigation component for consistent Organization/Team/Notifications/Billing/Stripe Connect UX. (Added 04-04-2026)
 - `/settings/billing` is currently implemented as read-only billing/subscription/connect metadata, not payment-method edits or invoice actions. (update 04-04-2026)
 - Lease renewal UX now includes stronger validation, renewal linkage visibility (`renewed from/to`), and query-driven renewal entry from lease-expiry notifications. (update 04-04-2026)
 - Lease list/detail currently includes renewal-chain context fields in UI/API payloads beyond the original baseline lease screen wording. (update 04-04-2026)
 
 ### Tenant Mobile Deltas
+
 - Tenant onboarding currently ships as welcome + login flow and does not currently expose an invite-code entry screen. (update 03-31-2026)
 - Payments tab currently supports balance + pay-now + payment history/detail modal; autopay toggle is not currently shipped in tab UI. (update 04-04-2026)
 - Account tab currently ships profile/emergency-contact editing + preferred contact + sign out; in-tab notification preference controls and dedicated contact-manager shortcut are not currently shipped. (update 04-04-2026)
@@ -872,6 +922,7 @@ This appendix captures what is currently implemented in the repo beyond or diffe
 - Expo push token registration is implemented and persisted to tenant profile via tenant portal API. (Added 04-04-2026)
 
 ### Data Model / Enum Deltas
+
 - Organization includes implemented Stripe Connect fields: `stripe_account_id`, `stripe_account_status`, and `stripe_account_details_submitted`. (Added 03-26-2026)
 - Tenant includes implemented auth/mobile fields: `supabase_user_id` and `expo_push_token`. (Added 04-04-2026)
 - Lease renewal linkage is implemented with self-referential relation via `renewal_of_lease_id` and exposed in service include shapes. (Added 03-29-2026)
@@ -879,6 +930,7 @@ This appendix captures what is currently implemented in the repo beyond or diffe
 - Work order status implementation uses normalized lifecycle values (`new_order`, `assigned`, `in_progress`, `pending_parts`, `completed`, `closed`, `cancelled`) rather than the simplified status labels shown in early outline text. (update 03-29-2026)
 
 ### Phase Progress Snapshot
+
 - Phase 1 and Phase 2 planned foundations/workflows are materially implemented in the current branch lineage, including properties/units/tenants/leases/payments/work-orders/messages/documents/notifications. (update 03-29-2026)
 - Phase 3 weeks 25-34 features are implemented across the mobile app and supporting API, including scaffold, maintenance submission, messaging/push, lease docs/payment history/profile, and settings/admin/renewal hardening. (update 04-04-2026)
 - Additional post-week-34 hardening landed for role enforcement and work-order attribution display. (update 04-05-2026)
@@ -887,7 +939,7 @@ This appendix captures what is currently implemented in the repo beyond or diffe
 
 ## 12. Phase-by-Phase Implementation Status
 
-*Last updated: 2026-04-09. Status reflects the `fix/week1-build-blockers` branch.*
+_Last updated: 2026-04-13. Status reflects the `main` branch._
 
 > **Legend:** ✅ Done — ⚠️ Partial — ❌ Not yet built — 🔴 Blocker (pilot) — 🟡 Required (production)
 
@@ -895,51 +947,51 @@ This appendix captures what is currently implemented in the repo beyond or diffe
 
 ### Phase 1 — Foundation
 
-| Item | Status | Notes |
-|---|---|---|
-| Monorepo scaffold (Turborepo, packages/db, packages/shared) | ✅ | |
-| Prisma schema — all core entities | ✅ | |
-| Supabase auth + org isolation middleware | ✅ | |
-| Property / Unit CRUD — API + web | ✅ | |
-| Tenant / Lease CRUD — API + web | ✅ | |
-| Manual payment logging | ✅ | |
-| Dashboard with KPI cards (clickable) | ✅ | |
-| Email notifications via Resend | ✅ | |
-| Document upload to S3 | ✅ | |
-| CI pipeline (GitHub Actions — web + API) | ✅ | Mobile not yet covered |
-| Role-based access (owner / manager / maintenance) | ✅ | |
-| Onboarding wizard — org name + first property | ⚠️ | Logo upload and billing step not implemented (`BUILD_OUTLINE.md:686`) |
-| Billing/settings — payment method, invoice history, plan management | ⚠️ | Currently read-only (`settings/billing/page.tsx`) |
-| Web TypeScript build passing | ✅ | Fixed 2026-04-09 |
-| API TypeScript build passing | ✅ | Fixed 2026-04-09 |
+| Item                                                                | Status | Notes                                                                                                                   |
+| ------------------------------------------------------------------- | ------ | ----------------------------------------------------------------------------------------------------------------------- |
+| Monorepo scaffold (Turborepo, packages/db, packages/shared)         | ✅     |                                                                                                                         |
+| Prisma schema — all core entities                                   | ✅     |                                                                                                                         |
+| Supabase auth + org isolation middleware                            | ✅     |                                                                                                                         |
+| Property / Unit CRUD — API + web                                    | ✅     |                                                                                                                         |
+| Tenant / Lease CRUD — API + web                                     | ✅     |                                                                                                                         |
+| Manual payment logging                                              | ✅     |                                                                                                                         |
+| Dashboard with KPI cards (clickable)                                | ✅     |                                                                                                                         |
+| Email notifications via Resend                                      | ✅     |                                                                                                                         |
+| Document upload to S3                                               | ✅     |                                                                                                                         |
+| CI pipeline (GitHub Actions — web + API)                            | ✅     | Mobile not yet covered                                                                                                  |
+| Role-based access (owner / manager / maintenance)                   | ✅     |                                                                                                                         |
+| Onboarding wizard — org name + logo + billing + first property      | ✅     | Multi-step onboarding completed with auth callback/invite flow hardening and idempotent step-1 behavior.                |
+| Billing/settings — payment method, invoice history, plan management | ✅     | Billing settings now supports plan updates, Stripe portal handoff, payment-method display, and invoice history listing. |
+| Web TypeScript build passing                                        | ✅     | Fixed 2026-04-09                                                                                                        |
+| API TypeScript build passing                                        | ✅     | Fixed 2026-04-09                                                                                                        |
 
 **Pilot blockers:** Onboarding must complete without manual DB intervention. Build must be green.
-**Production gaps:** Billing/settings must be fully operational. Auth + CRUD integration tests needed. Audit trail for lease changes and payment voids.
+**Production gaps:** Auth + CRUD integration tests needed. Audit trail for lease changes and payment voids.
 
 ---
 
 ### Phase 2 — Core Workflows
 
-| Item | Status | Notes |
-|---|---|---|
-| Stripe Connect onboarding for manager bank accounts | ✅ | `connect.ts` |
-| ACH payment initiation + Stripe webhook handling | ✅ | `payments.ts`, `stripe.ts` |
-| Ledger entries | ✅ | `ledger.service.ts` |
-| Work order CRUD, assignment, SLA breach job | ✅ | |
-| In-app messaging (REST polling, 5 s interval) | ✅ | WebSocket deferred to Phase 4+ |
-| Email notifications — rent reminders, overdue, lease expiry, late fee | ✅ | |
-| Late fee auto-apply job | ✅ | |
-| Rent generation job (monthly Payment records from leases) | ✅ | `rentGenerationJob.ts` |
-| Lease renewal with linkage tracking | ✅ | |
-| Vendor management | ✅ | Basic |
-| Staff roles + permissions | ✅ | |
-| Tenant list — search + operational filters | ❌ | Currently table-only; no search, no rent-status / expiry / work-order filter (`tenants/page.tsx:91`) |
-| Tenant detail — payment history section | ❌ | Not rendered on tenant detail screen (`tenants/[id]/page.tsx`) |
-| Tenant detail — manager message thread | ❌ | No conversation view from tenant detail |
-| Tenant detail — move-out workflow | ❌ | No deposit/disposition section |
-| Message file/photo attachments (web) | ❌ | Text-only currently |
-| ACH end-to-end flow validated (success + failure + refund) | ⚠️ | Routes exist; webhook → ledger path not smoke-tested |
-| Financial controls (reconciliation, duplicate prevention, audit) | ❌ | |
+| Item                                                                  | Status | Notes                                                                                                |
+| --------------------------------------------------------------------- | ------ | ---------------------------------------------------------------------------------------------------- |
+| Stripe Connect onboarding for manager bank accounts                   | ✅     | `connect.ts`                                                                                         |
+| ACH payment initiation + Stripe webhook handling                      | ✅     | `payments.ts`, `stripe.ts`                                                                           |
+| Ledger entries                                                        | ✅     | `ledger.service.ts`                                                                                  |
+| Work order CRUD, assignment, SLA breach job                           | ✅     |                                                                                                      |
+| In-app messaging (REST polling, 5 s interval)                         | ✅     | WebSocket deferred to Phase 4+                                                                       |
+| Email notifications — rent reminders, overdue, lease expiry, late fee | ✅     |                                                                                                      |
+| Late fee auto-apply job                                               | ✅     |                                                                                                      |
+| Rent generation job (monthly Payment records from leases)             | ✅     | `rentGenerationJob.ts`                                                                               |
+| Lease renewal with linkage tracking                                   | ✅     |                                                                                                      |
+| Vendor management                                                     | ✅     | Basic                                                                                                |
+| Staff roles + permissions                                             | ✅     |                                                                                                      |
+| Tenant list — search + operational filters                            | ❌     | Currently table-only; no search, no rent-status / expiry / work-order filter (`tenants/page.tsx:91`) |
+| Tenant detail — payment history section                               | ❌     | Not rendered on tenant detail screen (`tenants/[id]/page.tsx`)                                       |
+| Tenant detail — manager message thread                                | ❌     | No conversation view from tenant detail                                                              |
+| Tenant detail — move-out workflow                                     | ❌     | No deposit/disposition section                                                                       |
+| Message file/photo attachments (web)                                  | ❌     | Text-only currently                                                                                  |
+| ACH end-to-end flow validated (success + failure + refund)            | ⚠️     | Routes exist; webhook → ledger path not smoke-tested                                                 |
+| Financial controls (reconciliation, duplicate prevention, audit)      | ❌     |                                                                                                      |
 
 **Pilot blockers:** Tenant list search/filter. Tenant detail payment history. Tenant detail message thread.
 **Production gaps:** Move-out workflow. Message attachments (if in scope). Financial reconciliation and audit trail.
@@ -948,26 +1000,26 @@ This appendix captures what is currently implemented in the repo beyond or diffe
 
 ### Phase 3 — Tenant Mobile App
 
-| Item | Status | Notes |
-|---|---|---|
-| Expo Router scaffold + auth flow (welcome → login → forgot-password) | ✅ | |
-| Home tab: rent due, open work orders, messages badge | ✅ | |
-| Payments tab: balance, Pay Now sheet, payment history + detail | ✅ | |
-| Maintenance tab: active orders + submit new (with photo upload) | ✅ | |
-| Messages tab: thread list → conversation screen | ✅ | |
-| Documents tab: lease/notices download | ✅ | |
-| Account tab: profile, emergency contacts, current lease, sign out | ✅ | |
-| Push token registration (Expo push) | ✅ | |
-| Mobile build (`expo export`) passing | ✅ | Fixed 2026-04-09 — added `platforms: ["ios","android"]` to app.json |
-| Mobile lint (ESLint v9) passing | ✅ | Fixed 2026-04-09 — created `eslint.config.mjs` |
-| Resident activation / invite-code entry screen | ❌ | Flow is welcome → login only; no invite-code path (`BUILD_OUTLINE.md:735`) |
-| Autopay / recurring payment toggle | ❌ | Not in Payments tab UI (`BUILD_OUTLINE.md:747`) |
-| Message photo/file attachments (mobile) | ❌ | Text-only in `conversation.tsx` (`BUILD_OUTLINE.md:757`) |
-| Notification preferences on Account tab | ❌ | Not implemented (`BUILD_OUTLINE.md:766`) |
-| Contact manager shortcut on Account/Home tab | ❌ | Not implemented (`BUILD_OUTLINE.md:766`) |
-| iOS + Android device smoke test | ❌ | Not evidenced |
-| App Store submission readiness (icons, splash, EAS config, privacy policy) | ❌ | `app.json` has bundle IDs; icons/splash assets are placeholders |
-| Mobile CI coverage | ❌ | CI covers web + API only |
+| Item                                                                       | Status | Notes                                                                      |
+| -------------------------------------------------------------------------- | ------ | -------------------------------------------------------------------------- |
+| Expo Router scaffold + auth flow (welcome → login → forgot-password)       | ✅     |                                                                            |
+| Home tab: rent due, open work orders, messages badge                       | ✅     |                                                                            |
+| Payments tab: balance, Pay Now sheet, payment history + detail             | ✅     |                                                                            |
+| Maintenance tab: active orders + submit new (with photo upload)            | ✅     |                                                                            |
+| Messages tab: thread list → conversation screen                            | ✅     |                                                                            |
+| Documents tab: lease/notices download                                      | ✅     |                                                                            |
+| Account tab: profile, emergency contacts, current lease, sign out          | ✅     |                                                                            |
+| Push token registration (Expo push)                                        | ✅     |                                                                            |
+| Mobile build (`expo export`) passing                                       | ✅     | Fixed 2026-04-09 — added `platforms: ["ios","android"]` to app.json        |
+| Mobile lint (ESLint v9) passing                                            | ✅     | Fixed 2026-04-09 — created `eslint.config.mjs`                             |
+| Resident activation / invite-code entry screen                             | ❌     | Flow is welcome → login only; no invite-code path (`BUILD_OUTLINE.md:735`) |
+| Autopay / recurring payment toggle                                         | ❌     | Not in Payments tab UI (`BUILD_OUTLINE.md:747`)                            |
+| Message photo/file attachments (mobile)                                    | ❌     | Text-only in `conversation.tsx` (`BUILD_OUTLINE.md:757`)                   |
+| Notification preferences on Account tab                                    | ❌     | Not implemented (`BUILD_OUTLINE.md:766`)                                   |
+| Contact manager shortcut on Account/Home tab                               | ❌     | Not implemented (`BUILD_OUTLINE.md:766`)                                   |
+| iOS + Android device smoke test                                            | ❌     | Not evidenced                                                              |
+| App Store submission readiness (icons, splash, EAS config, privacy policy) | ❌     | `app.json` has bundle IDs; icons/splash assets are placeholders            |
+| Mobile CI coverage                                                         | ❌     | CI covers web + API only                                                   |
 
 **Pilot blockers:** Fix mobile build + lint (done). Add invite-code activation screen. Add notification preferences + contact-manager shortcut. Smoke test on real device.
 **Production gaps:** Autopay toggle. Message attachments. Full App Store submission prep. Mobile E2E tests. Mobile CI.
@@ -976,17 +1028,17 @@ This appendix captures what is currently implemented in the repo beyond or diffe
 
 ### Cross-Cutting Status
 
-| Item | Status |
-|---|---|
-| Web build (`tsc --noEmit`) green | ✅ |
-| API build (`tsc --noEmit`) green | ✅ |
-| Mobile build (`expo export`) green | ✅ |
-| Mobile lint green | ✅ |
-| API automated tests runnable on clean install | ⚠️ |
-| Seed / demo environment end-to-end workflow | ⚠️ |
-| Real observability (logs, error monitoring, alerting) | ❌ |
-| Security review (auth, file access, org isolation, webhook HMAC) | ❌ |
-| Financial accuracy tests (payments, refunds, late fees, ledger) | ❌ |
+| Item                                                             | Status |
+| ---------------------------------------------------------------- | ------ |
+| Web build (`tsc --noEmit`) green                                 | ✅     |
+| API build (`tsc --noEmit`) green                                 | ✅     |
+| Mobile build (`expo export`) green                               | ✅     |
+| Mobile lint green                                                | ✅     |
+| API automated tests runnable on clean install                    | ⚠️     |
+| Seed / demo environment end-to-end workflow                      | ⚠️     |
+| Real observability (logs, error monitoring, alerting)            | ❌     |
+| Security review (auth, file access, org isolation, webhook HMAC) | ❌     |
+| Financial accuracy tests (payments, refunds, late fees, ledger)  | ❌     |
 
 ---
 
@@ -997,10 +1049,12 @@ This appendix captures what is currently implemented in the repo beyond or diffe
 ---
 
 ### Module 1 — Advanced Tenant Onboarding
+
 **Target price:** $25–40/mo
 **Priority:** High
 
 **What it adds:**
+
 - Digital rental application with configurable question sets
 - Background and credit check integration (TransUnion SmartMove or similar)
 - E-lease signing via DocuSign or HelloSign
@@ -1008,6 +1062,7 @@ This appendix captures what is currently implemented in the repo beyond or diffe
 - Screening consent capture (legally required before running any check)
 
 **Data hooks already in schema:**
+
 - `ssn_full_encrypted` (Tenant) — encrypted at rest, never logged
 - `screening_consent_at` (Tenant) — required before check is triggered
 - `govt_id_number` (Tenant) — stored encrypted
@@ -1017,10 +1072,12 @@ This appendix captures what is currently implemented in the repo beyond or diffe
 ---
 
 ### Module 2 — Unit Intelligence & Appliance Registry
+
 **Target price:** $20–35/mo
 **Priority:** High
 
 **What it adds:**
+
 - Per-unit appliance records: make, model, serial number, warranty expiry, purchase date
 - Maintenance cost tracking per appliance over time
 - Age-based replacement alerts (e.g. HVAC approaching end of life)
@@ -1028,6 +1085,7 @@ This appendix captures what is currently implemented in the repo beyond or diffe
 - Appliance-linked work orders (tie a work order directly to a specific appliance)
 
 **Data hooks already in schema:**
+
 - `appliance_count` (Unit) — maintained by module, surfaced on unit detail
 
 **Dependencies:** Unit management, S3
@@ -1035,10 +1093,12 @@ This appendix captures what is currently implemented in the repo beyond or diffe
 ---
 
 ### Module 3 — Grounds & Property Maintenance
+
 **Target price:** $25–40/mo
 **Priority:** Medium
 
 **What it adds:**
+
 - Recurring task scheduling for common areas (landscaping, HVAC filter changes, pest control)
 - Vendor assignment to recurring tasks
 - Inspection log with completion photo requirement
@@ -1049,10 +1109,12 @@ This appendix captures what is currently implemented in the repo beyond or diffe
 ---
 
 ### Module 4 — Advanced Payments & Accounting
+
 **Target price:** $30–50/mo
 **Priority:** Medium
 
 **What it adds:**
+
 - Card payment acceptance (in addition to ACH)
 - Partial payment handling with balance carry-forward
 - Security deposit reconciliation against move-in/move-out inspections
@@ -1061,6 +1123,7 @@ This appendix captures what is currently implemented in the repo beyond or diffe
 - Schedule E export for tax filing
 
 **Data hooks already in schema:**
+
 - `tax_parcel_id` (Property) — needed for Schedule E
 
 **Dependencies:** Stripe, Payment ledger, Owner Portal module (for disbursements)
@@ -1068,10 +1131,12 @@ This appendix captures what is currently implemented in the repo beyond or diffe
 ---
 
 ### Module 5 — Vendor & Contractor Management
+
 **Target price:** $20–30/mo
 **Priority:** Medium
 
 **What it adds:**
+
 - Full vendor database with contact info, license numbers, insurance certificates
 - License and insurance expiry alerts (flagged on dashboard before expiry)
 - Work history and spend tracking per vendor
@@ -1079,6 +1144,7 @@ This appendix captures what is currently implemented in the repo beyond or diffe
 - Preferred vendor assignments per property or category
 
 **Data hooks already in schema:**
+
 - `w9_on_file` (Vendor) — required for contractor 1099 tax reporting
 
 **Dependencies:** Work orders
@@ -1086,10 +1152,12 @@ This appendix captures what is currently implemented in the repo beyond or diffe
 ---
 
 ### Module 6 — Inspections & Compliance
+
 **Target price:** $25–40/mo
 **Priority:** Medium
 
 **What it adds:**
+
 - Move-in and move-out inspection templates (configurable per property type)
 - Scheduled inspection workflows (annual, semi-annual)
 - Photo and video documentation with timestamp + GPS metadata
@@ -1098,6 +1166,7 @@ This appendix captures what is currently implemented in the repo beyond or diffe
 - Move-in vs. move-out comparison view (basis for deposit disposition)
 
 **Data hooks already in schema:**
+
 - `last_inspection_at` (Unit) — timestamp of most recent inspection of any type
 
 **Dependencies:** Unit management, S3
@@ -1105,10 +1174,12 @@ This appendix captures what is currently implemented in the repo beyond or diffe
 ---
 
 ### Module 7 — Lease Renewal
+
 **Target price:** $15–25/mo
 **Priority:** Medium
 
 **What it adds:**
+
 - Renewal offer workflow: manager creates offer → tenant receives in app → accept/counter/decline
 - Rent increase history and audit trail
 - Market rate comparison (manual entry or third-party data feed)
@@ -1121,10 +1192,12 @@ This appendix captures what is currently implemented in the repo beyond or diffe
 ---
 
 ### Module 8 — Eviction Management
+
 **Target price:** $30–50/mo
 **Priority:** Medium
 
 **What it adds:**
+
 - Notice type tracking: pay-or-quit, cure-or-quit, unconditional quit
 - Delivery method logging: certified mail, personal service, posting
 - Court date and case number tracking
@@ -1136,10 +1209,12 @@ This appendix captures what is currently implemented in the repo beyond or diffe
 ---
 
 ### Module 9 — Owner Portal
+
 **Target price:** $25–40/mo
 **Priority:** Low
 
 **What it adds:**
+
 - Owner entity above the property level (owner of record separate from manager)
 - Ownership percentage tracking for co-owned properties
 - Owner-facing read-only portal (separate login)
@@ -1151,10 +1226,12 @@ This appendix captures what is currently implemented in the repo beyond or diffe
 ---
 
 ### Module 10 — Communications & Resident Engagement
+
 **Target price:** $20–30/mo
 **Priority:** Low
 
 **What it adds:**
+
 - Bulk messaging to all tenants in a property or unit group
 - Automated notice delivery (rent increase, policy change, community alert)
 - SMS integration via Twilio (opt-in, per-tenant)
@@ -1168,10 +1245,12 @@ This appendix captures what is currently implemented in the repo beyond or diffe
 ---
 
 ### Module 11 — Reporting & Analytics
+
 **Target price:** $25–40/mo
 **Priority:** Low
 
 **What it adds:**
+
 - Custom report builder (drag-and-drop column selection)
 - Portfolio performance trends (occupancy rate, rent collected, vacancy days)
 - Maintenance spend breakdown by unit, property, category
@@ -1184,9 +1263,11 @@ This appendix captures what is currently implemented in the repo beyond or diffe
 ---
 
 ### Open API / Developer Platform
+
 **Target availability:** Premium plan or enterprise tier (Phase 5+)
 
 **What it adds:**
+
 - REST API with per-organization API keys
 - Webhook subscriptions (push events to external systems)
 - Official API documentation (OpenAPI spec)
