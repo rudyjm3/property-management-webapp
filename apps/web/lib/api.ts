@@ -18,7 +18,9 @@ export function getOrgId() {
 async function getAuthToken(): Promise<string | null> {
   try {
     const supabase = createClient();
-    const { data: { session } } = await supabase.auth.getSession();
+    const {
+      data: { session },
+    } = await supabase.auth.getSession();
     return session?.access_token ?? null;
   } catch {
     return null;
@@ -59,28 +61,32 @@ async function apiFetch<T>(path: string, options?: RequestInit): Promise<T> {
 
 export const api = {
   auth: {
-    me: () => apiFetch<{
-      id: string;
-      email: string;
-      name: string;
-      role: string;
-      organizationId: string;
-      organization: {
+    me: () =>
+      apiFetch<{
         id: string;
+        email: string;
         name: string;
-        slug: string;
-        timezone: string;
-        rentDueDay: number;
-        gracePeriodDays: number;
-        lateFeeAmount: string;
-      };
-    }>('/api/v1/auth/me'),
+        role: string;
+        organizationId: string;
+        organization: {
+          id: string;
+          name: string;
+          slug: string;
+          timezone: string;
+          rentDueDay: number;
+          gracePeriodDays: number;
+          lateFeeAmount: string;
+        };
+      }>('/api/v1/auth/me'),
 
     register: (data: { name: string; orgName: string; orgPhone?: string; timezone?: string }) =>
-      apiFetch<{ userId: string; orgId: string; orgName: string; role: string }>('/api/v1/auth/register', {
-        method: 'POST',
-        body: JSON.stringify(data),
-      }),
+      apiFetch<{ userId: string; orgId: string; orgName: string; role: string }>(
+        '/api/v1/auth/register',
+        {
+          method: 'POST',
+          body: JSON.stringify(data),
+        }
+      ),
   },
 
   organizations: {
@@ -91,6 +97,8 @@ export const api = {
       email?: string;
       timezone?: string;
       dateFormat?: string;
+      logoUrl?: string | null;
+      planTier?: 'starter' | 'pro' | 'enterprise';
       rentDueDay?: number;
       gracePeriodDays?: number;
       lateFeeAmount?: number;
@@ -137,9 +145,12 @@ export const api = {
         method: 'DELETE',
       }),
     invitePortal: (id: string) =>
-      apiFetch<{ message: string; email: string }>(`/api/v1/organizations/${_orgId}/tenants/${id}/invite-portal`, {
-        method: 'POST',
-      }),
+      apiFetch<{ message: string; email: string }>(
+        `/api/v1/organizations/${_orgId}/tenants/${id}/invite-portal`,
+        {
+          method: 'POST',
+        }
+      ),
   },
   leases: {
     list: () => apiFetch<any[]>(`/api/v1/organizations/${_orgId}/leases`),
@@ -169,16 +180,28 @@ export const api = {
         body: JSON.stringify({ tenantId }),
       }),
     removeParticipant: (leaseId: string, participantId: string) =>
-      apiFetch<any>(`/api/v1/organizations/${_orgId}/leases/${leaseId}/participants/${participantId}`, {
-        method: 'DELETE',
-      }),
+      apiFetch<any>(
+        `/api/v1/organizations/${_orgId}/leases/${leaseId}/participants/${participantId}`,
+        {
+          method: 'DELETE',
+        }
+      ),
     setPrimaryParticipant: (leaseId: string, participantId: string) =>
-      apiFetch<any>(`/api/v1/organizations/${_orgId}/leases/${leaseId}/participants/${participantId}`, {
-        method: 'PATCH',
-      }),
+      apiFetch<any>(
+        `/api/v1/organizations/${_orgId}/leases/${leaseId}/participants/${participantId}`,
+        {
+          method: 'PATCH',
+        }
+      ),
   },
   payments: {
-    list: (params?: { leaseId?: string; tenantId?: string; status?: string; type?: string; limit?: number }) => {
+    list: (params?: {
+      leaseId?: string;
+      tenantId?: string;
+      status?: string;
+      type?: string;
+      limit?: number;
+    }) => {
       const query = new URLSearchParams();
       if (params?.leaseId) query.set('leaseId', params.leaseId);
       if (params?.tenantId) query.set('tenantId', params.tenantId);
@@ -186,9 +209,7 @@ export const api = {
       if (params?.type) query.set('type', params.type);
       if (params?.limit) query.set('limit', String(params.limit));
       const qs = query.toString();
-      return apiFetch<any[]>(
-        `/api/v1/organizations/${_orgId}/payments${qs ? `?${qs}` : ''}`
-      );
+      return apiFetch<any[]>(`/api/v1/organizations/${_orgId}/payments${qs ? `?${qs}` : ''}`);
     },
     stats: () => apiFetch<any>(`/api/v1/organizations/${_orgId}/payments/stats`),
     create: (data: any) =>
@@ -220,27 +241,32 @@ export const api = {
     list: (propertyId: string) =>
       apiFetch<any[]>(`/api/v1/organizations/${_orgId}/properties/${propertyId}/units`),
     get: (propertyId: string, unitId: string) =>
-      apiFetch<any>(
-        `/api/v1/organizations/${_orgId}/properties/${propertyId}/units/${unitId}`
-      ),
+      apiFetch<any>(`/api/v1/organizations/${_orgId}/properties/${propertyId}/units/${unitId}`),
     create: (propertyId: string, data: any) =>
       apiFetch<any>(`/api/v1/organizations/${_orgId}/properties/${propertyId}/units`, {
         method: 'POST',
         body: JSON.stringify(data),
       }),
     update: (propertyId: string, unitId: string, data: any) =>
-      apiFetch<any>(
-        `/api/v1/organizations/${_orgId}/properties/${propertyId}/units/${unitId}`,
-        { method: 'PATCH', body: JSON.stringify(data) }
-      ),
+      apiFetch<any>(`/api/v1/organizations/${_orgId}/properties/${propertyId}/units/${unitId}`, {
+        method: 'PATCH',
+        body: JSON.stringify(data),
+      }),
     delete: (propertyId: string, unitId: string) =>
-      apiFetch<void>(
-        `/api/v1/organizations/${_orgId}/properties/${propertyId}/units/${unitId}`,
-        { method: 'DELETE' }
-      ),
+      apiFetch<void>(`/api/v1/organizations/${_orgId}/properties/${propertyId}/units/${unitId}`, {
+        method: 'DELETE',
+      }),
   },
   workOrders: {
-    list: (params?: { status?: string; priority?: string; category?: string; propertyId?: string; unitId?: string; tenantId?: string; limit?: number }) => {
+    list: (params?: {
+      status?: string;
+      priority?: string;
+      category?: string;
+      propertyId?: string;
+      unitId?: string;
+      tenantId?: string;
+      limit?: number;
+    }) => {
       const query = new URLSearchParams();
       if (params?.status) query.set('status', params.status);
       if (params?.priority) query.set('priority', params.priority);
@@ -270,10 +296,22 @@ export const api = {
   },
   messages: {
     threads: {
-      list: (tenantId?: string) => apiFetch<any[]>(`/api/v1/organizations/${_orgId}/messages/threads${tenantId ? `?tenantId=${tenantId}` : ''}`),
-      get: (threadId: string) => apiFetch<any[]>(`/api/v1/organizations/${_orgId}/messages/threads/${threadId}`),
+      list: (tenantId?: string) =>
+        apiFetch<any[]>(
+          `/api/v1/organizations/${_orgId}/messages/threads${tenantId ? `?tenantId=${tenantId}` : ''}`
+        ),
+      get: (threadId: string) =>
+        apiFetch<any[]>(`/api/v1/organizations/${_orgId}/messages/threads/${threadId}`),
     },
-    send: (data: { senderUserId: string; recipientTenantId: string; body: string; threadId?: string | null; subject?: string | null; unitId?: string | null; workOrderId?: string | null }) =>
+    send: (data: {
+      senderUserId: string;
+      recipientTenantId: string;
+      body: string;
+      threadId?: string | null;
+      subject?: string | null;
+      unitId?: string | null;
+      workOrderId?: string | null;
+    }) =>
       apiFetch<any>(`/api/v1/organizations/${_orgId}/messages`, {
         method: 'POST',
         body: JSON.stringify(data),
@@ -299,11 +337,17 @@ export const api = {
         body: JSON.stringify({ userId: _userId }),
       }),
     triggerLateFees: () =>
-      apiFetch<any>(`/api/v1/organizations/${_orgId}/notifications/jobs/late-fees`, { method: 'POST' }),
+      apiFetch<any>(`/api/v1/organizations/${_orgId}/notifications/jobs/late-fees`, {
+        method: 'POST',
+      }),
     triggerRentReminders: () =>
-      apiFetch<any>(`/api/v1/organizations/${_orgId}/notifications/jobs/rent-reminders`, { method: 'POST' }),
+      apiFetch<any>(`/api/v1/organizations/${_orgId}/notifications/jobs/rent-reminders`, {
+        method: 'POST',
+      }),
     triggerLeaseExpiry: () =>
-      apiFetch<any>(`/api/v1/organizations/${_orgId}/notifications/jobs/lease-expiry`, { method: 'POST' }),
+      apiFetch<any>(`/api/v1/organizations/${_orgId}/notifications/jobs/lease-expiry`, {
+        method: 'POST',
+      }),
   },
   staff: {
     list: (params?: { includeInactive?: boolean }) => {
@@ -315,14 +359,17 @@ export const api = {
         method: 'POST',
         body: JSON.stringify(data),
       }),
-    update: (userId: string, data: {
-      role?: string;
-      status?: string;
-      notifRentOverdue?: string;
-      notifWorkOrder?: string;
-      notifLeaseExpiry?: string;
-      notifNewMessage?: string;
-    }) =>
+    update: (
+      userId: string,
+      data: {
+        role?: string;
+        status?: string;
+        notifRentOverdue?: string;
+        notifWorkOrder?: string;
+        notifLeaseExpiry?: string;
+        notifNewMessage?: string;
+      }
+    ) =>
       apiFetch<any>(`/api/v1/organizations/${_orgId}/staff/${userId}`, {
         method: 'PATCH',
         body: JSON.stringify(data),
@@ -347,7 +394,7 @@ export const api = {
     }) =>
       apiFetch<{ uploadUrl: string; s3Key: string; expiresInSeconds: number }>(
         `/api/v1/organizations/${_orgId}/documents/upload-url`,
-        { method: 'POST', body: JSON.stringify(data) },
+        { method: 'POST', body: JSON.stringify(data) }
       ),
 
     uploadToS3: async (uploadUrl: string, file: File, contentType: string): Promise<void> => {
@@ -370,31 +417,26 @@ export const api = {
       label?: string | null;
       visibleToTenant?: boolean;
     }) =>
-      apiFetch<any>(
-        `/api/v1/organizations/${_orgId}/documents`,
-        { method: 'POST', body: JSON.stringify(data) },
-      ),
+      apiFetch<any>(`/api/v1/organizations/${_orgId}/documents`, {
+        method: 'POST',
+        body: JSON.stringify(data),
+      }),
 
     list: (params?: { entityType?: string; entityId?: string }) => {
       const query = new URLSearchParams();
       if (params?.entityType) query.set('entityType', params.entityType);
       if (params?.entityId) query.set('entityId', params.entityId);
       const qs = query.toString();
-      return apiFetch<any[]>(
-        `/api/v1/organizations/${_orgId}/documents${qs ? `?${qs}` : ''}`,
-      );
+      return apiFetch<any[]>(`/api/v1/organizations/${_orgId}/documents${qs ? `?${qs}` : ''}`);
     },
 
     getDownloadUrl: (docId: string) =>
       apiFetch<{ downloadUrl: string; document: any }>(
-        `/api/v1/organizations/${_orgId}/documents/${docId}/download-url`,
+        `/api/v1/organizations/${_orgId}/documents/${docId}/download-url`
       ),
 
     delete: (docId: string) =>
-      apiFetch<void>(
-        `/api/v1/organizations/${_orgId}/documents/${docId}`,
-        { method: 'DELETE' },
-      ),
+      apiFetch<void>(`/api/v1/organizations/${_orgId}/documents/${docId}`, { method: 'DELETE' }),
   },
 
   ledger: {

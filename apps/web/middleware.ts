@@ -2,10 +2,9 @@ import { createServerClient, type CookieOptions } from '@supabase/ssr';
 import { NextRequest, NextResponse } from 'next/server';
 
 const PUBLIC_PATHS = ['/login', '/signup', '/forgot-password', '/reset-password', '/auth/callback'];
-const ONBOARDING_PATH = '/onboarding';
 
 export async function middleware(request: NextRequest) {
-  const { pathname } = request.nextUrl;
+  const { pathname, searchParams } = request.nextUrl;
 
   // Create a response we can modify (needed for Supabase cookie refresh)
   let response = NextResponse.next({
@@ -31,21 +30,31 @@ export async function middleware(request: NextRequest) {
     }
   );
 
-  const { data: { user } } = await supabase.auth.getUser();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
 
   const isPublicPath = PUBLIC_PATHS.some((p) => pathname.startsWith(p));
-  const isOnboarding = pathname.startsWith(ONBOARDING_PATH);
+  const isOnboarding = pathname.startsWith('/onboarding');
+  const hasExchangeParams =
+    searchParams.has('code') || (searchParams.has('token_hash') && searchParams.has('type'));
+  const canAccessUnauthedOnboarding = isOnboarding && hasExchangeParams;
 
-  // Not logged in → redirect to login (except public paths)
-  if (!user && !isPublicPath && !isOnboarding) {
+  // Not logged in -> redirect to login (except public paths)
+  if (!user && !isPublicPath && !canAccessUnauthedOnboarding) {
     const url = request.nextUrl.clone();
     url.pathname = '/login';
     return NextResponse.redirect(url);
   }
 
-  // Logged in on a public auth page → redirect to dashboard
+  // Logged in on a public auth page -> redirect to dashboard
   // Exception: /reset-password and /auth/callback must stay accessible during recovery/invite flows
-  if (user && isPublicPath && !pathname.startsWith('/reset-password') && !pathname.startsWith('/auth/callback')) {
+  if (
+    user &&
+    isPublicPath &&
+    !pathname.startsWith('/reset-password') &&
+    !pathname.startsWith('/auth/callback')
+  ) {
     const url = request.nextUrl.clone();
     url.pathname = '/dashboard';
     return NextResponse.redirect(url);

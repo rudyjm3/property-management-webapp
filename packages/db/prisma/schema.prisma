@@ -660,6 +660,7 @@ model Document {
 }
 
 enum DocumentEntityType {
+  organization
   property
   unit
   lease

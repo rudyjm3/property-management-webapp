@@ -14,7 +14,14 @@ export const PROPERTY_TYPES = ['multifamily', 'single_family', 'commercial', 'mi
 
 // ─── Unit ─────────────────────────────────────────────────────────────────────
 
-export const UNIT_TYPES = ['studio', 'one_bed', 'two_bed', 'three_bed', 'four_plus_bed', 'commercial'] as const;
+export const UNIT_TYPES = [
+  'studio',
+  'one_bed',
+  'two_bed',
+  'three_bed',
+  'four_plus_bed',
+  'commercial',
+] as const;
 export const UNIT_STATUSES = ['vacant', 'occupied', 'notice', 'maintenance', 'unlisted'] as const;
 
 // ─── Tenant ───────────────────────────────────────────────────────────────────
@@ -26,9 +33,21 @@ export const INCOME_SOURCES = ['employment', 'self_employed', 'benefits', 'other
 
 // ─── Lease ────────────────────────────────────────────────────────────────────
 
-export const LEASE_STATUSES = ['draft', 'active', 'month_to_month', 'notice_given', 'expired', 'terminated'] as const;
+export const LEASE_STATUSES = [
+  'draft',
+  'active',
+  'month_to_month',
+  'notice_given',
+  'expired',
+  'terminated',
+] as const;
 export const LEASE_TYPES = ['fixed_term', 'month_to_month'] as const;
-export const SECURITY_DEPOSIT_STATUSES = ['held', 'partial_return', 'full_return', 'applied_to_balance'] as const;
+export const SECURITY_DEPOSIT_STATUSES = [
+  'held',
+  'partial_return',
+  'full_return',
+  'applied_to_balance',
+] as const;
 export const ESIGNATURE_STATUSES = ['pending', 'partially_signed', 'completed'] as const;
 
 export const LEASE_EXPIRY_WARNING_DAYS = {
@@ -38,7 +57,15 @@ export const LEASE_EXPIRY_WARNING_DAYS = {
 
 // ─── Payment ──────────────────────────────────────────────────────────────────
 
-export const PAYMENT_TYPES = ['rent', 'deposit', 'late_fee', 'pet_deposit', 'parking', 'credit', 'other'] as const;
+export const PAYMENT_TYPES = [
+  'rent',
+  'deposit',
+  'late_fee',
+  'pet_deposit',
+  'parking',
+  'credit',
+  'other',
+] as const;
 export const PAYMENT_STATUSES = ['pending', 'completed', 'failed', 'waived', 'refunded'] as const;
 export const PAYMENT_METHODS = ['ach', 'card', 'check', 'cash', 'money_order', 'other'] as const;
 
@@ -75,8 +102,23 @@ export const VENDOR_STATUSES = ['active', 'inactive'] as const;
 
 // ─── Document ─────────────────────────────────────────────────────────────────
 
-export const DOCUMENT_ENTITY_TYPES = ['property', 'unit', 'lease', 'tenant', 'work_order', 'vendor'] as const;
-export const DOCUMENT_CATEGORIES = ['lease', 'inspection', 'insurance', 'id', 'photo', 'other'] as const;
+export const DOCUMENT_ENTITY_TYPES = [
+  'organization',
+  'property',
+  'unit',
+  'lease',
+  'tenant',
+  'work_order',
+  'vendor',
+] as const;
+export const DOCUMENT_CATEGORIES = [
+  'lease',
+  'inspection',
+  'insurance',
+  'id',
+  'photo',
+  'other',
+] as const;
 
 // ─── Ledger ───────────────────────────────────────────────────────────────────
 
