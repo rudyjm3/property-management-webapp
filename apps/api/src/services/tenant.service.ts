@@ -68,7 +68,27 @@ export async function getTenant(organizationId: string, tenantId: string) {
     throw new AppError(404, 'TENANT_NOT_FOUND', 'Tenant not found');
   }
 
-  return tenant;
+  const statusRank = (status: string) => {
+    if (status === 'active') return 0;
+    if (status === 'month_to_month') return 1;
+    if (status === 'notice_given') return 2;
+    if (status === 'pending') return 3;
+    if (status === 'expired') return 4;
+    if (status === 'terminated') return 5;
+    return 6;
+  };
+
+  const sortedLeaseParticipants = [...tenant.leaseParticipants].sort((a, b) => {
+    const byStatus = statusRank(a.lease.status) - statusRank(b.lease.status);
+    if (byStatus !== 0) return byStatus;
+
+    return new Date(b.lease.startDate).getTime() - new Date(a.lease.startDate).getTime();
+  });
+
+  return {
+    ...tenant,
+    leaseParticipants: sortedLeaseParticipants,
+  };
 }
 
 interface CreateTenantData {

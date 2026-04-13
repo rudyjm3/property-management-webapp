@@ -77,6 +77,11 @@ interface MessageThread {
   unreadCount: number;
 }
 
+function formatDateOnly(value: string | null | undefined) {
+  if (!value) return '--';
+  return new Date(value).toLocaleDateString('en-US', { timeZone: 'UTC' });
+}
+
 export default function TenantDetailPage() {
   const params = useParams();
   const router = useRouter();
@@ -152,7 +157,8 @@ export default function TenantDetailPage() {
         currentAddress: (formData.get('currentAddress') as string) || null,
         emergencyContactName: formData.get('emergencyContactName') || null,
         emergencyContactPhone: formData.get('emergencyContactPhone') || null,
-        emergencyContact1Relationship: (formData.get('emergencyContact1Relationship') as string) || null,
+        emergencyContact1Relationship:
+          (formData.get('emergencyContact1Relationship') as string) || null,
       });
       setTenant((prev) => (prev ? { ...prev, ...updated } : prev));
       setEditing(false);
@@ -166,7 +172,7 @@ export default function TenantDetailPage() {
     setInviting(true);
     try {
       await api.tenants.invitePortal(tenantId);
-      setTenant((prev) => prev ? { ...prev, portalStatus: 'invited' } : prev);
+      setTenant((prev) => (prev ? { ...prev, portalStatus: 'invited' } : prev));
       alert('Invite sent! The tenant will receive an email to set their password.');
     } catch (err: any) {
       alert(err.message || 'Failed to send invite');
@@ -205,7 +211,10 @@ export default function TenantDetailPage() {
       <div className="page-header">
         <div>
           <h1 className="page-title">{tenant.name}</h1>
-          <p className="page-subtitle" style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+          <p
+            className="page-subtitle"
+            style={{ display: 'flex', alignItems: 'center', gap: '8px' }}
+          >
             Tenant since {new Date(tenant.createdAt).toLocaleDateString()}
             <span className={`badge badge-${PORTAL_STATUS_BADGE[tenant.portalStatus] ?? 'vacant'}`}>
               {PORTAL_STATUS_LABELS[tenant.portalStatus] ?? tenant.portalStatus}
@@ -216,13 +225,21 @@ export default function TenantDetailPage() {
           <div style={{ display: 'flex', gap: '8px' }}>
             {(tenant.portalStatus === 'never_logged_in' || tenant.portalStatus === 'invited') && (
               <button className="btn btn-primary" onClick={handleInvitePortal} disabled={inviting}>
-                {inviting ? 'Sending…' : tenant.portalStatus === 'invited' ? 'Resend Invite' : 'Invite to Portal'}
+                {inviting
+                  ? 'Sending…'
+                  : tenant.portalStatus === 'invited'
+                    ? 'Resend Invite'
+                    : 'Invite to Portal'}
               </button>
             )}
             <button className="btn btn-secondary" onClick={() => setEditing(true)}>
               Edit
             </button>
-            <button className="btn btn-secondary" style={{ color: 'var(--color-danger)' }} onClick={handleDelete}>
+            <button
+              className="btn btn-secondary"
+              style={{ color: 'var(--color-danger)' }}
+              onClick={handleDelete}
+            >
               Delete
             </button>
           </div>
@@ -233,7 +250,9 @@ export default function TenantDetailPage() {
         {/* Contact Info */}
         <div className="card">
           <div className="card-body">
-            <h3 style={{ marginBottom: '16px', fontSize: '16px', fontWeight: 600 }}>Contact Information</h3>
+            <h3 style={{ marginBottom: '16px', fontSize: '16px', fontWeight: 600 }}>
+              Contact Information
+            </h3>
             <div className="detail-grid">
               <div className="detail-item">
                 <label>Email</label>
@@ -268,7 +287,13 @@ export default function TenantDetailPage() {
                     <span>
                       {tenant.emergencyContactName || '--'}
                       {tenant.emergencyContact1Relationship && (
-                        <span style={{ color: 'var(--color-text-muted)', marginLeft: '6px', fontSize: '13px' }}>
+                        <span
+                          style={{
+                            color: 'var(--color-text-muted)',
+                            marginLeft: '6px',
+                            fontSize: '13px',
+                          }}
+                        >
                           ({tenant.emergencyContact1Relationship})
                         </span>
                       )}
@@ -288,7 +313,9 @@ export default function TenantDetailPage() {
         {!isMaintenance && (
           <div className="card">
             <div className="card-body">
-              <h3 style={{ marginBottom: '16px', fontSize: '16px', fontWeight: 600 }}>Current Lease</h3>
+              <h3 style={{ marginBottom: '16px', fontSize: '16px', fontWeight: 600 }}>
+                Current Lease
+              </h3>
               {currentLeases.length === 0 ? (
                 <div className="empty-state" style={{ padding: '24px' }}>
                   <p>No active lease</p>
@@ -296,14 +323,29 @@ export default function TenantDetailPage() {
               ) : (
                 <>
                   {currentLeases.length > 1 && (
-                    <div style={{ marginBottom: '12px', fontSize: '13px', color: '#ca8a04', fontWeight: 500 }}>
+                    <div
+                      style={{
+                        marginBottom: '12px',
+                        fontSize: '13px',
+                        color: '#ca8a04',
+                        fontWeight: 500,
+                      }}
+                    >
                       This tenant is on {currentLeases.length} active leases.
                     </div>
                   )}
                   {currentLeases.map((lp, i) => (
                     <div
                       key={lp.lease.id}
-                      style={i > 0 ? { marginTop: '16px', paddingTop: '16px', borderTop: '1px solid var(--color-border)' } : {}}
+                      style={
+                        i > 0
+                          ? {
+                              marginTop: '16px',
+                              paddingTop: '16px',
+                              borderTop: '1px solid var(--color-border)',
+                            }
+                          : {}
+                      }
                     >
                       <div className="detail-grid">
                         <div className="detail-item">
@@ -326,11 +368,11 @@ export default function TenantDetailPage() {
                         </div>
                         <div className="detail-item">
                           <label>Lease Start</label>
-                          <span>{new Date(lp.lease.startDate).toLocaleDateString()}</span>
+                          <span>{formatDateOnly(lp.lease.startDate)}</span>
                         </div>
                         <div className="detail-item">
                           <label>Lease End</label>
-                          <span>{new Date(lp.lease.endDate).toLocaleDateString()}</span>
+                          <span>{formatDateOnly(lp.lease.endDate)}</span>
                         </div>
                         <div className="detail-item">
                           <label>Monthly Rent</label>
@@ -338,7 +380,9 @@ export default function TenantDetailPage() {
                         </div>
                         <div className="detail-item">
                           <label>Status</label>
-                          <span className="badge badge-occupied">{lp.lease.status.replace(/_/g, ' ')}</span>
+                          <span className="badge badge-occupied">
+                            {lp.lease.status.replace(/_/g, ' ')}
+                          </span>
                         </div>
                       </div>
                     </div>
@@ -379,11 +423,13 @@ export default function TenantDetailPage() {
                       <tr key={lp.lease.id}>
                         <td>{lp.lease.unit.property.name}</td>
                         <td>Unit {lp.lease.unit.unitNumber}</td>
-                        <td>{new Date(lp.lease.startDate).toLocaleDateString()}</td>
-                        <td>{new Date(lp.lease.endDate).toLocaleDateString()}</td>
+                        <td>{formatDateOnly(lp.lease.startDate)}</td>
+                        <td>{formatDateOnly(lp.lease.endDate)}</td>
                         <td>${Number(lp.lease.rentAmount).toLocaleString()}</td>
                         <td>
-                          <span className={`badge badge-${lp.lease.status === 'active' ? 'occupied' : lp.lease.status === 'expired' ? 'notice' : 'vacant'}`}>
+                          <span
+                            className={`badge badge-${lp.lease.status === 'active' ? 'occupied' : lp.lease.status === 'expired' ? 'notice' : 'vacant'}`}
+                          >
                             {lp.lease.status.replace('_', ' ')}
                           </span>
                         </td>
@@ -421,16 +467,27 @@ export default function TenantDetailPage() {
                       <td>{new Date(wo.createdAt).toLocaleDateString()}</td>
                       <td style={{ textTransform: 'capitalize' }}>{wo.category}</td>
                       <td>
-                        <span className={`badge badge-${wo.priority === 'urgent' || wo.priority === 'emergency' ? 'notice' : 'occupied'}`}>
+                        <span
+                          className={`badge badge-${wo.priority === 'urgent' || wo.priority === 'emergency' ? 'notice' : 'occupied'}`}
+                        >
                           {wo.priority}
                         </span>
                       </td>
                       <td>
-                        <span className={`badge badge-${wo.status === 'completed' ? 'occupied' : wo.status === 'new_order' ? 'vacant' : 'maintenance'}`}>
+                        <span
+                          className={`badge badge-${wo.status === 'completed' ? 'occupied' : wo.status === 'new_order' ? 'vacant' : 'maintenance'}`}
+                        >
                           {wo.status.replace('_', ' ')}
                         </span>
                       </td>
-                      <td style={{ maxWidth: '300px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                      <td
+                        style={{
+                          maxWidth: '300px',
+                          overflow: 'hidden',
+                          textOverflow: 'ellipsis',
+                          whiteSpace: 'nowrap',
+                        }}
+                      >
                         {wo.description}
                       </td>
                     </tr>
@@ -449,7 +506,9 @@ export default function TenantDetailPage() {
             Payment History ({tenant.payments.length})
           </h3>
           {tenant.payments.length === 0 ? (
-            <p style={{ color: 'var(--color-text-muted)', fontSize: '14px' }}>No payment records yet.</p>
+            <p style={{ color: 'var(--color-text-muted)', fontSize: '14px' }}>
+              No payment records yet.
+            </p>
           ) : (
             <div className="table-container">
               <table>
@@ -464,11 +523,15 @@ export default function TenantDetailPage() {
                 <tbody>
                   {tenant.payments.map((p) => (
                     <tr key={p.id}>
-                      <td>{new Date(p.dueDate).toLocaleDateString('en-US', { timeZone: 'UTC' })}</td>
+                      <td>
+                        {new Date(p.dueDate).toLocaleDateString('en-US', { timeZone: 'UTC' })}
+                      </td>
                       <td style={{ textTransform: 'capitalize' }}>{p.type.replace('_', ' ')}</td>
                       <td style={{ fontWeight: 600 }}>${Number(p.amount).toLocaleString()}</td>
                       <td>
-                        <span className={`badge badge-${p.status === 'completed' ? 'occupied' : p.status === 'pending' ? 'notice' : 'vacant'}`}>
+                        <span
+                          className={`badge badge-${p.status === 'completed' ? 'occupied' : p.status === 'pending' ? 'notice' : 'vacant'}`}
+                        >
                           {p.status}
                         </span>
                       </td>
@@ -484,31 +547,76 @@ export default function TenantDetailPage() {
       {/* Messages */}
       <div className="card" style={{ marginTop: '24px' }}>
         <div className="card-body">
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
+          <div
+            style={{
+              display: 'flex',
+              justifyContent: 'space-between',
+              alignItems: 'center',
+              marginBottom: '16px',
+            }}
+          >
             <h3 style={{ fontSize: '16px', fontWeight: 600 }}>Messages ({threads.length})</h3>
             {!isMaintenance && (
-              <button className="btn btn-sm btn-primary" onClick={() => { setShowCompose(true); setTimeout(() => composeBodyRef.current?.focus(), 50); }}>
+              <button
+                className="btn btn-sm btn-primary"
+                onClick={() => {
+                  setShowCompose(true);
+                  setTimeout(() => composeBodyRef.current?.focus(), 50);
+                }}
+              >
                 New Message
               </button>
             )}
           </div>
 
           {showCompose && (
-            <form onSubmit={handleSendMessage} style={{ marginBottom: '16px', padding: '16px', background: 'var(--color-bg-secondary)', borderRadius: '8px', border: '1px solid var(--color-border)' }}>
-              {composeError && <p style={{ color: 'var(--color-danger)', fontSize: '13px', marginBottom: '8px' }}>{composeError}</p>}
+            <form
+              onSubmit={handleSendMessage}
+              style={{
+                marginBottom: '16px',
+                padding: '16px',
+                background: 'var(--color-bg-secondary)',
+                borderRadius: '8px',
+                border: '1px solid var(--color-border)',
+              }}
+            >
+              {composeError && (
+                <p style={{ color: 'var(--color-danger)', fontSize: '13px', marginBottom: '8px' }}>
+                  {composeError}
+                </p>
+              )}
               <div className="form-group" style={{ marginBottom: '10px' }}>
                 <label>Subject (optional)</label>
-                <input value={composeSubject} onChange={(e) => setComposeSubject(e.target.value)} placeholder="e.g. Rent reminder, Maintenance update..." />
+                <input
+                  value={composeSubject}
+                  onChange={(e) => setComposeSubject(e.target.value)}
+                  placeholder="e.g. Rent reminder, Maintenance update..."
+                />
               </div>
               <div className="form-group" style={{ marginBottom: '10px' }}>
                 <label>Message</label>
-                <textarea ref={composeBodyRef} value={composeBody} onChange={(e) => setComposeBody(e.target.value)} rows={3} required placeholder="Type your message..." style={{ resize: 'vertical' }} />
+                <textarea
+                  ref={composeBodyRef}
+                  value={composeBody}
+                  onChange={(e) => setComposeBody(e.target.value)}
+                  rows={3}
+                  required
+                  placeholder="Type your message..."
+                  style={{ resize: 'vertical' }}
+                />
               </div>
               <div style={{ display: 'flex', gap: '8px' }}>
                 <button type="submit" className="btn btn-sm btn-primary" disabled={composeSending}>
                   {composeSending ? 'Sending...' : 'Send'}
                 </button>
-                <button type="button" className="btn btn-sm btn-secondary" onClick={() => { setShowCompose(false); setComposeError(''); }}>
+                <button
+                  type="button"
+                  className="btn btn-sm btn-secondary"
+                  onClick={() => {
+                    setShowCompose(false);
+                    setComposeError('');
+                  }}
+                >
                   Cancel
                 </button>
               </div>
@@ -518,33 +626,96 @@ export default function TenantDetailPage() {
           {threads.length === 0 ? (
             <p style={{ color: 'var(--color-text-muted)', fontSize: '14px' }}>No messages yet.</p>
           ) : (
-            <div style={{ border: '1px solid var(--color-border)', borderRadius: '8px', overflow: 'hidden' }}>
+            <div
+              style={{
+                border: '1px solid var(--color-border)',
+                borderRadius: '8px',
+                overflow: 'hidden',
+              }}
+            >
               {threads.map((thread, i) => (
                 <Link
                   key={thread.threadId}
                   href="/messages"
-                  style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '12px 16px', borderBottom: i < threads.length - 1 ? '1px solid var(--color-border)' : undefined, textDecoration: 'none', color: 'inherit', background: thread.unreadCount > 0 ? 'var(--color-bg-secondary)' : undefined }}
+                  style={{
+                    display: 'flex',
+                    justifyContent: 'space-between',
+                    alignItems: 'center',
+                    padding: '12px 16px',
+                    borderBottom:
+                      i < threads.length - 1 ? '1px solid var(--color-border)' : undefined,
+                    textDecoration: 'none',
+                    color: 'inherit',
+                    background: thread.unreadCount > 0 ? 'var(--color-bg-secondary)' : undefined,
+                  }}
                 >
                   <div style={{ display: 'flex', alignItems: 'center', gap: '10px', minWidth: 0 }}>
                     {thread.unreadCount > 0 && (
-                      <span style={{ width: '8px', height: '8px', borderRadius: '50%', background: 'var(--color-primary)', flexShrink: 0, display: 'inline-block' }} />
+                      <span
+                        style={{
+                          width: '8px',
+                          height: '8px',
+                          borderRadius: '50%',
+                          background: 'var(--color-primary)',
+                          flexShrink: 0,
+                          display: 'inline-block',
+                        }}
+                      />
                     )}
                     <div style={{ minWidth: 0 }}>
-                      <div style={{ fontWeight: thread.unreadCount > 0 ? 600 : 400, fontSize: '14px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                        {thread.subject || (thread.tenant?.name ? `Message from ${thread.tenant.name}` : 'No subject')}
+                      <div
+                        style={{
+                          fontWeight: thread.unreadCount > 0 ? 600 : 400,
+                          fontSize: '14px',
+                          whiteSpace: 'nowrap',
+                          overflow: 'hidden',
+                          textOverflow: 'ellipsis',
+                        }}
+                      >
+                        {thread.subject ||
+                          (thread.tenant?.name
+                            ? `Message from ${thread.tenant.name}`
+                            : 'No subject')}
                       </div>
-                      <div style={{ fontSize: '12px', color: 'var(--color-text-muted)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                      <div
+                        style={{
+                          fontSize: '12px',
+                          color: 'var(--color-text-muted)',
+                          whiteSpace: 'nowrap',
+                          overflow: 'hidden',
+                          textOverflow: 'ellipsis',
+                        }}
+                      >
                         {thread.latestMessage.body}
                       </div>
                     </div>
                     {thread.unreadCount > 0 && (
-                      <span style={{ background: 'var(--color-primary)', color: 'white', borderRadius: '12px', padding: '1px 7px', fontSize: '11px', fontWeight: 600, flexShrink: 0 }}>
+                      <span
+                        style={{
+                          background: 'var(--color-primary)',
+                          color: 'white',
+                          borderRadius: '12px',
+                          padding: '1px 7px',
+                          fontSize: '11px',
+                          fontWeight: 600,
+                          flexShrink: 0,
+                        }}
+                      >
                         {thread.unreadCount}
                       </span>
                     )}
                   </div>
-                  <span style={{ fontSize: '12px', color: 'var(--color-text-muted)', flexShrink: 0, marginLeft: '16px' }}>
-                    {thread.latestMessage?.createdAt ? new Date(thread.latestMessage.createdAt).toLocaleDateString() : ''}
+                  <span
+                    style={{
+                      fontSize: '12px',
+                      color: 'var(--color-text-muted)',
+                      flexShrink: 0,
+                      marginLeft: '16px',
+                    }}
+                  >
+                    {thread.latestMessage?.createdAt
+                      ? new Date(thread.latestMessage.createdAt).toLocaleDateString()
+                      : ''}
                   </span>
                 </Link>
               ))}
@@ -566,7 +737,9 @@ export default function TenantDetailPage() {
             <form onSubmit={handleUpdate}>
               <div className="modal-body">
                 {error && (
-                  <div style={{ color: 'var(--color-danger)', marginBottom: '12px', fontSize: '14px' }}>
+                  <div
+                    style={{ color: 'var(--color-danger)', marginBottom: '12px', fontSize: '14px' }}
+                  >
                     {error}
                   </div>
                 )}
@@ -591,35 +764,72 @@ export default function TenantDetailPage() {
                   </div>
                   <div className="form-group">
                     <label>Date of Birth</label>
-                    <input name="dateOfBirth" type="date" defaultValue={tenant.dateOfBirth ? tenant.dateOfBirth.slice(0, 10) : ''} />
+                    <input
+                      name="dateOfBirth"
+                      type="date"
+                      defaultValue={tenant.dateOfBirth ? tenant.dateOfBirth.slice(0, 10) : ''}
+                    />
                   </div>
                 </div>
                 <div className="form-group">
                   <label>Current Address</label>
-                  <input name="currentAddress" defaultValue={tenant.currentAddress || ''} placeholder="123 Main St, City, ST 00000" />
+                  <input
+                    name="currentAddress"
+                    defaultValue={tenant.currentAddress || ''}
+                    placeholder="123 Main St, City, ST 00000"
+                  />
                 </div>
-                <div style={{ marginTop: '16px', paddingTop: '16px', borderTop: '1px solid var(--color-border)' }}>
-                  <p style={{ fontSize: '12px', color: 'var(--color-text-muted)', marginBottom: '12px', fontWeight: 500, textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+                <div
+                  style={{
+                    marginTop: '16px',
+                    paddingTop: '16px',
+                    borderTop: '1px solid var(--color-border)',
+                  }}
+                >
+                  <p
+                    style={{
+                      fontSize: '12px',
+                      color: 'var(--color-text-muted)',
+                      marginBottom: '12px',
+                      fontWeight: 500,
+                      textTransform: 'uppercase',
+                      letterSpacing: '0.5px',
+                    }}
+                  >
                     Emergency Contact 1
                   </p>
                   <div className="form-row">
                     <div className="form-group">
                       <label>Name</label>
-                      <input name="emergencyContactName" defaultValue={tenant.emergencyContactName || ''} />
+                      <input
+                        name="emergencyContactName"
+                        defaultValue={tenant.emergencyContactName || ''}
+                      />
                     </div>
                     <div className="form-group">
                       <label>Phone</label>
-                      <PhoneInput name="emergencyContactPhone" defaultValue={tenant.emergencyContactPhone} />
+                      <PhoneInput
+                        name="emergencyContactPhone"
+                        defaultValue={tenant.emergencyContactPhone}
+                      />
                     </div>
                   </div>
                   <div className="form-group">
                     <label>Relationship</label>
-                    <input name="emergencyContact1Relationship" defaultValue={tenant.emergencyContact1Relationship || ''} placeholder="e.g. Spouse, Parent, Sibling" />
+                    <input
+                      name="emergencyContact1Relationship"
+                      defaultValue={tenant.emergencyContact1Relationship || ''}
+                      placeholder="e.g. Spouse, Parent, Sibling"
+                    />
                   </div>
                 </div>
               </div>
               <div className="modal-footer">
-                <button type="button" className="btn btn-secondary" onClick={() => setEditing(false)}>
+                <button
+                  type="button"
+                  className="btn btn-secondary"
+                  onClick={() => setEditing(false)}
+                >
                   Cancel
                 </button>
                 <button type="submit" className="btn btn-primary">
