@@ -108,6 +108,47 @@ export const api = {
         body: JSON.stringify(data),
       }),
   },
+  billing: {
+    summary: () =>
+      apiFetch<{
+        organization: {
+          id: string;
+          name: string;
+          email: string | null;
+          phone: string | null;
+          planTier: 'starter' | 'pro' | 'enterprise';
+          subscriptionStatus: string;
+          trialEndsAt: string | null;
+          stripeCustomerId: string | null;
+          stripeSubscriptionId: string | null;
+        };
+        defaultPaymentMethod: {
+          type: string;
+          brand?: string;
+          last4?: string;
+          expMonth?: number;
+          expYear?: number;
+          bankName?: string | null;
+          accountType?: string | null;
+        } | null;
+        invoices: Array<{
+          id: string;
+          number: string | null;
+          status: string | null;
+          amountPaid: number;
+          amountDue: number;
+          currency: string;
+          created: number;
+          dueDate: number | null;
+          hostedInvoiceUrl: string | null;
+          invoicePdf: string | null;
+        }>;
+      }>(`/api/v1/organizations/${_orgId}/billing/summary`),
+    createPortalSession: () =>
+      apiFetch<{ url: string }>(`/api/v1/organizations/${_orgId}/billing/portal-session`, {
+        method: 'POST',
+      }),
+  },
 
   properties: {
     list: () => apiFetch<any[]>(`/api/v1/organizations/${_orgId}/properties`),

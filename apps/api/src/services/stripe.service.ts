@@ -161,17 +161,113 @@ export async function createMultiPaymentIntent(
 
 // ─── Cancel a PaymentIntent ───────────────────────────────────────────────────
 
-export async function cancelPaymentIntent(
-  paymentIntentId: string
-): Promise<Stripe.PaymentIntent> {
+export async function cancelPaymentIntent(paymentIntentId: string): Promise<Stripe.PaymentIntent> {
   const stripe = getStripe();
   try {
     return await stripe.paymentIntents.cancel(paymentIntentId);
   } catch (err) {
     const stripeErr = err as { code?: string; message?: string };
     if (stripeErr?.code === 'payment_intent_unexpected_state') {
-      throw new AppError(400, 'PAYMENT_INTENT_CANNOT_CANCEL', stripeErr.message ?? 'Cannot cancel this PaymentIntent');
+      throw new AppError(
+        400,
+        'PAYMENT_INTENT_CANNOT_CANCEL',
+        stripeErr.message ?? 'Cannot cancel this PaymentIntent'
+      );
     }
     throw err;
   }
+}
+
+export async function getOrCreateCustomer(orgId: string): Promise<Stripe.Customer> {
+  const stripe = getStripe();
+
+  const org = await prisma.organization.findUniqueOrThrow({
+    where: { id: orgId },
+    select: {
+      id: true,
+      name: true,
+      email: true,
+      stripeCustomerId: true,
+    },
+  });
+
+  if (org.stripeCustomerId) {
+    const existing = await stripe.customers.retrieve(org.stripeCustomerId);
+    if (!('deleted' in existing && existing.deleted)) {
+      return existing as Stripe.Customer;
+    }
+  }
+
+  const customer = await stripe.customers.create({
+    name: org.name,
+    email: org.email ?? undefined,
+    metadata: { orgId: org.id },
+  });
+
+  await prisma.organization.update({
+    where: { id: org.id },
+    data: { stripeCustomerId: customer.id },
+  });
+
+  return customer;
+}
+
+export async function createBillingPortalSession(
+  orgId: string,
+  returnUrl: string
+): Promise<string> {
+  const stripe = getStripe();
+  const customer = await getOrCreateCustomer(orgId);
+  const session = await stripe.billingPortal.sessions.create({
+    customer: customer.id,
+    return_url: returnUrl,
+  });
+  return session.url;
+}
+
+export async function listCustomerInvoices(customerId: string, limit = 12) {
+  const stripe = getStripe();
+  return stripe.invoices.list({
+    customer: customerId,
+    limit,
+  });
+}
+
+export async function getCustomerDefaultPaymentMethod(customerId: string) {
+  const stripe = getStripe();
+  const customer = await stripe.customers.retrieve(customerId, {
+    expand: ['invoice_settings.default_payment_method'],
+  });
+
+  if ('deleted' in customer && customer.deleted) {
+    return null;
+  }
+
+  const paymentMethod = customer.invoice_settings?.default_payment_method;
+  if (!paymentMethod || typeof paymentMethod === 'string') {
+    return null;
+  }
+
+  if (paymentMethod.type === 'card' && paymentMethod.card) {
+    return {
+      type: 'card',
+      brand: paymentMethod.card.brand,
+      last4: paymentMethod.card.last4,
+      expMonth: paymentMethod.card.exp_month,
+      expYear: paymentMethod.card.exp_year,
+    };
+  }
+
+  if (paymentMethod.type === 'us_bank_account' && paymentMethod.us_bank_account) {
+    return {
+      type: 'us_bank_account',
+      bankName: paymentMethod.us_bank_account.bank_name,
+      last4: paymentMethod.us_bank_account.last4,
+      accountType: paymentMethod.us_bank_account.account_type,
+    };
+  }
+
+  return {
+    type: paymentMethod.type,
+  };
 }

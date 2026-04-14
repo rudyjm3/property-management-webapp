@@ -17,8 +17,32 @@ export default function ResetPasswordPage() {
 
   useEffect(() => {
     const supabase = createClient();
-    // The /auth/callback route exchanges the PKCE code before redirecting here,
-    // so getSession() is reliable at this point.
+
+    // Supabase delivers recovery sessions via URL hash fragments
+    // (#access_token=...&refresh_token=...&type=recovery).
+    // createBrowserClient does not auto-process hash params, so we do it manually.
+    const hash = window.location.hash.substring(1);
+    const params = new URLSearchParams(hash);
+    const accessToken = params.get('access_token');
+    const refreshToken = params.get('refresh_token');
+    const type = params.get('type');
+
+    if (accessToken && refreshToken && (type === 'recovery' || type === 'invite')) {
+      supabase.auth.setSession({ access_token: accessToken, refresh_token: refreshToken })
+        .then(({ data: { session }, error }) => {
+          if (error || !session) {
+            setError('Reset link is invalid or expired. Request a new password reset email.');
+            return;
+          }
+          // Clear tokens from the URL bar without a reload
+          window.history.replaceState(null, '', window.location.pathname);
+          setIsTenantAccount(!!session.user.user_metadata?.tenantId);
+          setReady(true);
+        });
+      return;
+    }
+
+    // No hash tokens — fall back to existing session (e.g. came via /auth/callback)
     supabase.auth.getSession().then(({ data: { session } }) => {
       if (session) {
         setIsTenantAccount(!!session.user.user_metadata?.tenantId);
@@ -123,7 +147,7 @@ export default function ResetPasswordPage() {
               />
             </div>
 
-            <button type="submit" className="btn btn-primary" style={{ width: '100%', marginTop: '8px' }} disabled={!ready || loading}>
+            <button type="submit" className="btn btn-primary" style={{ width: '100%', marginTop: '8px', textAlign: 'center' }} disabled={!ready || loading}>
               {loading ? 'Updating…' : 'Update password'}
             </button>
           </form>

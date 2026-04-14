@@ -68,7 +68,27 @@ export async function getTenant(organizationId: string, tenantId: string) {
     throw new AppError(404, 'TENANT_NOT_FOUND', 'Tenant not found');
   }
 
-  return tenant;
+  const statusRank = (status: string) => {
+    if (status === 'active') return 0;
+    if (status === 'month_to_month') return 1;
+    if (status === 'notice_given') return 2;
+    if (status === 'pending') return 3;
+    if (status === 'expired') return 4;
+    if (status === 'terminated') return 5;
+    return 6;
+  };
+
+  const sortedLeaseParticipants = [...tenant.leaseParticipants].sort((a, b) => {
+    const byStatus = statusRank(a.lease.status) - statusRank(b.lease.status);
+    if (byStatus !== 0) return byStatus;
+
+    return new Date(b.lease.startDate).getTime() - new Date(a.lease.startDate).getTime();
+  });
+
+  return {
+    ...tenant,
+    leaseParticipants: sortedLeaseParticipants,
+  };
 }
 
 interface CreateTenantData {
@@ -96,39 +116,58 @@ function normalizeTenantData(data: Partial<CreateTenantData>): Record<string, un
   if (data.email !== undefined) normalized.email = data.email.trim().toLowerCase();
   if (data.name !== undefined) normalized.name = data.name.trim();
   if (data.phone !== undefined) normalized.phone = normalizeOptionalString(data.phone);
-  if (data.fullLegalName !== undefined) normalized.fullLegalName = normalizeOptionalString(data.fullLegalName);
-  if (data.currentAddress !== undefined) normalized.currentAddress = normalizeOptionalString(data.currentAddress);
-  if (data.emergencyContactName !== undefined) normalized.emergencyContactName = normalizeOptionalString(data.emergencyContactName);
-  if (data.emergencyContactPhone !== undefined) normalized.emergencyContactPhone = normalizeOptionalString(data.emergencyContactPhone);
+  if (data.fullLegalName !== undefined)
+    normalized.fullLegalName = normalizeOptionalString(data.fullLegalName);
+  if (data.currentAddress !== undefined)
+    normalized.currentAddress = normalizeOptionalString(data.currentAddress);
+  if (data.emergencyContactName !== undefined)
+    normalized.emergencyContactName = normalizeOptionalString(data.emergencyContactName);
+  if (data.emergencyContactPhone !== undefined)
+    normalized.emergencyContactPhone = normalizeOptionalString(data.emergencyContactPhone);
   if (data.emergencyContact1Relationship !== undefined) {
-    normalized.emergencyContact1Relationship = normalizeOptionalString(data.emergencyContact1Relationship);
+    normalized.emergencyContact1Relationship = normalizeOptionalString(
+      data.emergencyContact1Relationship
+    );
   }
 
   if (data.dateOfBirth !== undefined) {
-    normalized.dateOfBirth = data.dateOfBirth ? new Date(`${data.dateOfBirth}T00:00:00.000Z`) : null;
+    normalized.dateOfBirth = data.dateOfBirth
+      ? new Date(`${data.dateOfBirth}T00:00:00.000Z`)
+      : null;
   }
 
   return normalized;
 }
 
-export async function createTenant(
-  organizationId: string,
-  data: CreateTenantData
-) {
+export async function createTenant(organizationId: string, data: CreateTenantData) {
   const normalizedData = normalizeTenantData(data);
-  const normalizedEmail = String(normalizedData.email ?? '').trim().toLowerCase();
+  const normalizedEmail = String(normalizedData.email ?? '')
+    .trim()
+    .toLowerCase();
 
-  // Check for duplicate email within the organization
+  // Check for duplicate email within the organization (including soft-deleted rows).
+  // Tenant records are soft-deleted, but email remains unique at DB level. If we find
+  // a deleted match, we revive it instead of creating a brand new row.
   const existing = await prisma.tenant.findFirst({
-    where: { organizationId, email: normalizedEmail, deletedAt: null },
+    where: { organizationId, email: normalizedEmail },
   });
 
-  if (existing) {
+  if (existing && existing.deletedAt === null) {
     throw new AppError(
       409,
       'TENANT_EMAIL_EXISTS',
       'A tenant with this email already exists in your organization'
     );
+  }
+
+  if (existing && existing.deletedAt !== null) {
+    return prisma.tenant.update({
+      where: { id: existing.id },
+      data: {
+        ...(normalizedData as any),
+        deletedAt: null,
+      },
+    });
   }
 
   return prisma.tenant.create({
