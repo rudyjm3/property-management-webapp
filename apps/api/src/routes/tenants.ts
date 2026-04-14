@@ -5,6 +5,8 @@ import * as tenantService from '../services/tenant.service';
 import { supabaseAdmin } from '../lib/supabase';
 import { prisma } from '@propflow/db';
 import { requireRoles } from '../middleware/auth';
+import { sendTenantPortalInviteEmail } from '../services/tenant-invite-email.service';
+import { AppError } from '../middleware/error-handler';
 
 const router = Router({ mergeParams: true });
 
@@ -42,6 +44,19 @@ function isAlreadyRegisteredError(message: string): boolean {
 function isUserNotFoundError(message: string): boolean {
   const lower = message.toLowerCase();
   return lower.includes('user not found') || lower.includes('email not found');
+}
+
+async function sendInviteEmailOrFail(params: {
+  tenantName: string;
+  tenantEmail: string;
+  actionLink: string;
+  organizationName: string;
+}) {
+  try {
+    await sendTenantPortalInviteEmail(params);
+  } catch (err: any) {
+    throw new AppError(400, 'INVITE_EMAIL_FAILED', err?.message || 'Failed to send invite email.');
+  }
 }
 
 // GET /api/v1/organizations/:orgId/tenants
@@ -151,6 +166,11 @@ router.post(
 
       const redirectTo = `${process.env.APP_URL}/reset-password`;
       const normalizedEmail = tenant.email.trim().toLowerCase();
+      const org = await prisma.organization.findUnique({
+        where: { id: req.params.orgId as string },
+        select: { name: true },
+      });
+      const organizationName = org?.name || 'PropFlow';
 
       if (tenant.supabaseUserId) {
         // Heal stale links where tenant.supabaseUserId points to a deleted Supabase user.
@@ -184,6 +204,19 @@ router.post(
           options: { redirectTo },
         });
         if (!recoveryResult.error) {
+          const actionLink = recoveryResult.data?.properties?.action_link;
+          if (!actionLink) {
+            res.status(400).json({
+              error: { code: 'INVITE_FAILED', message: 'Invite link could not be generated.' },
+            });
+            return;
+          }
+          await sendInviteEmailOrFail({
+            tenantName: currentTenant.name,
+            tenantEmail: normalizedEmail,
+            actionLink,
+            organizationName,
+          });
           res.json({ data: { message: 'Invite sent', email: currentTenant.email } });
           return;
         }
@@ -218,17 +251,30 @@ router.post(
           }
 
           const existingUserId = await findSupabaseUserIdByEmail(normalizedEmail);
-          const { error: recoveryError } = await supabaseAdmin.auth.admin.generateLink({
+          const recoveryResult = await supabaseAdmin.auth.admin.generateLink({
             type: 'recovery',
             email: normalizedEmail,
             options: { redirectTo },
           });
-          if (recoveryError) {
+          if (recoveryResult.error) {
             res
               .status(400)
-              .json({ error: { code: 'INVITE_FAILED', message: recoveryError.message } });
+              .json({ error: { code: 'INVITE_FAILED', message: recoveryResult.error.message } });
             return;
           }
+          const actionLink = recoveryResult.data?.properties?.action_link;
+          if (!actionLink) {
+            res.status(400).json({
+              error: { code: 'INVITE_FAILED', message: 'Invite link could not be generated.' },
+            });
+            return;
+          }
+          await sendInviteEmailOrFail({
+            tenantName: currentTenant.name,
+            tenantEmail: normalizedEmail,
+            actionLink,
+            organizationName,
+          });
 
           await prisma.tenant.update({
             where: { id: currentTenant.id },
