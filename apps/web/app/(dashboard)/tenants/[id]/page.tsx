@@ -496,7 +496,7 @@ export default function TenantDetailPage() {
                         <td>${Number(lp.lease.rentAmount).toLocaleString()}</td>
                         <td>
                           <span
-                            className={`badge badge-${lp.lease.status === 'active' || lp.lease.status === 'month_to_month' ? 'occupied' : lp.lease.status === 'notice_given' ? 'notice' : lp.lease.status === 'expired' || lp.lease.status === 'terminated' ? 'muted' : 'vacant'}`}
+                            className={`badge badge-${lp.lease.status === 'active' || lp.lease.status === 'month_to_month' ? 'occupied' : lp.lease.status === 'notice_given' ? 'notice' : lp.lease.status === 'expired' ? 'muted' : lp.lease.status === 'terminated' ? 'danger' : 'vacant'}`}
                           >
                             {lp.lease.status.replace(/_/g, ' ')}
                           </span>

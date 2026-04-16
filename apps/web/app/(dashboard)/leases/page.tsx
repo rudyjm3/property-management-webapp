@@ -69,7 +69,7 @@ function statusBadgeClass(status: string): string {
     case 'draft':
       return 'badge-neutral';
     case 'terminated':
-      return 'badge-muted';
+      return 'badge-danger';
     default:
       return 'badge-muted';
   }

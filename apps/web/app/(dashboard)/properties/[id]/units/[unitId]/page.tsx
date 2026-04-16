@@ -20,7 +20,7 @@ const LEASE_STATUS_BADGE: Record<string, string> = {
   month_to_month: 'badge-occupied',
   notice_given: 'badge-notice',
   expired: 'badge-muted',
-  terminated: 'badge-muted',
+  terminated: 'badge-danger',
   draft: 'badge-neutral',
 };
 
