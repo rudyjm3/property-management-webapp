@@ -939,7 +939,7 @@ This appendix captures what is currently implemented in the repo beyond or diffe
 
 ## 12. Phase-by-Phase Implementation Status
 
-_Last updated: 2026-04-13. Status reflects the `main` branch._
+_Last updated: 2026-04-14. Status reflects the `main` branch._
 
 > **Legend:** ✅ Done — ⚠️ Partial — ❌ Not yet built — 🔴 Blocker (pilot) — 🟡 Required (production)
 
@@ -985,16 +985,16 @@ _Last updated: 2026-04-13. Status reflects the `main` branch._
 | Lease renewal with linkage tracking                                   | ✅     |                                                                                                      |
 | Vendor management                                                     | ✅     | Basic                                                                                                |
 | Staff roles + permissions                                             | ✅     |                                                                                                      |
-| Tenant list — search + operational filters                            | ❌     | Currently table-only; no search, no rent-status / expiry / work-order filter (`tenants/page.tsx:91`) |
-| Tenant detail — payment history section                               | ❌     | Not rendered on tenant detail screen (`tenants/[id]/page.tsx`)                                       |
-| Tenant detail — manager message thread                                | ❌     | No conversation view from tenant detail                                                              |
-| Tenant detail — move-out workflow                                     | ❌     | No deposit/disposition section                                                                       |
+| Tenant list — search + operational filters                            | ✅     | Search by name/email/unit/property; lease-status and expiry (30d/60d) filters implemented (`tenants/page.tsx`) |
+| Tenant detail — payment history section                               | ✅     | Payment history rendered at `tenants/[id]/page.tsx:502`                                              |
+| Tenant detail — manager message thread                                | ✅     | Thread list + compose + send implemented at `tenants/[id]/page.tsx:547`                              |
+| Tenant detail — move-out workflow                                     | ✅     | Move-out modal: date, deposit deductions, live return calc, terminates lease + creates deposit Payment |
 | Message file/photo attachments (web)                                  | ❌     | Text-only currently                                                                                  |
 | ACH end-to-end flow validated (success + failure + refund)            | ⚠️     | Routes exist; webhook → ledger path not smoke-tested                                                 |
 | Financial controls (reconciliation, duplicate prevention, audit)      | ❌     |                                                                                                      |
 
-**Pilot blockers:** Tenant list search/filter. Tenant detail payment history. Tenant detail message thread.
-**Production gaps:** Move-out workflow. Message attachments (if in scope). Financial reconciliation and audit trail.
+**Pilot blockers:** None — all pilot-blocking items are implemented.
+**Production gaps:** Move-out workflow. Message attachments (if in scope). ACH end-to-end smoke test. Financial reconciliation and audit trail.
 
 ---
 
