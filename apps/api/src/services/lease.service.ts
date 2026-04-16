@@ -204,6 +204,9 @@ export async function updateLease(
   if (data.endDate) updateData.endDate = new Date(data.endDate);
   if (data.moveOutDate) updateData.moveOutDate = new Date(data.moveOutDate);
   if (data.moveOutDate === null) updateData.moveOutDate = null;
+  if (data.status === 'active' || data.status === 'month_to_month') {
+    updateData.moveOutDate = null;
+  }
 
   // If the update would set this lease back to a current status, ensure no other
   // current lease already exists on the same unit (guards against reactivating
@@ -240,7 +243,6 @@ export async function updateLease(
       await tx.unit.update({ where: { id: existing.unitId }, data: { status: 'notice' } });
     } else if (data.status === 'active' || data.status === 'month_to_month') {
       await tx.unit.update({ where: { id: existing.unitId }, data: { status: 'occupied' } });
-      await tx.lease.update({ where: { id: leaseId }, data: { moveOutDate: null } });
     }
 
     // Propagate rent amount change to all pending payments for this lease
