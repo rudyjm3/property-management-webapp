@@ -916,6 +916,7 @@ export default function TenantDetailPage() {
                   <input
                     type="date"
                     required
+                    max={new Date().toISOString().split('T')[0]}
                     value={moveOutDate}
                     onChange={(e) => setMoveOutDate(e.target.value)}
                   />
