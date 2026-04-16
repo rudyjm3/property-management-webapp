@@ -129,7 +129,7 @@ export default function PropertyDetailPage() {
   if (loading) return <div className="loading">Loading property...</div>;
   if (!property) return <div className="loading">Property not found</div>;
 
-  const occupiedCount = property.units.filter((u) => u.status === 'occupied').length;
+  const occupiedCount = property.units.filter((u) => u.status === 'occupied' || u.status === 'notice').length;
   const vacantCount = property.units.filter((u) => u.status === 'vacant').length;
 
   return (

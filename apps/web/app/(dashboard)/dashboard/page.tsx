@@ -91,7 +91,7 @@ export default function DashboardPage() {
         const unitLists = await Promise.all(properties.map((p: any) => api.units.list(p.id)));
         for (const units of unitLists) {
           totalUnits += units.length;
-          occupiedUnits += units.filter((u: any) => u.status === 'occupied').length;
+          occupiedUnits += units.filter((u: any) => u.status === 'occupied' || u.status === 'notice').length;
           vacantUnits += units.filter((u: any) => u.status === 'vacant').length;
         }
 
