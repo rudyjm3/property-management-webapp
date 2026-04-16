@@ -9,6 +9,11 @@ import PhoneInput from '@/components/PhoneInput';
 import DocumentPanel from '@/components/DocumentPanel';
 import { useAuth } from '@/contexts/AuthContext';
 
+function localDateStr() {
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+}
+
 const PORTAL_STATUS_LABELS: Record<string, string> = {
   active: 'Portal Active',
   invited: 'Invited',
@@ -157,6 +162,15 @@ export default function TenantDetailPage() {
   async function handleMoveOut(e: React.FormEvent) {
     e.preventDefault();
     if (!moveOutLeaseId || !moveOutDate) return;
+    const hasPartialRow = moveOutDeductions.some((d) => {
+      const hasReason = d.reason.trim().length > 0;
+      const hasAmount = d.amount.trim().length > 0;
+      return hasReason !== hasAmount;
+    });
+    if (hasPartialRow) {
+      setMoveOutError('Each deduction must have both a reason and an amount.');
+      return;
+    }
     setMoveOutSubmitting(true);
     setMoveOutError('');
     try {
@@ -942,7 +956,7 @@ export default function TenantDetailPage() {
                   <input
                     type="date"
                     required
-                    max={new Date().toISOString().split('T')[0]}
+                    max={localDateStr()}
                     value={moveOutDate}
                     onChange={(e) => setMoveOutDate(e.target.value)}
                   />
@@ -974,7 +988,7 @@ export default function TenantDetailPage() {
                     <span>
                       -$
                       {moveOutDeductions
-                        .reduce((sum, d) => sum + (parseFloat(d.amount) || 0), 0)
+                        .filter((d) => d.reason.trim() && d.amount).reduce((sum, d) => sum + (parseFloat(d.amount) || 0), 0)
                         .toFixed(2)}
                     </span>
                   </div>
@@ -994,7 +1008,7 @@ export default function TenantDetailPage() {
                       {Math.max(
                         0,
                         moveOutDepositAmount -
-                          moveOutDeductions.reduce((sum, d) => sum + (parseFloat(d.amount) || 0), 0)
+                          moveOutDeductions.filter((d) => d.reason.trim() && d.amount).reduce((sum, d) => sum + (parseFloat(d.amount) || 0), 0)
                       ).toFixed(2)}
                     </span>
                   </div>

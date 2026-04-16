@@ -6,6 +6,11 @@ import Link from 'next/link';
 import { api } from '@/lib/api';
 import DocumentPanel from '@/components/DocumentPanel';
 
+function localDateStr() {
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+}
+
 interface LeaseDetail {
   id: string;
   rentAmount: string;
@@ -363,6 +368,15 @@ export default function LeaseDetailPage() {
   async function handleMoveOut(e: React.FormEvent) {
     e.preventDefault();
     if (!lease || !moveOutDate) return;
+    const hasPartialRow = moveOutDeductions.some((d) => {
+      const hasReason = d.reason.trim().length > 0;
+      const hasAmount = d.amount.trim().length > 0;
+      return hasReason !== hasAmount;
+    });
+    if (hasPartialRow) {
+      setMoveOutError('Each deduction must have both a reason and an amount.');
+      return;
+    }
     setMoveOutSubmitting(true);
     setMoveOutError('');
     try {
@@ -973,7 +987,7 @@ export default function LeaseDetailPage() {
                   <input
                     type="date"
                     required
-                    max={new Date().toISOString().split('T')[0]}
+                    max={localDateStr()}
                     value={moveOutDate}
                     onChange={(e) => setMoveOutDate(e.target.value)}
                   />
@@ -993,7 +1007,7 @@ export default function LeaseDetailPage() {
                   </div>
                   <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '4px', color: 'var(--color-danger)' }}>
                     <span>Total Deductions</span>
-                    <span>-${moveOutDeductions.reduce((sum, d) => sum + (parseFloat(d.amount) || 0), 0).toFixed(2)}</span>
+                    <span>-${moveOutDeductions.filter((d) => d.reason.trim() && d.amount).reduce((sum, d) => sum + (parseFloat(d.amount) || 0), 0).toFixed(2)}</span>
                   </div>
                   <div style={{
                     display: 'flex',
@@ -1005,7 +1019,7 @@ export default function LeaseDetailPage() {
                   }}>
                     <span>Return Amount</span>
                     <span style={{ color: 'var(--color-success)' }}>
-                      ${Math.max(0, moveOutDepositAmount - moveOutDeductions.reduce((sum, d) => sum + (parseFloat(d.amount) || 0), 0)).toFixed(2)}
+                      ${Math.max(0, moveOutDepositAmount - moveOutDeductions.filter((d) => d.reason.trim() && d.amount).reduce((sum, d) => sum + (parseFloat(d.amount) || 0), 0)).toFixed(2)}
                     </span>
                   </div>
                 </div>
