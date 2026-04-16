@@ -389,12 +389,6 @@ export async function processMoveOut(
   }
 
   const parsedMoveOutDate = new Date(data.moveOutDate);
-  const today = new Date();
-  today.setHours(23, 59, 59, 999); // allow any time on today
-  if (parsedMoveOutDate > today) {
-    throw new AppError(400, 'FUTURE_MOVE_OUT_DATE', 'Move-out date cannot be in the future.');
-  }
-
   const depositAmount = Number(existing.depositAmount);
   const totalDeductions = data.deductions.reduce((sum, d) => sum + d.amount, 0);
 

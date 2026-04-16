@@ -42,6 +42,7 @@ interface TenantDetail {
       endDate: string;
       rentAmount: string;
       depositAmount: string;
+      moveOutDate: string | null;
       status: string;
       unit: {
         id: string;
@@ -418,22 +419,24 @@ export default function TenantDetailPage() {
                           </span>
                         </div>
                       </div>
-                      <div style={{ marginTop: '12px', display: 'flex', justifyContent: 'flex-end' }}>
-                        <button
-                          className="btn btn-sm btn-danger"
-                          onClick={() => {
-                            setMoveOutLeaseId(lp.lease.id);
-                            setMoveOutDepositAmount(Number(lp.lease.depositAmount));
-                            setMoveOutDate('');
-                            setMoveOutDeductions([]);
-                            setMoveOutNotes('');
-                            setMoveOutError('');
-                            setShowMoveOut(true);
-                          }}
-                        >
-                          Move Out
-                        </button>
-                      </div>
+                      {lp.lease.status === 'notice_given' && (
+                        <div style={{ marginTop: '12px', display: 'flex', justifyContent: 'flex-end' }}>
+                          <button
+                            className="btn btn-sm btn-danger"
+                            onClick={() => {
+                              setMoveOutLeaseId(lp.lease.id);
+                              setMoveOutDepositAmount(Number(lp.lease.depositAmount));
+                              setMoveOutDate(lp.lease.moveOutDate ? lp.lease.moveOutDate.split('T')[0] : '');
+                              setMoveOutDeductions([]);
+                              setMoveOutNotes('');
+                              setMoveOutError('');
+                              setShowMoveOut(true);
+                            }}
+                          >
+                            Move Out
+                          </button>
+                        </div>
+                      )}
                     </div>
                   ))}
                 </>
@@ -916,7 +919,6 @@ export default function TenantDetailPage() {
                   <input
                     type="date"
                     required
-                    max={new Date().toISOString().split('T')[0]}
                     value={moveOutDate}
                     onChange={(e) => setMoveOutDate(e.target.value)}
                   />
