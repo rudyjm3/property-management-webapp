@@ -238,6 +238,8 @@ export async function updateLease(
       await tx.unit.update({ where: { id: existing.unitId }, data: { status: 'vacant' } });
     } else if (data.status === 'notice_given') {
       await tx.unit.update({ where: { id: existing.unitId }, data: { status: 'notice' } });
+    } else if (data.status === 'active' || data.status === 'month_to_month') {
+      await tx.unit.update({ where: { id: existing.unitId }, data: { status: 'occupied' } });
     }
 
     // Propagate rent amount change to all pending payments for this lease
