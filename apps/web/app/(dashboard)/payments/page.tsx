@@ -51,9 +51,9 @@ interface LeaseOption {
 const STATUS_COLORS: Record<string, string> = {
   completed: 'badge-occupied',
   pending: 'badge-maintenance',
-  failed: 'badge-notice',
+  failed: 'badge-danger',
   waived: 'badge-vacant',
-  refunded: 'badge-notice',
+  refunded: 'badge-danger',
 };
 
 const TYPE_LABELS: Record<string, string> = {

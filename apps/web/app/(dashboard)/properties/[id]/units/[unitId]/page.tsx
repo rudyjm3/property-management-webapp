@@ -8,6 +8,22 @@ import { formatPhone } from '@/lib/phone';
 import DocumentPanel from '@/components/DocumentPanel';
 import { useAuth } from '@/contexts/AuthContext';
 
+const UNIT_STATUS_LABELS: Record<string, string> = {
+  occupied: 'Occupied',
+  vacant: 'Vacant',
+  notice: 'Notice',
+  maintenance: 'Maintenance',
+};
+
+const LEASE_STATUS_BADGE: Record<string, string> = {
+  active: 'badge-occupied',
+  month_to_month: 'badge-occupied',
+  notice_given: 'badge-notice',
+  expired: 'badge-vacant',
+  terminated: 'badge-vacant',
+  draft: 'badge-neutral',
+};
+
 const UNIT_TYPE_LABELS: Record<string, string> = {
   studio: 'Studio',
   one_bed: '1 Bed',
@@ -249,7 +265,7 @@ export default function UnitDetailPage() {
             </Link>
           )}
           <span className={`badge badge-${unit.status}`} style={{ fontSize: '14px', padding: '4px 12px' }}>
-            {unit.status}
+            {UNIT_STATUS_LABELS[unit.status] ?? unit.status}
           </span>
         </div>
       </div>
@@ -349,7 +365,9 @@ export default function UnitDetailPage() {
                   <>
                     <div className="detail-item">
                       <label>Lease Status</label>
-                      <span className={`badge badge-occupied`}>{activeLease?.status}</span>
+                      <span className={`badge ${LEASE_STATUS_BADGE[activeLease?.status ?? ''] ?? 'badge-vacant'}`}>
+                        {activeLease?.status?.replace(/_/g, ' ')}
+                      </span>
                     </div>
                     <div className="detail-item">
                       <label>Lease Start</label>

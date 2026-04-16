@@ -318,6 +318,11 @@ a:hover {
 }
 
 .badge-notice {
+  background: #ea9019;
+  color: #f7de99;
+}
+
+.badge-danger {
   background: #fee2e2;
   color: #991b1b;
 }

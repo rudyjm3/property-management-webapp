@@ -210,7 +210,7 @@ export default function PropertyDetailPage() {
                       {unit.type && (
                         <span className="badge badge-neutral">{UNIT_TYPE_LABELS[unit.type] ?? unit.type}</span>
                       )}
-                      <span className={`badge badge-${unit.status}`}>{unit.status}</span>
+                      <span className={`badge badge-${unit.status}`}>{unit.status === 'notice' ? 'Notice' : unit.status}</span>
                     </div>
                   </div>
                   {tenant && <div className="unit-tenant">{tenant.name}</div>}

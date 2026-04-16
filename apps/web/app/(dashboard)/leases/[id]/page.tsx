@@ -100,9 +100,9 @@ function paymentStatusClass(status: string): string {
   switch (status) {
     case 'completed': return 'badge-occupied';
     case 'pending': return 'badge-maintenance';
-    case 'failed': return 'badge-notice';
+    case 'failed': return 'badge-danger';
     case 'waived': return 'badge-vacant';
-    case 'refunded': return 'badge-notice';
+    case 'refunded': return 'badge-danger';
     default: return 'badge-vacant';
   }
 }

@@ -54,7 +54,7 @@ interface Vendor {
 }
 
 const PRIORITY_COLORS: Record<string, string> = {
-  emergency: 'badge-notice',
+  emergency: 'badge-danger',
   urgent: 'badge-maintenance',
   routine: 'badge-vacant',
   normal: 'badge-vacant',
