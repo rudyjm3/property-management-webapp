@@ -89,10 +89,10 @@ function statusBadgeClass(status: string): string {
     case 'active': return 'badge-occupied';
     case 'month_to_month': return 'badge-maintenance';
     case 'notice_given': return 'badge-notice';
-    case 'expired': return 'badge-vacant';
+    case 'expired': return 'badge-muted';
     case 'draft': return 'badge-neutral';
-    case 'terminated': return 'badge-vacant';
-    default: return 'badge-vacant';
+    case 'terminated': return 'badge-muted';
+    default: return 'badge-muted';
   }
 }
 

@@ -19,8 +19,8 @@ const LEASE_STATUS_BADGE: Record<string, string> = {
   active: 'badge-occupied',
   month_to_month: 'badge-occupied',
   notice_given: 'badge-notice',
-  expired: 'badge-vacant',
-  terminated: 'badge-vacant',
+  expired: 'badge-muted',
+  terminated: 'badge-muted',
   draft: 'badge-neutral',
 };
 
@@ -538,7 +538,7 @@ export default function UnitDetailPage() {
                       <td>{new Date(wo.createdAt).toLocaleDateString()}</td>
                       <td style={{ textTransform: 'capitalize' }}>{wo.category}</td>
                       <td>
-                        <span className={`badge badge-${wo.priority === 'urgent' || wo.priority === 'emergency' ? 'notice' : 'occupied'}`}>
+                        <span className={`badge badge-${wo.priority === 'emergency' ? 'danger' : wo.priority === 'urgent' ? 'notice' : 'occupied'}`}>
                           {wo.priority}
                         </span>
                       </td>
@@ -592,8 +592,8 @@ export default function UnitDetailPage() {
                           <td>{new Date(lease.endDate).toLocaleDateString()}</td>
                           <td>${Number(lease.rentAmount).toLocaleString()}</td>
                           <td>
-                            <span className={`badge badge-${lease.status === 'active' ? 'occupied' : lease.status === 'expired' ? 'notice' : 'vacant'}`}>
-                              {lease.status.replace('_', ' ')}
+                            <span className={`badge ${LEASE_STATUS_BADGE[lease.status] ?? 'badge-muted'}`}>
+                              {lease.status.replace(/_/g, ' ')}
                             </span>
                           </td>
                         </tr>

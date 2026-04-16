@@ -65,13 +65,13 @@ function statusBadgeClass(status: string): string {
     case 'notice_given':
       return 'badge-notice';
     case 'expired':
-      return 'badge-vacant';
+      return 'badge-muted';
     case 'draft':
       return 'badge-neutral';
     case 'terminated':
-      return 'badge-vacant';
+      return 'badge-muted';
     default:
-      return 'badge-vacant';
+      return 'badge-muted';
   }
 }
 
