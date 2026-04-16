@@ -105,6 +105,7 @@ export default function TenantDetailPage() {
   const [showMoveOut, setShowMoveOut] = useState(false);
   const [moveOutLeaseId, setMoveOutLeaseId] = useState<string | null>(null);
   const [moveOutDepositAmount, setMoveOutDepositAmount] = useState(0);
+  const [moveOutNoticeDate, setMoveOutNoticeDate] = useState<string | null>(null);
   const [moveOutDate, setMoveOutDate] = useState('');
   const [moveOutDeductions, setMoveOutDeductions] = useState<{ reason: string; amount: string }[]>([]);
   const [moveOutNotes, setMoveOutNotes] = useState('');
@@ -426,7 +427,8 @@ export default function TenantDetailPage() {
                             onClick={() => {
                               setMoveOutLeaseId(lp.lease.id);
                               setMoveOutDepositAmount(Number(lp.lease.depositAmount));
-                              setMoveOutDate(lp.lease.moveOutDate ? lp.lease.moveOutDate.split('T')[0] : '');
+                              setMoveOutNoticeDate(lp.lease.moveOutDate ? lp.lease.moveOutDate.split('T')[0] : null);
+                              setMoveOutDate('');
                               setMoveOutDeductions([]);
                               setMoveOutNotes('');
                               setMoveOutError('');
@@ -911,10 +913,31 @@ export default function TenantDetailPage() {
                   </div>
                 )}
 
+                {/* Notice move-out date reference */}
+                {moveOutNoticeDate && (
+                  <div
+                    style={{
+                      display: 'flex',
+                      justifyContent: 'space-between',
+                      alignItems: 'center',
+                      background: 'var(--color-surface)',
+                      borderRadius: '6px',
+                      padding: '10px 12px',
+                      marginBottom: '16px',
+                      fontSize: '13px',
+                    }}
+                  >
+                    <span style={{ color: 'var(--color-text-muted)' }}>Move-Out Date (from Notice)</span>
+                    <span style={{ fontWeight: 600 }}>
+                      {new Date(moveOutNoticeDate + 'T00:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
+                    </span>
+                  </div>
+                )}
+
                 {/* Move-out date */}
                 <div className="form-group">
                   <label>
-                    Move-Out Date <span style={{ color: 'var(--color-danger)' }}>*</span>
+                    Actual Move-Out Date <span style={{ color: 'var(--color-danger)' }}>*</span>
                   </label>
                   <input
                     type="date"
