@@ -61,17 +61,17 @@ function statusBadgeClass(status: string): string {
     case 'active':
       return 'badge-occupied';
     case 'month_to_month':
-      return 'badge-maintenance';
+      return 'badge-accent';
     case 'notice_given':
       return 'badge-notice';
     case 'expired':
-      return 'badge-muted';
+      return 'badge-danger';
     case 'draft':
       return 'badge-neutral';
     case 'terminated':
       return 'badge-danger';
     default:
-      return 'badge-muted';
+      return 'badge-neutral';
   }
 }
 

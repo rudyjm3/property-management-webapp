@@ -17,9 +17,9 @@ const UNIT_STATUS_LABELS: Record<string, string> = {
 
 const LEASE_STATUS_BADGE: Record<string, string> = {
   active: 'badge-occupied',
-  month_to_month: 'badge-occupied',
+  month_to_month: 'badge-accent',
   notice_given: 'badge-notice',
-  expired: 'badge-muted',
+  expired: 'badge-danger',
   terminated: 'badge-danger',
   draft: 'badge-neutral',
 };

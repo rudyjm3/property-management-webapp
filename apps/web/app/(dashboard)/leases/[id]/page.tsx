@@ -87,19 +87,19 @@ function daysUntilExpiry(endDate: string): number {
 function statusBadgeClass(status: string): string {
   switch (status) {
     case 'active': return 'badge-occupied';
-    case 'month_to_month': return 'badge-maintenance';
+    case 'month_to_month': return 'badge-accent';
     case 'notice_given': return 'badge-notice';
-    case 'expired': return 'badge-muted';
+    case 'expired': return 'badge-danger';
     case 'draft': return 'badge-neutral';
     case 'terminated': return 'badge-danger';
-    default: return 'badge-muted';
+    default: return 'badge-neutral';
   }
 }
 
 function paymentStatusClass(status: string): string {
   switch (status) {
     case 'completed': return 'badge-occupied';
-    case 'pending': return 'badge-maintenance';
+    case 'pending': return 'badge-notice';
     case 'failed': return 'badge-danger';
     case 'waived': return 'badge-vacant';
     case 'refunded': return 'badge-danger';

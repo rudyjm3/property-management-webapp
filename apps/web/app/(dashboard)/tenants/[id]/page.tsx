@@ -22,7 +22,7 @@ const PORTAL_STATUS_LABELS: Record<string, string> = {
 
 const PORTAL_STATUS_BADGE: Record<string, string> = {
   active: 'occupied',
-  invited: 'muted',
+  invited: 'maintenance',
   never_logged_in: 'vacant',
 };
 
@@ -496,7 +496,7 @@ export default function TenantDetailPage() {
                         <td>${Number(lp.lease.rentAmount).toLocaleString()}</td>
                         <td>
                           <span
-                            className={`badge badge-${lp.lease.status === 'active' || lp.lease.status === 'month_to_month' ? 'occupied' : lp.lease.status === 'notice_given' ? 'notice' : lp.lease.status === 'expired' ? 'muted' : lp.lease.status === 'terminated' ? 'danger' : 'vacant'}`}
+                            className={`badge badge-${lp.lease.status === 'active' ? 'occupied' : lp.lease.status === 'month_to_month' ? 'accent' : lp.lease.status === 'notice_given' ? 'notice' : lp.lease.status === 'expired' || lp.lease.status === 'terminated' ? 'danger' : 'neutral'}`}
                           >
                             {lp.lease.status.replace(/_/g, ' ')}
                           </span>

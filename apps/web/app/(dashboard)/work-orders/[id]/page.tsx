@@ -55,7 +55,7 @@ interface Vendor {
 
 const PRIORITY_COLORS: Record<string, string> = {
   emergency: 'badge-danger',
-  urgent: 'badge-maintenance',
+  urgent: 'badge-notice',
   routine: 'badge-vacant',
   normal: 'badge-vacant',
 };
@@ -69,9 +69,9 @@ const PRIORITY_LABELS: Record<string, string> = {
 
 const STATUS_COLORS: Record<string, string> = {
   new_order: 'badge-maintenance',
-  assigned: 'badge-vacant',
+  assigned: 'badge-maintenance',
   in_progress: 'badge-occupied',
-  pending_parts: 'badge-maintenance',
+  pending_parts: 'badge-notice',
   completed: 'badge-occupied',
   closed: 'badge-vacant',
   cancelled: 'badge-vacant',
