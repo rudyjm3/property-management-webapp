@@ -8,6 +8,22 @@ import { formatPhone } from '@/lib/phone';
 import DocumentPanel from '@/components/DocumentPanel';
 import { useAuth } from '@/contexts/AuthContext';
 
+const UNIT_STATUS_LABELS: Record<string, string> = {
+  occupied: 'Occupied',
+  vacant: 'Vacant',
+  notice: 'Notice',
+  maintenance: 'Maintenance',
+};
+
+const LEASE_STATUS_BADGE: Record<string, string> = {
+  active: 'badge-occupied',
+  month_to_month: 'badge-accent',
+  notice_given: 'badge-notice',
+  expired: 'badge-danger',
+  terminated: 'badge-danger',
+  draft: 'badge-neutral',
+};
+
 const UNIT_TYPE_LABELS: Record<string, string> = {
   studio: 'Studio',
   one_bed: '1 Bed',
@@ -249,7 +265,7 @@ export default function UnitDetailPage() {
             </Link>
           )}
           <span className={`badge badge-${unit.status}`} style={{ fontSize: '14px', padding: '4px 12px' }}>
-            {unit.status}
+            {UNIT_STATUS_LABELS[unit.status] ?? unit.status}
           </span>
         </div>
       </div>
@@ -349,7 +365,9 @@ export default function UnitDetailPage() {
                   <>
                     <div className="detail-item">
                       <label>Lease Status</label>
-                      <span className={`badge badge-occupied`}>{activeLease?.status}</span>
+                      <span className={`badge ${LEASE_STATUS_BADGE[activeLease?.status ?? ''] ?? 'badge-vacant'}`}>
+                        {activeLease?.status?.replace(/_/g, ' ')}
+                      </span>
                     </div>
                     <div className="detail-item">
                       <label>Lease Start</label>
@@ -520,7 +538,7 @@ export default function UnitDetailPage() {
                       <td>{new Date(wo.createdAt).toLocaleDateString()}</td>
                       <td style={{ textTransform: 'capitalize' }}>{wo.category}</td>
                       <td>
-                        <span className={`badge badge-${wo.priority === 'urgent' || wo.priority === 'emergency' ? 'notice' : 'occupied'}`}>
+                        <span className={`badge badge-${wo.priority === 'emergency' ? 'danger' : wo.priority === 'urgent' ? 'notice' : 'occupied'}`}>
                           {wo.priority}
                         </span>
                       </td>
@@ -574,8 +592,8 @@ export default function UnitDetailPage() {
                           <td>{new Date(lease.endDate).toLocaleDateString()}</td>
                           <td>${Number(lease.rentAmount).toLocaleString()}</td>
                           <td>
-                            <span className={`badge badge-${lease.status === 'active' ? 'occupied' : lease.status === 'expired' ? 'notice' : 'vacant'}`}>
-                              {lease.status.replace('_', ' ')}
+                            <span className={`badge ${LEASE_STATUS_BADGE[lease.status] ?? 'badge-muted'}`}>
+                              {lease.status.replace(/_/g, ' ')}
                             </span>
                           </td>
                         </tr>

@@ -1,5 +1,5 @@
 import { Router, Request, Response, NextFunction } from 'express';
-import { createLeaseSchema, updateLeaseSchema, renewLeaseSchema } from '@propflow/shared';
+import { createLeaseSchema, updateLeaseSchema, renewLeaseSchema, moveOutSchema } from '@propflow/shared';
 import { validate } from '../middleware/validate';
 import * as leaseService from '../services/lease.service';
 import { requireRoles } from '../middleware/auth';
@@ -64,6 +64,20 @@ router.post('/:leaseId/renew', requireManagerAccess, validate(renewLeaseSchema),
       req.body
     );
     res.status(201).json({ data: lease });
+  } catch (err) {
+    next(err);
+  }
+});
+
+// POST /api/v1/organizations/:orgId/leases/:leaseId/move-out
+router.post('/:leaseId/move-out', requireManagerAccess, validate(moveOutSchema), async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const lease = await leaseService.processMoveOut(
+      req.params.orgId as string,
+      req.params.leaseId as string,
+      req.body
+    );
+    res.json({ data: lease });
   } catch (err) {
     next(err);
   }

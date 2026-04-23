@@ -14,7 +14,7 @@ const PORTAL_STATUS_LABELS: Record<string, string> = {
 
 const PORTAL_STATUS_BADGE: Record<string, string> = {
   active: 'occupied',
-  invited: 'notice',
+  invited: 'maintenance',
   never_logged_in: 'vacant',
 };
 

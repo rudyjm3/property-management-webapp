@@ -204,6 +204,9 @@ export async function updateLease(
   if (data.endDate) updateData.endDate = new Date(data.endDate);
   if (data.moveOutDate) updateData.moveOutDate = new Date(data.moveOutDate);
   if (data.moveOutDate === null) updateData.moveOutDate = null;
+  if (data.status === 'active' || data.status === 'month_to_month') {
+    updateData.moveOutDate = null;
+  }
 
   // If the update would set this lease back to a current status, ensure no other
   // current lease already exists on the same unit (guards against reactivating
@@ -238,6 +241,8 @@ export async function updateLease(
       await tx.unit.update({ where: { id: existing.unitId }, data: { status: 'vacant' } });
     } else if (data.status === 'notice_given') {
       await tx.unit.update({ where: { id: existing.unitId }, data: { status: 'notice' } });
+    } else if (data.status === 'active' || data.status === 'month_to_month') {
+      await tx.unit.update({ where: { id: existing.unitId }, data: { status: 'occupied' } });
     }
 
     // Propagate rent amount change to all pending payments for this lease
@@ -351,6 +356,105 @@ export async function renewLease(
     createdLeaseId: newLease.id,
     previousLeaseStatus: existing.status,
   };
+}
+
+// ─── Move-Out ─────────────────────────────────────────────────────────────────
+
+interface MoveOutDeductionLineItem {
+  reason: string;
+  amount: number;
+}
+
+interface ProcessMoveOutData {
+  moveOutDate: string;
+  deductions: MoveOutDeductionLineItem[];
+  notes?: string | null;
+}
+
+export async function processMoveOut(
+  organizationId: string,
+  leaseId: string,
+  data: ProcessMoveOutData
+) {
+  const existing = await prisma.lease.findFirst({
+    where: { id: leaseId, deletedAt: null, unit: { property: { organizationId } } },
+    include: {
+      participants: { orderBy: { isPrimary: 'desc' } },
+    },
+  });
+
+  if (!existing) {
+    throw new AppError(404, 'LEASE_NOT_FOUND', 'No lease found with that ID in your organization.');
+  }
+
+  if (!CURRENT_LEASE_STATUSES.includes(existing.status as any)) {
+    throw new AppError(400, 'LEASE_NOT_ACTIVE', 'Only active leases can be moved out.');
+  }
+
+  const parsedMoveOutDate = new Date(data.moveOutDate);
+  const depositAmount = Number(existing.depositAmount);
+  const totalDeductions = data.deductions.reduce((sum, d) => sum + d.amount, 0);
+
+  if (totalDeductions > depositAmount) {
+    throw new AppError(400, 'INVALID_DEDUCTIONS', 'Total deductions cannot exceed the deposit amount.');
+  }
+
+  const returnAmount = Math.max(0, depositAmount - totalDeductions);
+
+  const securityDepositStatus =
+    returnAmount <= 0
+      ? 'applied_to_balance'
+      : returnAmount < depositAmount
+        ? 'partial_return'
+        : 'full_return';
+
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const deductionsJson: any = {
+    lineItems: data.deductions,
+    notes: data.notes ?? null,
+  };
+
+  const primaryParticipant = existing.participants[0] ?? null;
+
+  return prisma.$transaction(async (tx) => {
+    await tx.lease.update({
+      where: { id: leaseId },
+      data: {
+        status: 'terminated',
+        moveOutDate: parsedMoveOutDate,
+        securityDepositStatus: securityDepositStatus as any,
+        securityDepositReturnAmount: returnAmount,
+        securityDepositReturnedAt: new Date(),
+        securityDepositDeductions: deductionsJson,
+      },
+    });
+
+    await tx.unit.update({
+      where: { id: existing.unitId },
+      data: { status: 'vacant' },
+    });
+
+    if (returnAmount > 0 && primaryParticipant) {
+      await tx.payment.create({
+        data: {
+          lease: { connect: { id: leaseId } },
+          tenant: { connect: { id: primaryParticipant.tenantId } },
+          amount: returnAmount,
+          type: 'deposit',
+          status: 'completed',
+          method: 'other',
+          dueDate: parsedMoveOutDate,
+          paidAt: new Date(),
+          notes: data.notes ? `Security deposit return. ${data.notes}` : 'Security deposit return.',
+        },
+      });
+    }
+
+    return tx.lease.findUniqueOrThrow({
+      where: { id: leaseId },
+      include: leaseInclude,
+    });
+  });
 }
 
 // ─── Add Participant ──────────────────────────────────────────────────────────

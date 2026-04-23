@@ -13,10 +13,10 @@ interface ConnectStatus {
 }
 
 const STATUS_BADGE: Record<ConnectAccountStatus, { label: string; className: string }> = {
-  not_connected: { label: 'Not Connected',       className: 'badge-notice' },
-  pending:       { label: 'Pending Verification', className: 'badge-maintenance' },
+  not_connected: { label: 'Not Connected',       className: 'badge-danger' },
+  pending:       { label: 'Pending Verification', className: 'badge-notice' },
   active:        { label: 'Active',               className: 'badge-occupied' },
-  restricted:    { label: 'Restricted',           className: 'badge-notice' },
+  restricted:    { label: 'Restricted',           className: 'badge-danger' },
 };
 
 export default function SettingsPage() {

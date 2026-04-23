@@ -184,6 +184,21 @@ export const renewLeaseSchema = z.object({
   noticePeriodDays: z.number().int().min(0).optional(),
 });
 
+// ─── Move-Out ─────────────────────────────────────────────────────────────────
+
+const moveOutDeductionLineItemSchema = z.object({
+  reason: z.string().min(1).max(200),
+  amount: z.number().positive(),
+});
+
+export const moveOutSchema = z.object({
+  moveOutDate: z.string().date(),
+  deductions: z.array(moveOutDeductionLineItemSchema).default([]),
+  notes: z.string().max(2000).nullable().optional(),
+});
+
+export type MoveOutInput = z.infer<typeof moveOutSchema>;
+
 // ─── Payment ──────────────────────────────────────────────────────────────────
 
 export const createPaymentSchema = z.object({

@@ -211,6 +211,11 @@ export const api = {
         method: 'POST',
         body: JSON.stringify(data),
       }),
+    moveOut: (id: string, data: { moveOutDate: string; deductions: { reason: string; amount: number }[]; notes?: string | null }) =>
+      apiFetch<any>(`/api/v1/organizations/${_orgId}/leases/${id}/move-out`, {
+        method: 'POST',
+        body: JSON.stringify(data),
+      }),
     delete: (id: string) =>
       apiFetch<void>(`/api/v1/organizations/${_orgId}/leases/${id}`, {
         method: 'DELETE',

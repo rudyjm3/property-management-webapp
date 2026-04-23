@@ -129,7 +129,7 @@ export default function PropertyDetailPage() {
   if (loading) return <div className="loading">Loading property...</div>;
   if (!property) return <div className="loading">Property not found</div>;
 
-  const occupiedCount = property.units.filter((u) => u.status === 'occupied').length;
+  const occupiedCount = property.units.filter((u) => u.status === 'occupied' || u.status === 'notice').length;
   const vacantCount = property.units.filter((u) => u.status === 'vacant').length;
 
   return (
@@ -210,7 +210,7 @@ export default function PropertyDetailPage() {
                       {unit.type && (
                         <span className="badge badge-neutral">{UNIT_TYPE_LABELS[unit.type] ?? unit.type}</span>
                       )}
-                      <span className={`badge badge-${unit.status}`}>{unit.status}</span>
+                      <span className={`badge badge-${unit.status}`}>{unit.status === 'notice' ? 'Notice' : unit.status}</span>
                     </div>
                   </div>
                   {tenant && <div className="unit-tenant">{tenant.name}</div>}

@@ -9,6 +9,11 @@ import PhoneInput from '@/components/PhoneInput';
 import DocumentPanel from '@/components/DocumentPanel';
 import { useAuth } from '@/contexts/AuthContext';
 
+function localDateStr() {
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+}
+
 const PORTAL_STATUS_LABELS: Record<string, string> = {
   active: 'Portal Active',
   invited: 'Invited',
@@ -17,7 +22,7 @@ const PORTAL_STATUS_LABELS: Record<string, string> = {
 
 const PORTAL_STATUS_BADGE: Record<string, string> = {
   active: 'occupied',
-  invited: 'notice',
+  invited: 'maintenance',
   never_logged_in: 'vacant',
 };
 
@@ -41,6 +46,8 @@ interface TenantDetail {
       startDate: string;
       endDate: string;
       rentAmount: string;
+      depositAmount: string;
+      moveOutDate: string | null;
       status: string;
       unit: {
         id: string;
@@ -100,6 +107,15 @@ export default function TenantDetailPage() {
   const [composeSending, setComposeSending] = useState(false);
   const [composeError, setComposeError] = useState('');
   const composeBodyRef = useRef<HTMLTextAreaElement>(null);
+  const [showMoveOut, setShowMoveOut] = useState(false);
+  const [moveOutLeaseId, setMoveOutLeaseId] = useState<string | null>(null);
+  const [moveOutDepositAmount, setMoveOutDepositAmount] = useState(0);
+  const [moveOutNoticeDate, setMoveOutNoticeDate] = useState<string | null>(null);
+  const [moveOutDate, setMoveOutDate] = useState('');
+  const [moveOutDeductions, setMoveOutDeductions] = useState<{ reason: string; amount: string }[]>([]);
+  const [moveOutNotes, setMoveOutNotes] = useState('');
+  const [moveOutSubmitting, setMoveOutSubmitting] = useState(false);
+  const [moveOutError, setMoveOutError] = useState('');
 
   useEffect(() => {
     async function load() {
@@ -140,6 +156,39 @@ export default function TenantDetailPage() {
       setComposeError(err.message || 'Failed to send message');
     } finally {
       setComposeSending(false);
+    }
+  }
+
+  async function handleMoveOut(e: React.FormEvent) {
+    e.preventDefault();
+    if (!moveOutLeaseId || !moveOutDate) return;
+    const hasPartialRow = moveOutDeductions.some((d) => {
+      const hasReason = d.reason.trim().length > 0;
+      const hasAmount = d.amount.trim().length > 0;
+      return hasReason !== hasAmount;
+    });
+    if (hasPartialRow) {
+      setMoveOutError('Each deduction must have both a reason and an amount.');
+      return;
+    }
+    setMoveOutSubmitting(true);
+    setMoveOutError('');
+    try {
+      const parsedDeductions = moveOutDeductions
+        .filter((d) => d.reason.trim() && d.amount)
+        .map((d) => ({ reason: d.reason.trim(), amount: parseFloat(d.amount) }));
+      await api.leases.moveOut(moveOutLeaseId, {
+        moveOutDate,
+        deductions: parsedDeductions,
+        notes: moveOutNotes.trim() || null,
+      });
+      const updated = await api.tenants.get(tenantId);
+      setTenant(updated);
+      setShowMoveOut(false);
+    } catch (err: any) {
+      setMoveOutError(err.message || 'Failed to process move-out.');
+    } finally {
+      setMoveOutSubmitting(false);
     }
   }
 
@@ -385,6 +434,25 @@ export default function TenantDetailPage() {
                           </span>
                         </div>
                       </div>
+                      {lp.lease.status === 'notice_given' && (
+                        <div style={{ marginTop: '12px', display: 'flex', justifyContent: 'flex-end' }}>
+                          <button
+                            className="btn btn-sm btn-danger"
+                            onClick={() => {
+                              setMoveOutLeaseId(lp.lease.id);
+                              setMoveOutDepositAmount(Number(lp.lease.depositAmount));
+                              setMoveOutNoticeDate(lp.lease.moveOutDate ? lp.lease.moveOutDate.split('T')[0] : null);
+                              setMoveOutDate('');
+                              setMoveOutDeductions([]);
+                              setMoveOutNotes('');
+                              setMoveOutError('');
+                              setShowMoveOut(true);
+                            }}
+                          >
+                            Move Out
+                          </button>
+                        </div>
+                      )}
                     </div>
                   ))}
                 </>
@@ -428,9 +496,9 @@ export default function TenantDetailPage() {
                         <td>${Number(lp.lease.rentAmount).toLocaleString()}</td>
                         <td>
                           <span
-                            className={`badge badge-${lp.lease.status === 'active' ? 'occupied' : lp.lease.status === 'expired' ? 'notice' : 'vacant'}`}
+                            className={`badge badge-${lp.lease.status === 'active' ? 'occupied' : lp.lease.status === 'month_to_month' ? 'accent' : lp.lease.status === 'notice_given' ? 'notice' : lp.lease.status === 'expired' || lp.lease.status === 'terminated' ? 'danger' : 'neutral'}`}
                           >
-                            {lp.lease.status.replace('_', ' ')}
+                            {lp.lease.status.replace(/_/g, ' ')}
                           </span>
                         </td>
                       </tr>
@@ -834,6 +902,210 @@ export default function TenantDetailPage() {
                 </button>
                 <button type="submit" className="btn btn-primary">
                   Save Changes
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Move-Out Modal */}
+      {showMoveOut && (
+        <div className="modal-overlay" onClick={() => setShowMoveOut(false)}>
+          <div className="modal" style={{ maxWidth: '560px' }} onClick={(e) => e.stopPropagation()}>
+            <div className="modal-header">
+              <h2>Process Move-Out</h2>
+              <button className="btn btn-sm btn-secondary" onClick={() => setShowMoveOut(false)}>
+                ✕
+              </button>
+            </div>
+            <form onSubmit={handleMoveOut}>
+              <div className="modal-body">
+                {moveOutError && (
+                  <div style={{ color: 'var(--color-danger)', marginBottom: '12px', fontSize: '14px' }}>
+                    {moveOutError}
+                  </div>
+                )}
+
+                {/* Notice move-out date reference */}
+                {moveOutNoticeDate && (
+                  <div
+                    style={{
+                      display: 'flex',
+                      justifyContent: 'space-between',
+                      alignItems: 'center',
+                      background: 'var(--color-surface)',
+                      borderRadius: '6px',
+                      padding: '10px 12px',
+                      marginBottom: '16px',
+                      fontSize: '13px',
+                    }}
+                  >
+                    <span style={{ color: 'var(--color-text-muted)' }}>Move-Out Date (from Notice)</span>
+                    <span style={{ fontWeight: 600 }}>
+                      {new Date(moveOutNoticeDate + 'T00:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
+                    </span>
+                  </div>
+                )}
+
+                {/* Move-out date */}
+                <div className="form-group">
+                  <label>
+                    Actual Move-Out Date <span style={{ color: 'var(--color-danger)' }}>*</span>
+                  </label>
+                  <input
+                    type="date"
+                    required
+                    max={localDateStr()}
+                    value={moveOutDate}
+                    onChange={(e) => setMoveOutDate(e.target.value)}
+                  />
+                </div>
+
+                {/* Deposit summary */}
+                <div
+                  style={{
+                    background: 'var(--color-surface)',
+                    borderRadius: '6px',
+                    padding: '12px',
+                    marginBottom: '16px',
+                    fontSize: '14px',
+                  }}
+                >
+                  <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '4px' }}>
+                    <span>Security Deposit</span>
+                    <span>${moveOutDepositAmount.toFixed(2)}</span>
+                  </div>
+                  <div
+                    style={{
+                      display: 'flex',
+                      justifyContent: 'space-between',
+                      marginBottom: '4px',
+                      color: 'var(--color-danger)',
+                    }}
+                  >
+                    <span>Total Deductions</span>
+                    <span>
+                      -$
+                      {moveOutDeductions
+                        .filter((d) => d.reason.trim() && d.amount).reduce((sum, d) => sum + (parseFloat(d.amount) || 0), 0)
+                        .toFixed(2)}
+                    </span>
+                  </div>
+                  <div
+                    style={{
+                      display: 'flex',
+                      justifyContent: 'space-between',
+                      fontWeight: 600,
+                      borderTop: '1px solid var(--color-border)',
+                      paddingTop: '4px',
+                      marginTop: '4px',
+                    }}
+                  >
+                    <span>Return Amount</span>
+                    <span style={{ color: 'var(--color-success)' }}>
+                      $
+                      {Math.max(
+                        0,
+                        moveOutDepositAmount -
+                          moveOutDeductions.filter((d) => d.reason.trim() && d.amount).reduce((sum, d) => sum + (parseFloat(d.amount) || 0), 0)
+                      ).toFixed(2)}
+                    </span>
+                  </div>
+                </div>
+
+                {/* Deduction line items */}
+                <div style={{ marginBottom: '16px' }}>
+                  <div
+                    style={{
+                      display: 'flex',
+                      justifyContent: 'space-between',
+                      alignItems: 'center',
+                      marginBottom: '8px',
+                    }}
+                  >
+                    <label style={{ fontWeight: 500 }}>Deductions</label>
+                    <button
+                      type="button"
+                      className="btn btn-sm btn-secondary"
+                      onClick={() =>
+                        setMoveOutDeductions([...moveOutDeductions, { reason: '', amount: '' }])
+                      }
+                    >
+                      + Add Deduction
+                    </button>
+                  </div>
+                  {moveOutDeductions.map((d, idx) => (
+                    <div
+                      key={idx}
+                      style={{ display: 'flex', gap: '8px', alignItems: 'flex-start', marginBottom: '8px' }}
+                    >
+                      <div className="form-group" style={{ flex: 2, marginBottom: 0 }}>
+                        <input
+                          placeholder="Reason (e.g. Cleaning)"
+                          value={d.reason}
+                          onChange={(e) => {
+                            const next = [...moveOutDeductions];
+                            next[idx] = { ...next[idx], reason: e.target.value };
+                            setMoveOutDeductions(next);
+                          }}
+                        />
+                      </div>
+                      <div className="form-group" style={{ flex: 1, marginBottom: 0 }}>
+                        <input
+                          type="number"
+                          min="0"
+                          step="0.01"
+                          placeholder="Amount"
+                          value={d.amount}
+                          onChange={(e) => {
+                            const next = [...moveOutDeductions];
+                            next[idx] = { ...next[idx], amount: e.target.value };
+                            setMoveOutDeductions(next);
+                          }}
+                        />
+                      </div>
+                      <button
+                        type="button"
+                        className="btn btn-sm btn-danger"
+                        onClick={() =>
+                          setMoveOutDeductions(moveOutDeductions.filter((_, i) => i !== idx))
+                        }
+                      >
+                        Remove
+                      </button>
+                    </div>
+                  ))}
+                  {moveOutDeductions.length === 0 && (
+                    <p style={{ fontSize: '13px', color: 'var(--color-text-muted)' }}>
+                      No deductions — full deposit will be returned.
+                    </p>
+                  )}
+                </div>
+
+                {/* Notes */}
+                <div className="form-group">
+                  <label>Notes (optional)</label>
+                  <textarea
+                    rows={3}
+                    value={moveOutNotes}
+                    onChange={(e) => setMoveOutNotes(e.target.value)}
+                    placeholder="Any additional notes about the move-out..."
+                  />
+                </div>
+              </div>
+
+              <div className="modal-footer">
+                <button
+                  type="button"
+                  className="btn btn-secondary"
+                  onClick={() => setShowMoveOut(false)}
+                  disabled={moveOutSubmitting}
+                >
+                  Cancel
+                </button>
+                <button type="submit" className="btn btn-danger" disabled={moveOutSubmitting}>
+                  {moveOutSubmitting ? 'Processing...' : 'Confirm Move-Out'}
                 </button>
               </div>
             </form>

@@ -313,23 +313,38 @@ a:hover {
 }
 
 .badge-vacant {
+  background: #f3f4f6;
+  color: #374151;
+}
+
+.badge-notice {
   background: #fef3c7;
   color: #92400e;
 }
 
-.badge-notice {
+.badge-muted {
+  background: #f3f4f6;
+  color: #374151;
+}
+
+.badge-danger {
   background: #fee2e2;
   color: #991b1b;
 }
 
 .badge-maintenance {
-  background: #e0e7ff;
-  color: #3730a3;
+  background: #dbeafe;
+  color: #1e40af;
 }
 
 .badge-neutral {
   background: #f3f4f6;
   color: #374151;
+}
+
+.badge-accent {
+  background: #ede9fe;
+  color: #5b21b6;
 }
 
 .unit-tenant {
