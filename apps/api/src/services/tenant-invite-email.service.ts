@@ -8,10 +8,11 @@ interface TenantInviteEmailParams {
   tenantEmail: string;
   actionLink: string;
   organizationName: string;
+  inviteCode: string;
 }
 
 export async function sendTenantPortalInviteEmail(params: TenantInviteEmailParams) {
-  const { tenantName, tenantEmail, actionLink, organizationName } = params;
+  const { tenantName, tenantEmail, actionLink, organizationName, inviteCode } = params;
 
   const html = `<!DOCTYPE html>
 <html lang="en">
@@ -28,6 +29,11 @@ export async function sendTenantPortalInviteEmail(params: TenantInviteEmailParam
       <a href="${actionLink}" style="display:inline-block;background:#1e40af;color:#ffffff;text-decoration:none;padding:12px 20px;border-radius:6px;font-weight:600;">
         Set Password
       </a>
+      <div style="margin:24px 0;padding:16px;background:#f0f4ff;border-radius:8px;text-align:center;">
+        <p style="margin:0 0 8px;font-size:13px;color:#4b5563;">Or open the <strong>PropFlow mobile app</strong> and enter this invite code:</p>
+        <p style="margin:0;font-size:32px;font-weight:700;letter-spacing:8px;color:#1e40af;font-family:monospace;">${inviteCode}</p>
+        <p style="margin:8px 0 0;font-size:11px;color:#6b7280;">This code expires in 72 hours.</p>
+      </div>
       <p style="margin:20px 0 0;font-size:13px;line-height:1.5;color:#6b7280;">
         If the button does not work, copy and paste this link into your browser:
       </p>

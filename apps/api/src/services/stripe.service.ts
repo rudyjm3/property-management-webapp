@@ -271,3 +271,39 @@ export async function getCustomerDefaultPaymentMethod(customerId: string) {
     type: paymentMethod.type,
   };
 }
+
+// ─── Autopay SetupIntent ──────────────────────────────────────────────────────
+
+export async function createAutopaySetupIntent(params: {
+  tenantId: string;
+  tenantName: string;
+  tenantEmail: string;
+  orgId: string;
+  stripeAccountId: string;
+  existingCustomerId?: string;
+}): Promise<{ clientSecret: string; customerId: string }> {
+  const stripe = getStripe();
+
+  let customerId = params.existingCustomerId;
+  if (!customerId) {
+    const customer = await stripe.customers.create({
+      name: params.tenantName,
+      email: params.tenantEmail,
+      metadata: { tenantId: params.tenantId, orgId: params.orgId },
+    });
+    customerId = customer.id;
+  }
+
+  const setupIntent = await stripe.setupIntents.create({
+    customer: customerId,
+    payment_method_types: ['us_bank_account'],
+    usage: 'off_session',
+    metadata: { tenantId: params.tenantId, orgId: params.orgId },
+  });
+
+  return {
+    clientSecret: setupIntent.client_secret!,
+    customerId,
+  };
+}
+

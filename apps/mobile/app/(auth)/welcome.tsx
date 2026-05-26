@@ -17,7 +17,10 @@ export default function WelcomeScreen() {
             Your home, simplified. Pay rent, submit requests, and stay connected with your property manager.
           </Text>
         </View>
-        <Button title="Sign In" onPress={() => router.push('/(auth)/login')} variant="secondary" />
+        <View style={styles.actions}>
+          <Button title="Sign In" onPress={() => router.push('/(auth)/login')} variant="secondary" />
+          <Button title="Activate with invite code" onPress={() => router.push('/(auth)/activate')} variant="ghost" />
+        </View>
       </View>
     </SafeAreaView>
   );
@@ -31,4 +34,5 @@ const styles = StyleSheet.create({
   iconEmoji: { fontSize: 36 },
   title: { fontSize: 36, fontWeight: '700', color: '#fff', letterSpacing: -0.5 },
   subtitle: { fontSize: 17, color: 'rgba(255,255,255,0.8)', textAlign: 'center', maxWidth: 280 },
+  actions: { gap: 12 },
 });

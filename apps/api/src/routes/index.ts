@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import { requireAuth, requireOrg, requireTenantAuth } from '../middleware/auth';
 import authRoutes from './auth';
+import inviteRoutes from './invite';
 import organizationRoutes from './organizations';
 import notificationJobRoutes from './notificationJobs';
 import propertyRoutes from './properties';
@@ -22,6 +23,9 @@ const router = Router();
 
 // Auth routes — no org scope
 router.use('/auth', authRoutes);
+
+// Invite activation routes — public, rate-limited
+router.use('/invite', inviteRoutes);
 
 // Cron-trigger notification jobs (CRON_SECRET only, no user JWT)
 router.use('/organizations/:orgId/notifications/jobs', notificationJobRoutes);

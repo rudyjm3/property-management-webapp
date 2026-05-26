@@ -1,5 +1,6 @@
 import { Request, Response, NextFunction } from 'express';
 import { Prisma } from '@propflow/db';
+import * as Sentry from '@sentry/node';
 
 export class AppError extends Error {
   constructor(
@@ -56,6 +57,7 @@ export function errorHandler(err: Error, _req: Request, res: Response, _next: Ne
     return;
   }
 
+  Sentry.captureException(err);
   console.error('Unhandled error:', err);
   res.status(500).json({
     error: { code: 'INTERNAL_ERROR', message: 'An unexpected error occurred' },

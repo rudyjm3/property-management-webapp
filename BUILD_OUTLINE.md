@@ -1042,7 +1042,39 @@ _Last updated: 2026-04-14. Status reflects the `main` branch._
 
 ---
 
-## 13. Add-On Module Documentation
+## 13. Priority Roadmap Recommendation
+
+_Sourced from MVP review, 2026-05-26._
+
+### Now (before any paying customers)
+
+1. **Tenant invite-code activation screen (mobile)** — the mobile auth flow has no activation path; tenants land on welcome → login only. Must add an invite-code entry screen so first-time tenants can set a password from the app.
+2. **Stripe webhook security audit + rate limiting** — signature verification exists but there is no rate limiting anywhere in the API. Auth, payment, and webhook endpoints need protection before production traffic.
+3. **Error monitoring (Sentry)** — currently console.error only. Sentry must be wired into the API, mobile app, and web dashboard before any real-user data flows through the system.
+4. **Autopay UI toggle (mobile)** — the Payments tab has Pay Now but no autopay toggle. The BUILD_OUTLINE specifies autopay as a Payments tab feature.
+5. **End-to-end ACH smoke test in Stripe sandbox** — the webhook → ledger path exists but has never been smoke-tested. This is a financial system; untested money movement paths are a blocker.
+
+### Next 60 days (MVP launch)
+
+6. **Online rental application form + e-signature (Module 1)** — this unlocks the full leasing funnel. Currently tenants are added manually by managers.
+7. **Message file attachments (Web + Mobile)** — messaging is text-only; attachment support is needed for lease notices and maintenance photos.
+8. **SMS via Twilio** — the scaffolding is there (Twilio env vars, service stub), just needs activation for rent reminders and maintenance alerts.
+9. **Financial audit trail** — void and correction on payments; currently a payment record can be deleted but not properly voided with a counterpart ledger entry.
+10. **Guided onboarding walkthrough with help text** — the onboarding wizard exists but has no tooltips or empty-state coaching for first-time property managers.
+
+### Months 3–6 (growth phase)
+
+11. **Full accounting module (P&L, bank reconciliation, Schedule E)** — Module 2 in the roadmap. Required to compete with DoorLoop and Buildium at scale.
+12. **Owner portal** — Module 6. Unlocks the property management company segment (managers who report to property owners, not owner-operators).
+13. **Tenant credit reporting** — free differentiator that drives mobile adoption; tenants who report rent to credit bureaus are stickier.
+14. **Vacancy listing syndication** — Module 8. Top-of-funnel capture from Zillow/Apartments.com.
+15. **AI maintenance triage** — differentiator; auto-categorizes and prioritizes work orders on submission.
+
+> **Bottom line:** This is a well-built, architecturally sound product that is close to MVP-ready. The biggest gaps before launch are security hardening (webhook auth, rate limiting), the tenant invite flow, and online leasing/e-signatures. The biggest gaps before competing with DoorLoop and Buildium at scale are full accounting and the owner portal. The data model is already designed for all of this — execution is the remaining work, not redesign.
+
+---
+
+## 14. Add-On Module Documentation
 
 > Add-on modules are Phase 4+ features. They are outside base-product scope and will not be built until the pilot gate is cleared and early user feedback has been collected. Each module is feature-flagged at the API middleware layer via `organization.active_modules` and billed as additional Stripe Subscription Items. UI components are gated behind a `<ModuleGate module="...">` wrapper.
 

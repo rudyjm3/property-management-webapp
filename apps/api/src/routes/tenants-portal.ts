@@ -227,4 +227,36 @@ router.get('/documents/:docId/download-url', async (req: Request, res: Response,
   }
 });
 
+// ─── Autopay ─────────────────────────────────────────────────────────────────
+
+// GET /api/v1/tenant/autopay
+router.get('/autopay', async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const { tenantId } = req.tenant!;
+    const result = await tenantPortalService.getAutopayStatus(tenantId);
+    res.json({ data: result });
+  } catch (err) {
+    next(err);
+  }
+});
+
+// POST /api/v1/tenant/autopay
+// Body: { enabled: boolean }
+// When enabling without a saved payment method, returns a Stripe SetupIntent client secret
+// so the mobile app can run the bank-account setup flow before autopay is activated.
+router.post('/autopay', async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const { tenantId, orgId } = req.tenant!;
+    const { enabled } = req.body as { enabled?: boolean };
+    if (typeof enabled !== 'boolean') {
+      res.status(400).json({ error: { code: 'INVALID_INPUT', message: 'enabled must be a boolean.' } });
+      return;
+    }
+    const result = await tenantPortalService.setAutopay(tenantId, orgId, enabled);
+    res.json({ data: result });
+  } catch (err) {
+    next(err);
+  }
+});
+
 export default router;

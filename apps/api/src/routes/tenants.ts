@@ -1,4 +1,5 @@
 import { Router, Request, Response, NextFunction } from 'express';
+import { randomBytes } from 'crypto';
 import { createTenantSchema, updateTenantSchema } from '@propflow/shared';
 import { validate } from '../middleware/validate';
 import * as tenantService from '../services/tenant.service';
@@ -46,11 +47,26 @@ function isUserNotFoundError(message: string): boolean {
   return lower.includes('user not found') || lower.includes('email not found');
 }
 
+function generateInviteCode(): string {
+  return randomBytes(4).toString('hex').toUpperCase(); // 8 hex chars, e.g. "A3F2B1C9"
+}
+
+async function stampInviteCode(tenantId: string): Promise<string> {
+  const code = generateInviteCode();
+  const expiresAt = new Date(Date.now() + 72 * 60 * 60 * 1000); // 72 hours
+  await prisma.tenant.update({
+    where: { id: tenantId },
+    data: { inviteCode: code, inviteCodeExpiresAt: expiresAt },
+  });
+  return code;
+}
+
 async function sendInviteEmailOrFail(params: {
   tenantName: string;
   tenantEmail: string;
   actionLink: string;
   organizationName: string;
+  inviteCode: string;
 }) {
   try {
     await sendTenantPortalInviteEmail(params);
@@ -211,11 +227,13 @@ router.post(
             });
             return;
           }
+          const inviteCode = await stampInviteCode(currentTenant.id);
           await sendInviteEmailOrFail({
             tenantName: currentTenant.name,
             tenantEmail: normalizedEmail,
             actionLink,
             organizationName,
+            inviteCode,
           });
           res.json({ data: { message: 'Invite sent', email: currentTenant.email } });
           return;
@@ -269,11 +287,13 @@ router.post(
             });
             return;
           }
+          const inviteCode2 = await stampInviteCode(currentTenant.id);
           await sendInviteEmailOrFail({
             tenantName: currentTenant.name,
             tenantEmail: normalizedEmail,
             actionLink,
             organizationName,
+            inviteCode: inviteCode2,
           });
 
           await prisma.tenant.update({
@@ -288,6 +308,21 @@ router.post(
           return;
         }
         if (user) {
+          const inviteCode3 = await stampInviteCode(currentTenant.id);
+          // Generate the action link for the email (invite type, no PKCE needed server-side)
+          const inviteLinkResult = await supabaseAdmin.auth.admin.generateLink({
+            type: 'invite',
+            email: normalizedEmail,
+            options: { redirectTo },
+          });
+          const actionLink = inviteLinkResult.data?.properties?.action_link ?? redirectTo;
+          await sendInviteEmailOrFail({
+            tenantName: currentTenant.name,
+            tenantEmail: normalizedEmail,
+            actionLink,
+            organizationName,
+            inviteCode: inviteCode3,
+          });
           await prisma.tenant.update({
             where: { id: currentTenant.id },
             data: { supabaseUserId: user.id, portalStatus: 'invited' },

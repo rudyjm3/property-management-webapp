@@ -1,11 +1,12 @@
-import { useMemo, useState } from 'react';
-import { FlatList, Modal, Pressable, RefreshControl, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { useEffect, useMemo, useState } from 'react';
+import { FlatList, Modal, Pressable, RefreshControl, StyleSheet, Switch, Text, TouchableOpacity, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { usePayments } from '@/hooks/usePayments';
 import { useDashboard } from '@/hooks/useDashboard';
 import { Card } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
 import { PayNowSheet } from '@/components/payments/PayNowSheet';
+import { AutopaySetupSheet, useAutopayToggle } from '@/components/payments/AutopaySetupSheet';
 import type { TenantPaymentListItem } from '@propflow/shared';
 
 const STATUS_COLORS: Record<string, { bg: string; text: string }> = {
@@ -51,6 +52,12 @@ export default function PaymentsScreen() {
   const [paySheetVisible, setPaySheetVisible] = useState(false);
   const [selectedPayment, setSelectedPayment] = useState<TenantPaymentListItem | null>(null);
   const allPayments = useMemo(() => data?.pages.flatMap((p) => p.data) ?? [], [data]);
+  const {
+    autopayEnabled, hasPaymentMethod, setupClientSecret, showSetupSheet,
+    setShowSetupSheet, loading: autopayLoading, loadAutopay, toggleAutopay, handleSetupSuccess,
+  } = useAutopayToggle(() => { refetch(); refetchDashboard(); });
+
+  useEffect(() => { loadAutopay(); }, []);
 
   return (
     <SafeAreaView style={styles.container}>
@@ -86,6 +93,25 @@ export default function PaymentsScreen() {
                   <Button title="Pay Now" onPress={() => setPaySheetVisible(true)} style={{ marginTop: 12 }} />
                 </Card>
               )}
+              <Card>
+                <View style={styles.autopayRow}>
+                  <View style={styles.autopayLeft}>
+                    <Text style={styles.autopayTitle}>Autopay</Text>
+                    <Text style={styles.autopaySubtitle}>
+                      {autopayEnabled
+                        ? hasPaymentMethod ? 'On — bank account linked' : 'On'
+                        : 'Off — pay manually each month'}
+                    </Text>
+                  </View>
+                  <Switch
+                    value={autopayEnabled}
+                    onValueChange={toggleAutopay}
+                    disabled={autopayLoading}
+                    trackColor={{ true: '#6366f1', false: '#e5e7eb' }}
+                    thumbColor="#fff"
+                  />
+                </View>
+              </Card>
               <Text style={styles.sectionTitle}>History</Text>
             </View>
           );
@@ -97,6 +123,15 @@ export default function PaymentsScreen() {
 
       {!!dashboard?.pendingPayments?.length && (
         <PayNowSheet visible={paySheetVisible} payments={dashboard.pendingPayments} onClose={() => setPaySheetVisible(false)} onSuccess={() => { refetch(); refetchDashboard(); }} />
+      )}
+
+      {setupClientSecret && (
+        <AutopaySetupSheet
+          visible={showSetupSheet}
+          setupIntentClientSecret={setupClientSecret}
+          onClose={() => setShowSetupSheet(false)}
+          onSuccess={handleSetupSuccess}
+        />
       )}
 
       <Modal visible={!!selectedPayment} transparent animationType="slide" onRequestClose={() => setSelectedPayment(null)}>
@@ -144,6 +179,10 @@ const styles = StyleSheet.create({
   badge: { paddingHorizontal: 8, paddingVertical: 2, borderRadius: 99 },
   badgeText: { fontSize: 11, fontWeight: '500', textTransform: 'capitalize' },
   empty: { textAlign: 'center', color: '#9ca3af', paddingVertical: 48 },
+  autopayRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+  autopayLeft: { flex: 1, marginRight: 12 },
+  autopayTitle: { fontSize: 15, fontWeight: '600', color: '#111827' },
+  autopaySubtitle: { fontSize: 13, color: '#6b7280', marginTop: 2 },
   modalBackdrop: { flex: 1, backgroundColor: 'rgba(17,24,39,0.35)' },
   modalCard: {
     backgroundColor: '#fff',
