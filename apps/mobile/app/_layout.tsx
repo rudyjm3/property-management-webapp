@@ -1,3 +1,4 @@
+import * as Sentry from '@sentry/react-native';
 import { useEffect, useRef } from 'react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { StripeProvider } from '@stripe/stripe-react-native';
@@ -7,6 +8,13 @@ import { StatusBar } from 'expo-status-bar';
 import * as Device from 'expo-device';
 import Constants from 'expo-constants';
 import { tenantApi } from '@/lib/api';
+
+Sentry.init({
+  dsn: process.env.EXPO_PUBLIC_SENTRY_DSN,
+  environment: process.env.EXPO_PUBLIC_ENV ?? 'development',
+  tracesSampleRate: 0,
+  enableNative: true,
+});
 
 const queryClient = new QueryClient({
   defaultOptions: { queries: { retry: 1, staleTime: 30_000 } },
@@ -61,7 +69,7 @@ function PushRegistrar() {
   return null;
 }
 
-export default function RootLayout() {
+function RootLayout() {
   return (
     <QueryClientProvider client={queryClient}>
       <StripeProvider publishableKey={process.env.EXPO_PUBLIC_STRIPE_PUBLISHABLE_KEY!}>
@@ -86,3 +94,5 @@ export default function RootLayout() {
     </QueryClientProvider>
   );
 }
+
+export default Sentry.wrap(RootLayout);

@@ -107,6 +107,21 @@ export const tenantApi = {
       body: JSON.stringify({ token }),
     }),
 
+  autopay: {
+    get: (): Promise<{ autopayEnabled: boolean; hasPaymentMethod: boolean }> =>
+      apiFetch('/api/v1/tenant/autopay'),
+
+    set: (enabled: boolean): Promise<{
+      autopayEnabled: boolean;
+      requiresSetup: boolean;
+      setupIntentClientSecret?: string;
+    }> =>
+      apiFetch('/api/v1/tenant/autopay', {
+        method: 'POST',
+        body: JSON.stringify({ enabled }),
+      }),
+  },
+
   documents: {
     list: (): Promise<TenantDocumentListItem[]> =>
       apiFetch('/api/v1/tenant/documents'),

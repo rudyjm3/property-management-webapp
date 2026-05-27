@@ -1,4 +1,4 @@
-import { prisma } from '@propflow/db';
+import { prisma, Prisma } from '@propflow/db';
 import { AppError } from '../middleware/error-handler';
 import { CURRENT_LEASE_STATUSES } from '../constants';
 
@@ -164,7 +164,7 @@ export async function createTenant(organizationId: string, data: CreateTenantDat
     return prisma.tenant.update({
       where: { id: existing.id },
       data: {
-        ...(normalizedData as any),
+        ...(normalizedData as Prisma.TenantUpdateInput),
         deletedAt: null,
       },
     });
@@ -172,7 +172,7 @@ export async function createTenant(organizationId: string, data: CreateTenantDat
 
   return prisma.tenant.create({
     data: {
-      ...(normalizedData as any),
+      ...(normalizedData as Prisma.TenantCreateInput),
       organization: { connect: { id: organizationId } },
     },
   });
@@ -215,7 +215,7 @@ export async function updateTenant(
 
   return prisma.tenant.update({
     where: { id: tenantId },
-    data: normalizedData as any,
+    data: normalizedData as Prisma.TenantUpdateInput,
   });
 }
 

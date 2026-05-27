@@ -587,3 +587,85 @@ export async function requestTenantUploadUrl(
   const { uploadUrl } = await s3Service.generateUploadPresignedUrl(s3Key, contentType);
   return { uploadUrl, s3Key };
 }
+
+// ─── Autopay ─────────────────────────────────────────────────────────────────
+
+export async function getAutopayStatus(tenantId: string) {
+  const tenant = await prisma.tenant.findUnique({
+    where: { id: tenantId },
+    select: {
+      autopayEnabled: true,
+      stripeDefaultPaymentMethodId: true,
+    },
+  });
+  if (!tenant) throw new AppError(404, 'TENANT_NOT_FOUND', 'Tenant not found.');
+
+  return {
+    autopayEnabled: tenant.autopayEnabled,
+    hasPaymentMethod: !!tenant.stripeDefaultPaymentMethodId,
+  };
+}
+
+export async function setAutopay(tenantId: string, orgId: string, enabled: boolean) {
+  const tenant = await prisma.tenant.findUnique({
+    where: { id: tenantId },
+    select: {
+      id: true,
+      name: true,
+      email: true,
+      stripeCustomerId: true,
+      stripeDefaultPaymentMethodId: true,
+    },
+  });
+  if (!tenant) throw new AppError(404, 'TENANT_NOT_FOUND', 'Tenant not found.');
+
+  if (!enabled) {
+    await prisma.tenant.update({
+      where: { id: tenantId },
+      data: { autopayEnabled: false },
+    });
+    return { autopayEnabled: false, requiresSetup: false };
+  }
+
+  // Enabling autopay without a saved payment method — need to run setup flow
+  if (!tenant.stripeDefaultPaymentMethodId) {
+    const org = await prisma.organization.findUniqueOrThrow({
+      where: { id: orgId },
+      select: { stripeAccountId: true, stripeAccountStatus: true },
+    });
+    if (org.stripeAccountStatus !== 'active') {
+      throw new AppError(400, 'CONNECT_NOT_ACTIVE', 'Payments are not yet enabled. Please contact your property manager.');
+    }
+
+    const setupIntent = await stripeService.createAutopaySetupIntent({
+      tenantId: tenant.id,
+      tenantName: tenant.name,
+      tenantEmail: tenant.email,
+      orgId,
+      stripeAccountId: org.stripeAccountId!,
+      existingCustomerId: tenant.stripeCustomerId ?? undefined,
+    });
+
+    // Persist the customer ID if it was just created
+    if (setupIntent.customerId && setupIntent.customerId !== tenant.stripeCustomerId) {
+      await prisma.tenant.update({
+        where: { id: tenantId },
+        data: { stripeCustomerId: setupIntent.customerId },
+      });
+    }
+
+    return {
+      autopayEnabled: false,
+      requiresSetup: true,
+      setupIntentClientSecret: setupIntent.clientSecret,
+    };
+  }
+
+  // Already has a saved payment method — just toggle the flag
+  await prisma.tenant.update({
+    where: { id: tenantId },
+    data: { autopayEnabled: true },
+  });
+
+  return { autopayEnabled: true, requiresSetup: false };
+}
