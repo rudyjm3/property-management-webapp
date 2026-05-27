@@ -273,22 +273,24 @@ export default async function stripeWebhookHandler(req: Request, res: Response):
     return;
   }
 
-  // Acknowledge receipt immediately — Stripe marks an event failed if the endpoint
-  // doesn't respond within 30 s. Long DB operations must not block this response.
-  res.status(200).json({ received: true });
-
   if (!HANDLED_EVENTS.has(event.type)) {
     console.log(`[stripe-webhook] Ignored unhandled event type: ${event.type}`);
+    res.status(200).json({ received: true });
     return;
   }
 
-  // Process the event asynchronously after the response has been sent.
+  // Process synchronously before acknowledging so Stripe retries on transient failures.
+  // The idempotency guard (stripeEventId unique constraint) makes retries safe.
   const timeoutGuard = new Promise<never>((_, reject) =>
     setTimeout(() => reject(new Error(`Webhook handler timeout after ${HANDLER_TIMEOUT_MS}ms`)), HANDLER_TIMEOUT_MS)
   );
 
-  Promise.race([processStripeEvent(event), timeoutGuard]).catch((err) => {
+  try {
+    await Promise.race([processStripeEvent(event), timeoutGuard]);
+    res.status(200).json({ received: true });
+  } catch (err) {
     Sentry.captureException(err, { extra: { eventType: event.type, eventId: event.id } });
     console.error(`[stripe-webhook] Failed to process event ${event.type} (${event.id}):`, err);
-  });
+    res.status(500).json({ error: 'Webhook processing failed' });
+  }
 }

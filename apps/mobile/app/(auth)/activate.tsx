@@ -99,11 +99,12 @@ export default function ActivateScreen() {
     setLoading(true);
     setError(null);
     try {
-      // Exchange the OTP token for a live session
+      // Exchange the hashed token from generateLink() for a live session.
+      // generateLink returns a hashed_token (SHA-256 of the real token) which
+      // must be verified via token_hash, not as an email OTP token.
       const { error: otpError } = await supabase.auth.verifyOtp({
-        email: otpEmail,
-        token: otpToken,
-        type: 'email',
+        token_hash: otpToken,
+        type: 'magiclink',
       });
       if (otpError) {
         setError('Your invite link has expired. Please ask your property manager to resend the invite.');

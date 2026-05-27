@@ -272,7 +272,7 @@ export default function OnboardingPage() {
           <h1 style={{ fontSize: '28px', fontWeight: 700, color: 'var(--color-primary, #2563eb)' }}>
             PropFlow
           </h1>
-          <p style={{ color: 'var(--color-text-muted)', marginTop: '4px' }}>Let's get you set up</p>
+          <p style={{ color: 'var(--color-text-muted)', marginTop: '4px' }}>Let&apos;s get you set up</p>
         </div>
 
         <div style={{ marginBottom: '32px' }}>

@@ -16,12 +16,10 @@ export interface AuthTenant {
 }
 
 // Extend Express Request to carry auth context
-declare global {
-  namespace Express {
-    interface Request {
-      user?: AuthUser;
-      tenant?: AuthTenant;
-    }
+declare module 'express-serve-static-core' {
+  interface Request {
+    user?: AuthUser;
+    tenant?: AuthTenant;
   }
 }
 

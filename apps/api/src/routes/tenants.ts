@@ -70,8 +70,9 @@ async function sendInviteEmailOrFail(params: {
 }) {
   try {
     await sendTenantPortalInviteEmail(params);
-  } catch (err: any) {
-    throw new AppError(400, 'INVITE_EMAIL_FAILED', err?.message || 'Failed to send invite email.');
+  } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : 'Failed to send invite email.';
+    throw new AppError(400, 'INVITE_EMAIL_FAILED', message);
   }
 }
 

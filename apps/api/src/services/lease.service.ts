@@ -1,5 +1,5 @@
 import { prisma } from '@propflow/db';
-import { LeaseType } from '@prisma/client';
+import { LeaseType, SecurityDepositStatus } from '@prisma/client';
 import { AppError } from '../middleware/error-handler';
 import { CURRENT_LEASE_STATUSES } from '../constants';
 
@@ -387,7 +387,7 @@ export async function processMoveOut(
     throw new AppError(404, 'LEASE_NOT_FOUND', 'No lease found with that ID in your organization.');
   }
 
-  if (!CURRENT_LEASE_STATUSES.includes(existing.status as any)) {
+  if (!CURRENT_LEASE_STATUSES.includes(existing.status as typeof CURRENT_LEASE_STATUSES[number])) {
     throw new AppError(400, 'LEASE_NOT_ACTIVE', 'Only active leases can be moved out.');
   }
 
@@ -401,12 +401,12 @@ export async function processMoveOut(
 
   const returnAmount = Math.max(0, depositAmount - totalDeductions);
 
-  const securityDepositStatus =
+  const securityDepositStatus: SecurityDepositStatus =
     returnAmount <= 0
-      ? 'applied_to_balance'
+      ? SecurityDepositStatus.applied_to_balance
       : returnAmount < depositAmount
-        ? 'partial_return'
-        : 'full_return';
+        ? SecurityDepositStatus.partial_return
+        : SecurityDepositStatus.full_return;
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const deductionsJson: any = {
@@ -422,7 +422,7 @@ export async function processMoveOut(
       data: {
         status: 'terminated',
         moveOutDate: parsedMoveOutDate,
-        securityDepositStatus: securityDepositStatus as any,
+        securityDepositStatus,
         securityDepositReturnAmount: returnAmount,
         securityDepositReturnedAt: new Date(),
         securityDepositDeductions: deductionsJson,
