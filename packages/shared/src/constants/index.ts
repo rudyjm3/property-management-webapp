@@ -66,7 +66,7 @@ export const PAYMENT_TYPES = [
   'credit',
   'other',
 ] as const;
-export const PAYMENT_STATUSES = ['pending', 'completed', 'failed', 'waived', 'refunded'] as const;
+export const PAYMENT_STATUSES = ['pending', 'completed', 'failed', 'waived', 'refunded', 'voided'] as const;
 export const PAYMENT_METHODS = ['ach', 'card', 'check', 'cash', 'money_order', 'other'] as const;
 
 // ─── Work Order ───────────────────────────────────────────────────────────────

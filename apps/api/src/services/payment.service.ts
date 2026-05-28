@@ -270,6 +270,9 @@ export async function voidPayment(
   if (payment.status === 'refunded') {
     throw new AppError(400, 'PAYMENT_REFUNDED', 'Refunded payments cannot be voided. The refund is already the correction record.');
   }
+  if (payment.status !== 'completed' && payment.status !== 'waived') {
+    throw new AppError(400, 'PAYMENT_NOT_VOIDABLE', 'Only completed or waived payments can be voided. Delete pending payments instead.');
+  }
 
   return prisma.payment.update({
     where: { id: paymentId },
