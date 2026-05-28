@@ -20,6 +20,7 @@
     "@expo/metro-runtime": "~6.1.2",
     "@propflow/shared": "*",
     "@sentry/react-native": "^8.12.0",
+    "promise": "^8.3.0",
     "@stripe/stripe-react-native": "0.50.3",
     "@supabase/supabase-js": "^2.49.0",
     "@tanstack/react-query": "^5.0.0",
