@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { Suspense, useEffect, useMemo, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { api } from '@/lib/api';
 import { useAuth } from '@/contexts/AuthContext';
@@ -35,6 +35,14 @@ const PLAN_OPTIONS: Array<{
 type Step = 'org' | 'logo' | 'billing' | 'property' | 'done';
 
 export default function OnboardingPage() {
+  return (
+    <Suspense>
+      <OnboardingContent />
+    </Suspense>
+  );
+}
+
+function OnboardingContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const { profile, session, loading, refreshProfile } = useAuth();
