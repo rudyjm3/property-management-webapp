@@ -154,6 +154,69 @@ export default function DashboardPage() {
         </div>
       </div>
 
+      {/* Getting Started checklist — visible until the manager has at least one property */}
+      {!loading && !isMaintenance && portfolio?.totalProperties === 0 && (
+        <div
+          style={{
+            background: 'var(--color-primary-light, #eff6ff)',
+            border: '1px solid var(--color-primary, #2563eb)',
+            borderRadius: '10px',
+            padding: '20px 24px',
+            marginBottom: '32px',
+          }}
+        >
+          <h2 style={{ fontSize: '16px', fontWeight: 700, color: 'var(--color-primary)', marginBottom: '4px' }}>
+            Getting started
+          </h2>
+          <p style={{ fontSize: '13px', color: 'var(--color-text-muted)', marginBottom: '16px' }}>
+            Complete these steps to start managing your portfolio.
+          </p>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+            {[
+              { label: 'Add a property', href: '/properties', done: (portfolio?.totalProperties ?? 0) > 0 },
+              { label: 'Add units to your property', href: '/properties', done: (portfolio?.totalUnits ?? 0) > 0 },
+              { label: 'Add your first tenant', href: '/tenants', done: false },
+              { label: 'Create a lease', href: '/leases', done: (portfolio?.occupiedUnits ?? 0) > 0 },
+              { label: 'Log or collect a payment', href: '/payments', done: (paymentStats?.collectedThisMonth ?? 0) > 0 },
+            ].map((item) => (
+              <Link
+                key={item.href + item.label}
+                href={item.href}
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '10px',
+                  fontSize: '14px',
+                  color: item.done ? 'var(--color-text-muted)' : 'var(--color-text)',
+                  textDecoration: 'none',
+                  fontWeight: item.done ? 400 : 500,
+                }}
+              >
+                <span
+                  style={{
+                    width: '18px',
+                    height: '18px',
+                    borderRadius: '50%',
+                    border: item.done ? '2px solid var(--color-success)' : '2px solid var(--color-primary)',
+                    background: item.done ? 'var(--color-success)' : 'transparent',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    flexShrink: 0,
+                    fontSize: '10px',
+                    color: '#fff',
+                    fontWeight: 700,
+                  }}
+                >
+                  {item.done ? '✓' : ''}
+                </span>
+                <span style={{ textDecoration: item.done ? 'line-through' : 'none' }}>{item.label}</span>
+              </Link>
+            ))}
+          </div>
+        </div>
+      )}
+
       {/* Portfolio KPIs */}
       <div style={{ marginBottom: '8px' }}>
         <h2 style={{ fontSize: '14px', fontWeight: 600, color: 'var(--color-text-muted)', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: '12px' }}>

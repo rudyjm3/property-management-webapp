@@ -421,6 +421,8 @@ model Payment {
   checkNumber           String?       @map("check_number") @db.VarChar(50)
   referenceNote         String?       @map("reference_note") @db.VarChar(500)
   paidAt                DateTime?     @map("paid_at")
+  voidedAt              DateTime?     @map("voided_at")
+  voidReason            String?       @map("void_reason") @db.VarChar(500)
   dueDate               DateTime      @map("due_date") @db.Date
   periodStart           DateTime?     @map("period_start") @db.Date
   periodEnd             DateTime?     @map("period_end") @db.Date
@@ -460,6 +462,7 @@ enum PaymentStatus {
   failed
   waived
   refunded
+  voided
 }
 
 enum PaymentMethod {

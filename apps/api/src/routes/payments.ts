@@ -160,4 +160,22 @@ router.post('/:paymentId/cancel-ach', requireManagerAccess, async (req: Request,
   }
 });
 
+// POST /api/v1/organizations/:orgId/payments/:paymentId/void
+router.post('/:paymentId/void', requireManagerAccess, async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const { reason } = req.body as { reason?: string };
+    if (!reason || !reason.trim()) {
+      throw new AppError(400, 'VOID_REASON_REQUIRED', 'A reason is required to void a payment.');
+    }
+    const payment = await paymentService.voidPayment(
+      req.params.orgId as string,
+      req.params.paymentId as string,
+      reason
+    );
+    res.json({ data: payment });
+  } catch (err) {
+    next(err);
+  }
+});
+
 export default router;

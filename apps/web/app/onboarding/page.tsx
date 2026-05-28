@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { Suspense, useEffect, useMemo, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { api } from '@/lib/api';
 import { useAuth } from '@/contexts/AuthContext';
@@ -32,9 +32,17 @@ const PLAN_OPTIONS: Array<{
   { value: 'enterprise', label: 'Enterprise', subtitle: 'Large portfolios and custom operations' },
 ];
 
-type Step = 'org' | 'logo' | 'billing' | 'property';
+type Step = 'org' | 'logo' | 'billing' | 'property' | 'done';
 
 export default function OnboardingPage() {
+  return (
+    <Suspense>
+      <OnboardingContent />
+    </Suspense>
+  );
+}
+
+function OnboardingContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const { profile, session, loading, refreshProfile } = useAuth();
@@ -236,7 +244,7 @@ export default function OnboardingPage() {
         zip: propZip,
         type: propType,
       });
-      router.push('/dashboard');
+      setStep('done');
     } catch (err: any) {
       setPropError(err.message || 'Failed to create property. You can add it later.');
     } finally {
@@ -250,6 +258,7 @@ export default function OnboardingPage() {
       { key: 'logo', label: 'Branding' },
       { key: 'billing', label: 'Billing plan' },
       { key: 'property', label: 'First property' },
+      { key: 'done', label: 'All set' },
     ],
     []
   );
@@ -299,9 +308,12 @@ export default function OnboardingPage() {
         {step === 'org' && (
           <div className="card">
             <div className="card-body">
-              <h2 style={{ fontSize: '18px', fontWeight: 600, marginBottom: '20px' }}>
+              <h2 style={{ fontSize: '18px', fontWeight: 600, marginBottom: '6px' }}>
                 Tell us about yourself
               </h2>
+              <p style={{ fontSize: '13px', color: 'var(--color-text-muted)', marginBottom: '20px', lineHeight: '1.5' }}>
+                This creates your PropFlow organization. Your company name appears on tenant-facing emails and the tenant portal, so use your full business name.
+              </p>
 
               {orgError && (
                 <div
@@ -382,13 +394,11 @@ export default function OnboardingPage() {
         {step === 'logo' && (
           <div className="card">
             <div className="card-body">
-              <h2 style={{ fontSize: '18px', fontWeight: 600, marginBottom: '4px' }}>
+              <h2 style={{ fontSize: '18px', fontWeight: 600, marginBottom: '6px' }}>
                 Add your company logo
               </h2>
-              <p
-                style={{ fontSize: '14px', color: 'var(--color-text-muted)', marginBottom: '20px' }}
-              >
-                Optional. You can upload this now or do it later from organization settings.
+              <p style={{ fontSize: '13px', color: 'var(--color-text-muted)', marginBottom: '20px', lineHeight: '1.5' }}>
+                Your logo appears at the top of rent-reminder emails and on the tenant portal. A clear, square logo (PNG or JPG) works best. You can skip this and add it later in Settings &rsaquo; Organization.
               </p>
 
               {logoError && (
@@ -470,13 +480,11 @@ export default function OnboardingPage() {
         {step === 'billing' && (
           <div className="card">
             <div className="card-body">
-              <h2 style={{ fontSize: '18px', fontWeight: 600, marginBottom: '4px' }}>
+              <h2 style={{ fontSize: '18px', fontWeight: 600, marginBottom: '6px' }}>
                 Choose your billing plan
               </h2>
-              <p
-                style={{ fontSize: '14px', color: 'var(--color-text-muted)', marginBottom: '20px' }}
-              >
-                This sets your current plan tier. Payment method can be configured later.
+              <p style={{ fontSize: '13px', color: 'var(--color-text-muted)', marginBottom: '20px', lineHeight: '1.5' }}>
+                Pick the plan that fits your portfolio. You can upgrade or downgrade at any time from Settings &rsaquo; Billing. Your card won&rsquo;t be charged until your trial ends.
               </p>
 
               {billingError && (
@@ -560,13 +568,11 @@ export default function OnboardingPage() {
         {step === 'property' && (
           <div className="card">
             <div className="card-body">
-              <h2 style={{ fontSize: '18px', fontWeight: 600, marginBottom: '4px' }}>
+              <h2 style={{ fontSize: '18px', fontWeight: 600, marginBottom: '6px' }}>
                 Add your first property
               </h2>
-              <p
-                style={{ fontSize: '14px', color: 'var(--color-text-muted)', marginBottom: '20px' }}
-              >
-                You can add more properties anytime from the Properties page.
+              <p style={{ fontSize: '13px', color: 'var(--color-text-muted)', marginBottom: '20px', lineHeight: '1.5' }}>
+                A property is the top-level container for units and leases. Add the building address here, then create individual units (e.g. Unit 1A, Unit 2B) from the Properties page after setup. You can skip this and add properties later.
               </p>
 
               {propError && (
@@ -666,7 +672,7 @@ export default function OnboardingPage() {
                     type="button"
                     className="btn btn-secondary"
                     style={{ flex: 1, display: 'flex', justifyContent: 'center' }}
-                    onClick={() => router.push('/dashboard')}
+                    onClick={() => setStep('done')}
                   >
                     Skip for now
                   </button>
@@ -676,10 +682,86 @@ export default function OnboardingPage() {
                     style={{ flex: 1, display: 'flex', justifyContent: 'center' }}
                     disabled={propLoading}
                   >
-                    {propLoading ? 'Saving...' : 'Go to dashboard'}
+                    {propLoading ? 'Saving...' : 'Add property'}
                   </button>
                 </div>
               </form>
+            </div>
+          </div>
+        )}
+
+        {step === 'done' && (
+          <div className="card">
+            <div className="card-body" style={{ textAlign: 'center', padding: '40px 32px' }}>
+              <div style={{ fontSize: '48px', marginBottom: '16px' }}>🎉</div>
+              <h2 style={{ fontSize: '22px', fontWeight: 700, marginBottom: '8px' }}>
+                You&rsquo;re all set!
+              </h2>
+              <p style={{ fontSize: '14px', color: 'var(--color-text-muted)', marginBottom: '32px', lineHeight: '1.6' }}>
+                Your PropFlow account is ready. Here&rsquo;s what to do next to get up and running.
+              </p>
+
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', textAlign: 'left', marginBottom: '32px' }}>
+                {[
+                  { label: 'Add units to your property', href: '/properties', hint: 'Create individual unit records (e.g. 1A, 2B) inside each property.' },
+                  { label: 'Add your first tenant', href: '/tenants', hint: 'Create a tenant profile and send them a portal invite.' },
+                  { label: 'Create a lease', href: '/leases', hint: 'Link a unit, tenant, rent amount, and start/end dates.' },
+                  { label: 'Log or collect first payment', href: '/payments', hint: 'Record a manual payment or initiate an ACH direct debit.' },
+                ].map((item, i) => (
+                  <a
+                    key={item.href}
+                    href={item.href}
+                    style={{
+                      display: 'flex',
+                      alignItems: 'flex-start',
+                      gap: '12px',
+                      padding: '14px 16px',
+                      borderRadius: '8px',
+                      border: '1px solid var(--color-border)',
+                      textDecoration: 'none',
+                      background: 'var(--color-bg)',
+                      transition: 'border-color 0.15s',
+                    }}
+                    onMouseEnter={(e) => (e.currentTarget.style.borderColor = 'var(--color-primary)')}
+                    onMouseLeave={(e) => (e.currentTarget.style.borderColor = 'var(--color-border)')}
+                  >
+                    <span
+                      style={{
+                        width: '24px',
+                        height: '24px',
+                        borderRadius: '50%',
+                        background: 'var(--color-primary)',
+                        color: '#fff',
+                        fontSize: '12px',
+                        fontWeight: 700,
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        flexShrink: 0,
+                        marginTop: '1px',
+                      }}
+                    >
+                      {i + 1}
+                    </span>
+                    <div>
+                      <div style={{ fontSize: '14px', fontWeight: 600, color: 'var(--color-text)', marginBottom: '2px' }}>
+                        {item.label}
+                      </div>
+                      <div style={{ fontSize: '12px', color: 'var(--color-text-muted)' }}>
+                        {item.hint}
+                      </div>
+                    </div>
+                  </a>
+                ))}
+              </div>
+
+              <button
+                className="btn btn-primary"
+                style={{ width: '100%', display: 'flex', justifyContent: 'center' }}
+                onClick={() => router.push('/dashboard')}
+              >
+                Go to dashboard
+              </button>
             </div>
           </div>
         )}
