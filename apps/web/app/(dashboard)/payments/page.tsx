@@ -17,6 +17,8 @@ interface Payment {
   dueDate: string;
   paidAt: string | null;
   notes: string | null;
+  voidedAt: string | null;
+  voidReason: string | null;
   isLate: boolean;
   lateFeeApplied: boolean;
   createdAt: string;
@@ -54,6 +56,7 @@ const STATUS_COLORS: Record<string, string> = {
   failed: 'badge-danger',
   waived: 'badge-vacant',
   refunded: 'badge-danger',
+  voided: 'badge-muted',
 };
 
 const TYPE_LABELS: Record<string, string> = {
@@ -75,7 +78,7 @@ const METHOD_LABELS: Record<string, string> = {
   other: 'Other',
 };
 
-const FILTER_STATUSES = ['', 'pending', 'completed', 'failed', 'waived', 'refunded'];
+const FILTER_STATUSES = ['', 'pending', 'completed', 'failed', 'waived', 'refunded', 'voided'];
 const FILTER_TYPES = [
   '',
   'rent',
@@ -151,6 +154,12 @@ export default function PaymentsPage() {
   const [editDueDate, setEditDueDate] = useState('');
   const [editSubmitting, setEditSubmitting] = useState(false);
   const [editError, setEditError] = useState('');
+
+  // Void modal state
+  const [voidPayment, setVoidPayment] = useState<Payment | null>(null);
+  const [voidReason, setVoidReason] = useState('');
+  const [voidSubmitting, setVoidSubmitting] = useState(false);
+  const [voidError, setVoidError] = useState('');
 
   // Log Payment form options
   const [leaseOptions, setLeaseOptions] = useState<LeaseOption[]>([]);
@@ -425,6 +434,38 @@ export default function PaymentsPage() {
       loadPayments();
     } catch (err) {
       console.error('Failed to delete payment:', err);
+    }
+  }
+
+  function openVoidModal(payment: Payment) {
+    setVoidPayment(payment);
+    setVoidReason('');
+    setVoidError('');
+  }
+
+  function closeVoidModal() {
+    setVoidPayment(null);
+    setVoidReason('');
+    setVoidError('');
+  }
+
+  async function handleVoidSubmit(e: React.FormEvent) {
+    e.preventDefault();
+    if (!voidPayment) return;
+    if (!voidReason.trim()) {
+      setVoidError('A reason is required.');
+      return;
+    }
+    setVoidSubmitting(true);
+    setVoidError('');
+    try {
+      await api.payments.void(voidPayment.id, voidReason);
+      closeVoidModal();
+      loadPayments();
+    } catch (err: unknown) {
+      setVoidError(err instanceof Error ? err.message : 'Failed to void payment.');
+    } finally {
+      setVoidSubmitting(false);
     }
   }
 
@@ -806,6 +847,23 @@ export default function PaymentsPage() {
                           >
                             {payment.status}
                           </span>
+                          {payment.status === 'voided' && payment.voidReason && (
+                            <span
+                              title={payment.voidReason}
+                              style={{
+                                fontSize: '11px',
+                                color: 'var(--color-text-muted)',
+                                maxWidth: '120px',
+                                overflow: 'hidden',
+                                textOverflow: 'ellipsis',
+                                whiteSpace: 'nowrap',
+                                display: 'block',
+                                cursor: 'help',
+                              }}
+                            >
+                              {payment.voidReason}
+                            </span>
+                          )}
                           {payment.status === 'pending' && payment.stripePaymentIntentId && (
                             <span
                               style={{
@@ -851,19 +909,32 @@ export default function PaymentsPage() {
                               Cancel ACH
                             </button>
                           )}
-                          <button
-                            className="btn btn-sm btn-secondary"
-                            onClick={() => openEditModal(payment)}
-                          >
-                            Edit
-                          </button>
-                          <button
-                            className="btn btn-sm btn-secondary"
-                            style={{ color: 'var(--color-danger)' }}
-                            onClick={() => handleDelete(payment.id)}
-                          >
-                            Delete
-                          </button>
+                          {payment.status !== 'voided' && (
+                            <button
+                              className="btn btn-sm btn-secondary"
+                              onClick={() => openEditModal(payment)}
+                            >
+                              Edit
+                            </button>
+                          )}
+                          {(payment.status === 'completed' || payment.status === 'waived') && (
+                            <button
+                              className="btn btn-sm btn-secondary"
+                              style={{ color: 'var(--color-danger)' }}
+                              onClick={() => openVoidModal(payment)}
+                            >
+                              Void
+                            </button>
+                          )}
+                          {payment.status === 'pending' && (
+                            <button
+                              className="btn btn-sm btn-secondary"
+                              style={{ color: 'var(--color-danger)' }}
+                              onClick={() => handleDelete(payment.id)}
+                            >
+                              Delete
+                            </button>
+                          )}
                         </div>
                       </td>
                     </tr>
@@ -1220,6 +1291,67 @@ export default function PaymentsPage() {
                 </button>
                 <button type="submit" className="btn btn-primary" disabled={editSubmitting}>
                   {editSubmitting ? 'Saving…' : 'Save Changes'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Void Payment Modal */}
+      {voidPayment && (
+        <div className="modal-overlay" onClick={closeVoidModal}>
+          <div className="modal" onClick={(e) => e.stopPropagation()} style={{ maxWidth: '440px' }}>
+            <div className="modal-header">
+              <h2>Void Payment</h2>
+              <button className="btn btn-sm btn-secondary" onClick={closeVoidModal}>X</button>
+            </div>
+            <form onSubmit={handleVoidSubmit}>
+              <div className="modal-body">
+                <div
+                  style={{
+                    background: '#fef9c3',
+                    border: '1px solid #fde68a',
+                    borderRadius: '6px',
+                    padding: '12px',
+                    marginBottom: '16px',
+                    fontSize: '13px',
+                    color: '#92400e',
+                  }}
+                >
+                  <strong>This action cannot be undone.</strong> Voiding marks the payment as reversed and keeps a permanent record in the audit trail. The payment will remain visible with a &ldquo;voided&rdquo; status.
+                </div>
+                <div style={{ marginBottom: '12px', fontSize: '14px', color: 'var(--color-text-muted)' }}>
+                  <strong>{voidPayment.tenant.name}</strong> &mdash; ${Number(voidPayment.amount).toLocaleString()} {TYPE_LABELS[voidPayment.type] ?? voidPayment.type}
+                </div>
+                {voidError && (
+                  <div style={{ color: 'var(--color-danger)', marginBottom: '12px', fontSize: '14px' }}>
+                    {voidError}
+                  </div>
+                )}
+                <div className="form-group">
+                  <label>Reason for voiding *</label>
+                  <textarea
+                    value={voidReason}
+                    onChange={(e) => setVoidReason(e.target.value)}
+                    placeholder="e.g. Duplicate entry, incorrect amount, tenant overpayment adjustment…"
+                    rows={3}
+                    required
+                    style={{ width: '100%', resize: 'vertical' }}
+                  />
+                </div>
+              </div>
+              <div className="modal-footer">
+                <button type="button" className="btn btn-secondary" onClick={closeVoidModal}>
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  className="btn btn-primary"
+                  disabled={voidSubmitting}
+                  style={{ background: 'var(--color-danger)', borderColor: 'var(--color-danger)' }}
+                >
+                  {voidSubmitting ? 'Voiding…' : 'Void Payment'}
                 </button>
               </div>
             </form>

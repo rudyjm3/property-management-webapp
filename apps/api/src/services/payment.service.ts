@@ -254,3 +254,30 @@ export async function deletePayment(organizationId: string, paymentId: string) {
     data: { deletedAt: new Date() },
   });
 }
+
+// ─── Void ─────────────────────────────────────────────────────────────────────
+
+export async function voidPayment(
+  organizationId: string,
+  paymentId: string,
+  reason: string
+) {
+  const payment = await getPayment(organizationId, paymentId);
+
+  if (payment.status === 'voided') {
+    throw new AppError(400, 'PAYMENT_ALREADY_VOIDED', 'This payment has already been voided.');
+  }
+  if (payment.status === 'refunded') {
+    throw new AppError(400, 'PAYMENT_REFUNDED', 'Refunded payments cannot be voided. The refund is already the correction record.');
+  }
+
+  return prisma.payment.update({
+    where: { id: paymentId },
+    data: {
+      status: 'voided',
+      voidedAt: new Date(),
+      voidReason: reason.trim(),
+    },
+    include: paymentInclude,
+  });
+}

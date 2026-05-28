@@ -282,6 +282,11 @@ export const api = {
         `/api/v1/organizations/${_orgId}/payments/${paymentId}/cancel-ach`,
         { method: 'POST' }
       ),
+    void: (paymentId: string, reason: string) =>
+      apiFetch<any>(
+        `/api/v1/organizations/${_orgId}/payments/${paymentId}/void`,
+        { method: 'POST', body: JSON.stringify({ reason }) }
+      ),
   },
   units: {
     list: (propertyId: string) =>
