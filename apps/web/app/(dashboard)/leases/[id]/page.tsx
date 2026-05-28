@@ -1185,7 +1185,7 @@ export default function LeaseDetailPage() {
             </div>
             <div className="modal-body">
               <p style={{ fontSize: '13px', lineHeight: '1.6', color: '#374151', marginBottom: '16px' }}>
-                By typing your full name and clicking "Sign," you are electronically signing this lease agreement. Your signature, timestamp, and IP address will be recorded. This is legally binding under ESIGN/UETA.
+                By typing your full name and clicking &quot;Sign,&quot; you are electronically signing this lease agreement. Your signature, timestamp, and IP address will be recorded. This is legally binding under ESIGN/UETA.
               </p>
               <div className="form-group">
                 <label>Type your full legal name *</label>

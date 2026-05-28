@@ -9,7 +9,7 @@ export default function LeaseSignedPage() {
         </div>
         <h1 style={{ margin: '0 0 8px', fontSize: '20px', fontWeight: 700, color: '#111827' }}>Lease signed!</h1>
         <p style={{ margin: 0, fontSize: '15px', lineHeight: '1.6', color: '#6b7280' }}>
-          Your signature has been recorded. The property manager will countersign the lease and you'll receive an email confirmation once it's fully executed.
+          Your signature has been recorded. The property manager will countersign the lease and you&apos;ll receive an email confirmation once it&apos;s fully executed.
         </p>
       </div>
     </div>

@@ -221,7 +221,7 @@ export default function ApplicationsPage() {
               ) : (
                 <div>
                   <p style={{ fontSize: '14px', color: '#374151', marginBottom: '12px' }}>
-                    Share this link with prospective tenants. It's unique to the selected unit.
+                    Share this link with prospective tenants. It&apos;s unique to the selected unit.
                   </p>
                   <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
                     <input

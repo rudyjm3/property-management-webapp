@@ -171,7 +171,7 @@ export default function SignLeasePage() {
         <div style={{ background: '#fff', border: '1px solid #e5e7eb', borderRadius: '8px', padding: '20px 24px', marginBottom: '16px' }}>
           <h2 style={{ margin: '0 0 12px', fontSize: '15px', fontWeight: 600 }}>Electronic Signature Disclosure</h2>
           <p style={{ margin: 0, fontSize: '13px', lineHeight: '1.6', color: '#374151' }}>
-            By typing your full legal name below and clicking "Sign Lease Agreement," you agree that your electronic signature is the legal equivalent of your manual signature on this lease agreement. This signature is binding under the Electronic Signatures in Global and National Commerce Act (ESIGN) and the Uniform Electronic Transactions Act (UETA). Your signature, timestamp, and IP address will be recorded.
+            By typing your full legal name below and clicking &quot;Sign Lease Agreement,&quot; you agree that your electronic signature is the legal equivalent of your manual signature on this lease agreement. This signature is binding under the Electronic Signatures in Global and National Commerce Act (ESIGN) and the Uniform Electronic Transactions Act (UETA). Your signature, timestamp, and IP address will be recorded.
           </p>
         </div>
 

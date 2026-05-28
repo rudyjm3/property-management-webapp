@@ -1,4 +1,5 @@
 import { prisma } from '@propflow/db';
+import { AppError } from '../middleware/error-handler';
 import { sendLeaseSignedByTenant, sendLeaseFullySigned } from './application-email.service';
 
 const APP_URL = process.env.APP_URL ?? 'http://localhost:3000';
@@ -46,7 +47,7 @@ export async function getSigningContext(signingToken: string) {
     },
   });
 
-  if (!lease) throw Object.assign(new Error('Signing link not found or invalid.'), { status: 404 });
+  if (!lease) throw new AppError(404, 'SIGNING_LINK_NOT_FOUND', 'Signing link not found or invalid.');
 
   return {
     leaseId: lease.id,
@@ -112,8 +113,8 @@ export async function tenantSignLease(signingToken: string, signatureName: strin
     },
   });
 
-  if (!lease) throw Object.assign(new Error('Signing link not found.'), { status: 404 });
-  if (lease.tenantSignedAt) throw Object.assign(new Error('Lease has already been signed.'), { status: 409 });
+  if (!lease) throw new AppError(404, 'SIGNING_LINK_NOT_FOUND', 'Signing link not found.');
+  if (lease.tenantSignedAt) throw new AppError(409, 'ALREADY_SIGNED', 'Lease has already been signed.');
 
   const now = new Date();
   const newEsigStatus = lease.managerSignedAt ? 'completed' : 'partially_signed';
@@ -193,8 +194,8 @@ export async function managerSignLease(
     },
   });
 
-  if (!lease) throw Object.assign(new Error('Lease not found.'), { status: 404 });
-  if (lease.managerSignedAt) throw Object.assign(new Error('Lease has already been countersigned.'), { status: 409 });
+  if (!lease) throw new AppError(404, 'LEASE_NOT_FOUND', 'Lease not found.');
+  if (lease.managerSignedAt) throw new AppError(409, 'ALREADY_SIGNED', 'Lease has already been countersigned.');
 
   const now = new Date();
   const newEsigStatus = lease.tenantSignedAt ? 'completed' : 'partially_signed';

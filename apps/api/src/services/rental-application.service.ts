@@ -1,5 +1,6 @@
-import { prisma, Prisma } from '@propflow/db';
+import { prisma, Prisma, IncomeSource, RentalApplicationStatus } from '@propflow/db';
 import { randomUUID } from 'crypto';
+import { AppError } from '../middleware/error-handler';
 import {
   sendApplicationReceivedNotification,
   sendApplicationConfirmation,
@@ -18,7 +19,7 @@ export async function createApplicationLink(orgId: string, unitId: string) {
     where: { id: unitId, property: { organizationId: orgId } },
     select: { id: true, unitNumber: true, property: { select: { organizationId: true } } },
   });
-  if (!unit) throw Object.assign(new Error('Unit not found.'), { status: 404 });
+  if (!unit) throw new AppError(404, 'UNIT_NOT_FOUND', 'Unit not found.');
 
   const token = randomUUID();
   const application = await prisma.rentalApplication.create({
@@ -68,7 +69,7 @@ export async function getApplicationContext(token: string) {
     },
   });
 
-  if (!app) throw Object.assign(new Error('Application link not found.'), { status: 404 });
+  if (!app) throw new AppError(404, 'APPLICATION_NOT_FOUND', 'Application link not found.');
 
   return {
     id: app.id,
@@ -139,8 +140,8 @@ export async function submitApplication(
     },
   });
 
-  if (!app) throw Object.assign(new Error('Application link not found.'), { status: 404 });
-  if (app.submittedAt) throw Object.assign(new Error('This application has already been submitted.'), { status: 409 });
+  if (!app) throw new AppError(404, 'APPLICATION_NOT_FOUND', 'Application link not found.');
+  if (app.submittedAt) throw new AppError(409, 'ALREADY_SUBMITTED', 'This application has already been submitted.');
 
   const updated = await prisma.rentalApplication.update({
     where: { id: app.id },
@@ -154,7 +155,7 @@ export async function submitApplication(
       employerName: data.employerName ?? null,
       employerPhone: data.employerPhone ?? null,
       monthlyGrossIncome: data.monthlyGrossIncome ?? null,
-      incomeSource: (data.incomeSource as any) ?? null,
+      incomeSource: (data.incomeSource as IncomeSource | undefined) ?? null,
       occupantCount: data.occupantCount,
       pets: (data.pets ?? Prisma.JsonNull) as Prisma.InputJsonValue,
       vehicles: (data.vehicles ?? Prisma.JsonNull) as Prisma.InputJsonValue,
@@ -194,8 +195,8 @@ export async function listApplications(
   orgId: string,
   filters: { status?: string; search?: string; cursor?: string; limit: number },
 ) {
-  const where: any = { organizationId: orgId };
-  if (filters.status) where.status = filters.status;
+  const where: Prisma.RentalApplicationWhereInput = { organizationId: orgId };
+  if (filters.status) where.status = filters.status as RentalApplicationStatus;
   if (filters.search) {
     where.OR = [
       { applicantName: { contains: filters.search, mode: 'insensitive' } },
@@ -244,7 +245,7 @@ export async function getApplication(orgId: string, id: string) {
       },
     },
   });
-  if (!app) throw Object.assign(new Error('Application not found.'), { status: 404 });
+  if (!app) throw new AppError(404, 'APPLICATION_NOT_FOUND', 'Application not found.');
   return app;
 }
 
@@ -268,14 +269,7 @@ export async function reviewApplication(
         include: {
           property: {
             include: {
-              organization: {
-                include: {
-                  users: {
-                    where: { status: 'active', role: { in: ['owner', 'manager'] } },
-                    select: { email: true },
-                  },
-                },
-              },
+              organization: { select: { name: true } },
             },
           },
         },
@@ -283,23 +277,19 @@ export async function reviewApplication(
     },
   });
 
-  if (!app) throw Object.assign(new Error('Application not found.'), { status: 404 });
+  if (!app) throw new AppError(404, 'APPLICATION_NOT_FOUND', 'Application not found.');
   if (app.status === 'approved' || app.status === 'denied') {
-    throw Object.assign(new Error('Application has already been reviewed.'), { status: 409 });
+    throw new AppError(409, 'ALREADY_REVIEWED', 'Application has already been reviewed.');
   }
   if (!app.submittedAt) {
-    throw Object.assign(new Error('Application has not been submitted yet.'), { status: 409 });
+    throw new AppError(409, 'NOT_SUBMITTED', 'Application has not been submitted yet.');
   }
 
   const display = unitDisplay(app.unit);
-  const managerEmails = app.unit.property.organization.users.map((u) => u.email);
 
   if (data.status === 'approved') {
     if (!data.leaseStartDate || !data.leaseEndDate || !data.rentAmount) {
-      throw Object.assign(
-        new Error('leaseStartDate, leaseEndDate, and rentAmount are required when approving.'),
-        { status: 400 },
-      );
+      throw new AppError(400, 'MISSING_FIELDS', 'leaseStartDate, leaseEndDate, and rentAmount are required when approving.');
     }
 
     // Create tenant record from application data
