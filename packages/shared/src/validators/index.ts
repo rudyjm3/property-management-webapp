@@ -20,6 +20,7 @@ import {
   DOCUMENT_ENTITY_TYPES,
   DOCUMENT_CATEGORIES,
   LEDGER_ENTRY_TYPES,
+  RENTAL_APPLICATION_STATUSES,
 } from '../constants';
 
 // ─── Organization ─────────────────────────────────────────────────────────────
@@ -346,6 +347,62 @@ export const listLedgerFiltersSchema = z.object({
   type: z.enum(LEDGER_ENTRY_TYPES).optional(),
   cursor: z.string().optional(),
   limit: z.coerce.number().int().min(1).max(100).default(25),
+});
+
+// ─── Rental Application ───────────────────────────────────────────────────────
+
+export const submitApplicationSchema = z.object({
+  applicantName: z.string().min(1).max(200),
+  applicantEmail: z.string().email(),
+  applicantPhone: z.string().max(20).nullable().optional(),
+  dateOfBirth: z.string().date().nullable().optional(),
+  currentAddress: z.string().max(500).nullable().optional(),
+  previousAddress: z.string().max(500).nullable().optional(),
+  employerName: z.string().max(200).nullable().optional(),
+  employerPhone: z.string().max(20).nullable().optional(),
+  monthlyGrossIncome: z.number().positive().nullable().optional(),
+  incomeSource: z.enum(INCOME_SOURCES).nullable().optional(),
+  occupantCount: z.number().int().min(1).default(1),
+  pets: z.array(z.object({
+    type: z.string(),
+    breed: z.string(),
+    weight: z.number(),
+    name: z.string(),
+  })).nullable().optional(),
+  vehicles: z.array(z.object({
+    make: z.string(),
+    model: z.string(),
+    color: z.string(),
+    plate: z.string(),
+    state: z.string().length(2),
+  })).nullable().optional(),
+  emergencyContactName: z.string().max(200).nullable().optional(),
+  emergencyContactPhone: z.string().max(20).nullable().optional(),
+  consentGiven: z.literal(true, { errorMap: () => ({ message: 'You must agree to the authorization statement.' }) }),
+});
+
+export const reviewApplicationSchema = z.object({
+  status: z.enum(['approved', 'denied'] as const),
+  reviewNotes: z.string().max(2000).nullable().optional(),
+  leaseStartDate: z.string().date().optional(),
+  leaseEndDate: z.string().date().optional(),
+  rentAmount: z.number().positive().optional(),
+  depositAmount: z.number().min(0).optional(),
+});
+
+export const listApplicationsSchema = z.object({
+  status: z.enum(RENTAL_APPLICATION_STATUSES).optional(),
+  search: z.string().max(200).optional(),
+  cursor: z.string().optional(),
+  limit: z.coerce.number().int().min(1).max(100).default(25),
+});
+
+export const generateApplicationLinkSchema = z.object({
+  unitId: z.string().uuid(),
+});
+
+export const signLeaseSchema = z.object({
+  signatureName: z.string().min(1).max(200),
 });
 
 // ─── Pagination ───────────────────────────────────────────────────────────────

@@ -239,6 +239,11 @@ export const api = {
           method: 'PATCH',
         }
       ),
+    sign: (leaseId: string, signatureName: string) =>
+      apiFetch<{ esignatureStatus: string }>(
+        `/api/v1/organizations/${_orgId}/leases/${leaseId}/sign`,
+        { method: 'POST', body: JSON.stringify({ signatureName }) },
+      ),
   },
   payments: {
     list: (params?: {
@@ -522,5 +527,47 @@ export const api = {
       }>(`/api/v1/organizations/${_orgId}/connect/sync`, {
         method: 'POST',
       }),
+  },
+
+  applications: {
+    generateLink: (unitId: string) =>
+      apiFetch<{ id: string; token: string; url: string }>(
+        `/api/v1/organizations/${_orgId}/application-links`,
+        { method: 'POST', body: JSON.stringify({ unitId }) },
+      ),
+
+    list: (params?: { status?: string; search?: string; cursor?: string }) => {
+      const qs = new URLSearchParams();
+      if (params?.status) qs.set('status', params.status);
+      if (params?.search) qs.set('search', params.search);
+      if (params?.cursor) qs.set('cursor', params.cursor);
+      const q = qs.toString();
+      return apiFetch<{ data: any[]; nextCursor: string | null }>(
+        `/api/v1/organizations/${_orgId}/applications${q ? `?${q}` : ''}`,
+      );
+    },
+
+    get: (id: string) =>
+      apiFetch<any>(`/api/v1/organizations/${_orgId}/applications/${id}`),
+
+    review: (
+      id: string,
+      data: {
+        status: 'approved' | 'denied';
+        reviewNotes?: string | null;
+        leaseStartDate?: string;
+        leaseEndDate?: string;
+        rentAmount?: number;
+        depositAmount?: number;
+      },
+    ) =>
+      apiFetch<any>(`/api/v1/organizations/${_orgId}/applications/${id}/review`, {
+        method: 'PATCH',
+        body: JSON.stringify(data),
+      }),
+
+    pendingCount: () =>
+      apiFetch<{ count: number }>(`/api/v1/organizations/${_orgId}/applications?status=pending&limit=1`)
+        .then((r: any) => (r.data?.length ?? 0)),
   },
 };

@@ -18,6 +18,9 @@ import connectRoutes from './connect';
 import ledgerRoutes from './ledger';
 import billingRoutes from './billing';
 import tenantPortalRoutes from './tenants-portal';
+import applicationRoutes from './applications';
+import applyRoutes from './apply';
+import signRoutes from './sign';
 
 const router = Router();
 
@@ -26,6 +29,12 @@ router.use('/auth', authRoutes);
 
 // Invite activation routes — public, rate-limited
 router.use('/invite', inviteRoutes);
+
+// Public application form routes — rate-limited, no auth
+router.use('/apply', applyRoutes);
+
+// Public lease signing routes — rate-limited, no auth
+router.use('/sign', signRoutes);
 
 // Cron-trigger notification jobs (CRON_SECRET only, no user JWT)
 router.use('/organizations/:orgId/notifications/jobs', notificationJobRoutes);
@@ -47,6 +56,8 @@ router.use('/organizations/:orgId/messages', requireAuth, requireOrg, messageRou
 router.use('/organizations/:orgId/connect', requireAuth, requireOrg, connectRoutes);
 router.use('/organizations/:orgId/ledger', requireAuth, requireOrg, ledgerRoutes);
 router.use('/organizations/:orgId/billing', requireAuth, requireOrg, billingRoutes);
+// Application links, application review, and manager lease signing
+router.use('/organizations/:orgId', requireAuth, requireOrg, applicationRoutes);
 
 // Tenant portal routes — protected by tenant auth (separate from manager auth)
 router.use('/tenant', requireTenantAuth, tenantPortalRoutes);

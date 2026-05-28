@@ -32,14 +32,15 @@ model Organization {
   createdAt            DateTime           @default(now()) @map("created_at")
   updatedAt            DateTime           @updatedAt @map("updated_at")
 
-  users         User[]
-  properties    Property[]
-  tenants       Tenant[]
-  vendors       Vendor[]
-  messages      Message[]
-  documents     Document[]
-  notifications Notification[]
-  ledgerEntries LedgerEntry[]
+  users               User[]
+  properties          Property[]
+  tenants             Tenant[]
+  vendors             Vendor[]
+  messages            Message[]
+  documents           Document[]
+  notifications       Notification[]
+  ledgerEntries       LedgerEntry[]
+  rentalApplications  RentalApplication[]
 
   @@map("organizations")
 }
@@ -184,10 +185,11 @@ model Unit {
   createdAt            DateTime   @default(now()) @map("created_at")
   updatedAt            DateTime   @updatedAt @map("updated_at")
 
-  property   Property    @relation(fields: [propertyId], references: [id])
-  leases     Lease[]
-  workOrders WorkOrder[]
-  messages   Message[]
+  property            Property            @relation(fields: [propertyId], references: [id])
+  leases              Lease[]
+  workOrders          WorkOrder[]
+  messages            Message[]
+  rentalApplications  RentalApplication[]
 
   @@unique([propertyId, unitNumber])
   @@index([propertyId])
@@ -283,6 +285,63 @@ model Tenant {
   @@map("tenants")
 }
 
+// ─── Rental Application ───────────────────────────────────────────────────────
+
+model RentalApplication {
+  id             String                   @id @default(uuid())
+  organizationId String                   @map("organization_id")
+  unitId         String                   @map("unit_id")
+  token          String                   @unique @db.VarChar(36)
+  status         RentalApplicationStatus  @default(pending)
+  // Applicant info
+  applicantName        String             @map("applicant_name") @db.VarChar(200)
+  applicantEmail       String             @map("applicant_email") @db.VarChar(320)
+  applicantPhone       String?            @map("applicant_phone") @db.VarChar(20)
+  dateOfBirth          DateTime?          @map("date_of_birth") @db.Date
+  currentAddress       String?            @map("current_address") @db.VarChar(500)
+  previousAddress      String?            @map("previous_address") @db.VarChar(500)
+  // Employment
+  employerName         String?            @map("employer_name") @db.VarChar(200)
+  employerPhone        String?            @map("employer_phone") @db.VarChar(20)
+  monthlyGrossIncome   Decimal?           @map("monthly_gross_income") @db.Decimal(10, 2)
+  incomeSource         IncomeSource?      @map("income_source")
+  // Household
+  occupantCount        Int                @default(1) @map("occupant_count")
+  pets                 Json?
+  vehicles             Json?
+  // Emergency contact
+  emergencyContactName  String?           @map("emergency_contact_name") @db.VarChar(200)
+  emergencyContactPhone String?           @map("emergency_contact_phone") @db.VarChar(20)
+  // Consent
+  consentGiven         Boolean            @default(false) @map("consent_given")
+  consentIp            String?            @map("consent_ip") @db.VarChar(45)
+  consentAt            DateTime?          @map("consent_at")
+  // Review
+  reviewNotes          String?            @map("review_notes")
+  reviewedAt           DateTime?          @map("reviewed_at")
+  reviewedByUserId     String?            @map("reviewed_by_user_id")
+  createdTenantId      String?            @map("created_tenant_id")
+  submittedAt          DateTime?          @map("submitted_at")
+  createdAt            DateTime           @default(now()) @map("created_at")
+  updatedAt            DateTime           @updatedAt @map("updated_at")
+
+  organization Organization @relation(fields: [organizationId], references: [id])
+  unit         Unit         @relation(fields: [unitId], references: [id])
+
+  @@index([organizationId])
+  @@index([unitId])
+  @@index([token])
+  @@map("rental_applications")
+}
+
+enum RentalApplicationStatus {
+  pending
+  under_review
+  approved
+  denied
+  withdrawn
+}
+
 enum PreferredContact {
   email
   sms
@@ -347,6 +406,11 @@ model Lease {
   esignatureStatus            EsignatureStatus      @default(pending) @map("esignature_status")
   tenantSignedAt              DateTime?             @map("tenant_signed_at")
   managerSignedAt             DateTime?             @map("manager_signed_at")
+  signingToken                String?               @unique @map("signing_token") @db.VarChar(36)
+  tenantSignatureName         String?               @map("tenant_signature_name") @db.VarChar(200)
+  managerSignatureName        String?               @map("manager_signature_name") @db.VarChar(200)
+  tenantSignatureIp           String?               @map("tenant_signature_ip") @db.VarChar(45)
+  managerSignatureIp          String?               @map("manager_signature_ip") @db.VarChar(45)
   renewalOfLeaseId            String?               @map("renewal_of_lease_id")
   notes                       String?
   createdAt                   DateTime              @default(now()) @map("created_at")
