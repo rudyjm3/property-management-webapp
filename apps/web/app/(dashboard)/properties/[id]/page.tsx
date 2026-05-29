@@ -1,11 +1,12 @@
 'use client';
 
-import { useEffect, useState } from 'react';
-import { useParams } from 'next/navigation';
+import { useEffect, useState, useMemo } from 'react';
+import { useParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { api } from '@/lib/api';
 import DocumentPanel from '@/components/DocumentPanel';
 import { useAuth } from '@/contexts/AuthContext';
+import BulkCreateModal from './BulkCreateModal';
 
 const UNIT_TYPE_LABELS: Record<string, string> = {
   studio: 'Studio',
@@ -34,6 +35,7 @@ interface Unit {
   marketRent: string | null;
   rentAmount: string;
   status: string;
+  address: string | null;
   leases: Array<{
     participants: Array<{
       isPrimary: boolean;
@@ -58,17 +60,46 @@ interface PropertyDetail {
 
 export default function PropertyDetailPage() {
   const params = useParams();
+  const router = useRouter();
   const propertyId = params.id as string;
   const { profile } = useAuth();
   const isMaintenance = profile?.role === 'maintenance';
+
   const [property, setProperty] = useState<PropertyDetail | null>(null);
   const [loading, setLoading] = useState(true);
   const [showAddUnit, setShowAddUnit] = useState(false);
   const [showEditProperty, setShowEditProperty] = useState(false);
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
+  const [deleting, setDeleting] = useState(false);
+  const [showBulkCreate, setShowBulkCreate] = useState(false);
+
+  // Filter state
+  const [unitSearch, setUnitSearch] = useState('');
+  const [filterStatus, setFilterStatus] = useState('');
+  const [filterBedrooms, setFilterBedrooms] = useState('');
+  const [filterBathrooms, setFilterBathrooms] = useState('');
+  const [filterSqFtMin, setFilterSqFtMin] = useState('');
+  const [filterSqFtMax, setFilterSqFtMax] = useState('');
+  const [filterType, setFilterType] = useState('');
+  const [filterAddress, setFilterAddress] = useState('');
+
+  // Pagination
+  const [currentPage, setCurrentPage] = useState(1);
+  const [pageSize, setPageSize] = useState<number | 'all'>(20);
+
+  // View toggle
+  const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
 
   useEffect(() => {
     loadProperty();
   }, [propertyId]);
+
+  // Reset to page 1 whenever any filter or page size changes
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [filterStatus, filterType, filterBedrooms, filterBathrooms,
+      filterSqFtMin, filterSqFtMax, filterAddress, unitSearch, pageSize]);
 
   async function loadProperty() {
     try {
@@ -126,6 +157,77 @@ export default function PropertyDetailPage() {
     }
   }
 
+  async function handleDeleteProperty() {
+    setDeleting(true);
+    setDeleteError(null);
+    try {
+      await api.properties.delete(propertyId);
+      router.push('/properties');
+    } catch (err: any) {
+      const msg = err?.message ?? 'Failed to delete property';
+      if (msg.toLowerCase().includes('unit')) {
+        setDeleteError('This property still has units. Remove all units before deleting.');
+      } else {
+        setDeleteError(msg);
+      }
+      setDeleting(false);
+    }
+  }
+
+  function clearAllFilters() {
+    setUnitSearch('');
+    setFilterStatus('');
+    setFilterBedrooms('');
+    setFilterBathrooms('');
+    setFilterSqFtMin('');
+    setFilterSqFtMax('');
+    setFilterType('');
+    setFilterAddress('');
+  }
+
+  // Derived filter + pagination values (computed from loaded units)
+  const distinctAddresses = useMemo(() => {
+    if (!property) return [];
+    return [...new Set(property.units.map((u) => u.address).filter(Boolean) as string[])];
+  }, [property?.units]);
+
+  const filteredUnits = useMemo(() => {
+    if (!property) return [];
+    return property.units.filter((unit) => {
+      if (filterStatus && unit.status !== filterStatus) return false;
+      if (filterType && unit.type !== filterType) return false;
+      if (filterBedrooms) {
+        const n = Number(filterBedrooms);
+        if (filterBedrooms === '4') {
+          if (unit.bedrooms < 4) return false;
+        } else {
+          if (unit.bedrooms !== n) return false;
+        }
+      }
+      if (filterBathrooms && unit.bathrooms !== Number(filterBathrooms)) return false;
+      if (filterSqFtMin && unit.sqFt !== null && unit.sqFt < Number(filterSqFtMin)) return false;
+      if (filterSqFtMax && unit.sqFt !== null && unit.sqFt > Number(filterSqFtMax)) return false;
+      if (filterAddress && unit.address !== filterAddress) return false;
+      if (unitSearch) {
+        const q = unitSearch.toLowerCase();
+        const matchUnit = unit.unitNumber.toLowerCase().includes(q);
+        const matchType = (unit.type ? (UNIT_TYPE_LABELS[unit.type] ?? unit.type) : '').toLowerCase().includes(q);
+        const matchAddress = (unit.address ?? '').toLowerCase().includes(q);
+        if (!matchUnit && !matchType && !matchAddress) return false;
+      }
+      return true;
+    });
+  }, [property?.units, filterStatus, filterType, filterBedrooms, filterBathrooms,
+      filterSqFtMin, filterSqFtMax, filterAddress, unitSearch]);
+
+  const totalPages = pageSize === 'all' ? 1 : Math.ceil(filteredUnits.length / (pageSize as number));
+  const pagedUnits = pageSize === 'all'
+    ? filteredUnits
+    : filteredUnits.slice((currentPage - 1) * (pageSize as number), currentPage * (pageSize as number));
+
+  const hasActiveFilters = !!(filterStatus || filterType || filterBedrooms ||
+    filterBathrooms || filterSqFtMin || filterSqFtMax || filterAddress || unitSearch);
+
   if (loading) return <div className="loading">Loading property...</div>;
   if (!property) return <div className="loading">Property not found</div>;
 
@@ -151,6 +253,9 @@ export default function PropertyDetailPage() {
           <div style={{ display: 'flex', gap: '8px' }}>
             <button className="btn btn-secondary" onClick={() => setShowEditProperty(true)}>
               Edit Property
+            </button>
+            <button className="btn btn-secondary" onClick={() => setShowBulkCreate(true)}>
+              + Bulk Add Units
             </button>
             <button className="btn btn-primary" onClick={() => setShowAddUnit(true)}>
               + Add Unit
@@ -187,14 +292,202 @@ export default function PropertyDetailPage() {
         </div>
       </div>
 
+      {/* Units section header */}
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px', marginTop: '8px' }}>
+        <h2 style={{ fontSize: '16px', fontWeight: 600, margin: 0 }}>
+          Units ({property.units.length})
+        </h2>
+        {property.units.length > 0 && (
+          <div style={{ display: 'flex', gap: '4px' }}>
+            <button
+              className={`btn btn-sm ${viewMode === 'grid' ? 'btn-primary' : 'btn-secondary'}`}
+              onClick={() => setViewMode('grid')}
+            >
+              Grid
+            </button>
+            <button
+              className={`btn btn-sm ${viewMode === 'list' ? 'btn-primary' : 'btn-secondary'}`}
+              onClick={() => setViewMode('list')}
+            >
+              List
+            </button>
+          </div>
+        )}
+      </div>
+
+      {/* Filter bar */}
+      {property.units.length > 0 && (
+        <div className="filter-bar" style={{ marginBottom: '16px' }}>
+          <div className="filter-search">
+            <label className="filter-label">Search</label>
+            <div style={{ position: 'relative' }}>
+              <svg
+                style={{ position: 'absolute', left: '8px', top: '50%', transform: 'translateY(-50%)', width: '14px', height: '14px', color: 'var(--color-text-muted)', pointerEvents: 'none' }}
+                fill="none" stroke="currentColor" viewBox="0 0 24 24"
+              >
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+              </svg>
+              <input
+                className={`filter-search-input${unitSearch ? ' has-clear' : ''}`}
+                placeholder="Unit #, floor plan, address…"
+                value={unitSearch}
+                onChange={(e) => setUnitSearch(e.target.value)}
+                style={{ paddingLeft: '28px' }}
+              />
+              {unitSearch && (
+                <button
+                  onClick={() => setUnitSearch('')}
+                  style={{ position: 'absolute', right: '8px', top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', cursor: 'pointer', color: 'var(--color-text-muted)', fontSize: '16px', lineHeight: 1, padding: 0 }}
+                >
+                  ×
+                </button>
+              )}
+            </div>
+          </div>
+
+          <div className="filter-divider" />
+
+          <div className="filter-group">
+            <label className="filter-label">Status</label>
+            <select
+              className={`filter-select${filterStatus ? ' filter-select-active-primary' : ''}`}
+              value={filterStatus}
+              onChange={(e) => setFilterStatus(e.target.value)}
+            >
+              <option value="">All Statuses</option>
+              <option value="vacant">Vacant</option>
+              <option value="occupied">Occupied</option>
+              <option value="notice">Notice</option>
+              <option value="maintenance">Maintenance</option>
+              <option value="unlisted">Unlisted</option>
+            </select>
+          </div>
+
+          <div className="filter-group">
+            <label className="filter-label">Bedrooms</label>
+            <select
+              className={`filter-select${filterBedrooms ? ' filter-select-active-primary' : ''}`}
+              value={filterBedrooms}
+              onChange={(e) => setFilterBedrooms(e.target.value)}
+            >
+              <option value="">Any</option>
+              <option value="0">Studio (0)</option>
+              <option value="1">1</option>
+              <option value="2">2</option>
+              <option value="3">3</option>
+              <option value="4">4+</option>
+            </select>
+          </div>
+
+          <div className="filter-group">
+            <label className="filter-label">Bathrooms</label>
+            <select
+              className={`filter-select${filterBathrooms ? ' filter-select-active-primary' : ''}`}
+              value={filterBathrooms}
+              onChange={(e) => setFilterBathrooms(e.target.value)}
+            >
+              <option value="">Any</option>
+              <option value="1">1</option>
+              <option value="1.5">1.5</option>
+              <option value="2">2</option>
+              <option value="2.5">2.5</option>
+              <option value="3">3+</option>
+            </select>
+          </div>
+
+          <div className="filter-group">
+            <label className="filter-label">Floor Plan</label>
+            <select
+              className={`filter-select${filterType ? ' filter-select-active-primary' : ''}`}
+              value={filterType}
+              onChange={(e) => setFilterType(e.target.value)}
+            >
+              <option value="">All Types</option>
+              <option value="studio">Studio</option>
+              <option value="one_bed">1 Bed</option>
+              <option value="two_bed">2 Bed</option>
+              <option value="three_bed">3 Bed</option>
+              <option value="four_plus_bed">4+ Bed</option>
+              <option value="commercial">Commercial</option>
+            </select>
+          </div>
+
+          <div className="filter-group">
+            <label className="filter-label">Sq Ft</label>
+            <div style={{ display: 'flex', gap: '4px', alignItems: 'center' }}>
+              <input
+                type="number"
+                placeholder="Min"
+                value={filterSqFtMin}
+                onChange={(e) => setFilterSqFtMin(e.target.value)}
+                style={{ width: '72px', padding: '6px 8px', border: '1px solid var(--color-border)', borderRadius: '6px', fontSize: '13px' }}
+              />
+              <span style={{ fontSize: '12px', color: 'var(--color-text-muted)' }}>–</span>
+              <input
+                type="number"
+                placeholder="Max"
+                value={filterSqFtMax}
+                onChange={(e) => setFilterSqFtMax(e.target.value)}
+                style={{ width: '72px', padding: '6px 8px', border: '1px solid var(--color-border)', borderRadius: '6px', fontSize: '13px' }}
+              />
+            </div>
+          </div>
+
+          {distinctAddresses.length > 0 && (
+            <div className="filter-group">
+              <label className="filter-label">Street Address</label>
+              <select
+                className={`filter-select${filterAddress ? ' filter-select-active-primary' : ''}`}
+                value={filterAddress}
+                onChange={(e) => setFilterAddress(e.target.value)}
+              >
+                <option value="">All Addresses</option>
+                {distinctAddresses.map((addr) => (
+                  <option key={addr} value={addr}>{addr}</option>
+                ))}
+              </select>
+            </div>
+          )}
+
+          {hasActiveFilters && (
+            <div className="filter-summary">
+              <span className="filter-label">Results</span>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <span className="filter-count">{filteredUnits.length}</span>
+                <button
+                  onClick={clearAllFilters}
+                  style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: '12px', color: 'var(--color-primary)', padding: 0, textDecoration: 'underline' }}
+                >
+                  Clear filters
+                </button>
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Units display */}
       {property.units.length === 0 ? (
         <div className="empty-state">
           <h3>No units yet</h3>
           <p>Add units to this property to start managing them.</p>
         </div>
-      ) : (
+      ) : filteredUnits.length === 0 ? (
+        <div className="empty-state">
+          <h3>No units match the current filters</h3>
+          <p>
+            <button
+              onClick={clearAllFilters}
+              style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--color-primary)', textDecoration: 'underline', fontSize: 'inherit', padding: 0 }}
+            >
+              Clear filters
+            </button>{' '}
+            to see all units.
+          </p>
+        </div>
+      ) : viewMode === 'grid' ? (
         <div className="units-grid">
-          {property.units.map((unit) => {
+          {pagedUnits.map((unit) => {
             const participants = unit.leases?.[0]?.participants;
             const tenant = (participants?.find((p) => p.isPrimary) ?? participants?.[0])?.tenant;
             return (
@@ -231,10 +524,99 @@ export default function PropertyDetailPage() {
             );
           })}
         </div>
+      ) : (
+        <div className="table-container">
+          <table>
+            <thead>
+              <tr>
+                <th>Unit #</th>
+                <th>Floor Plan</th>
+                <th>Status</th>
+                <th>Bed</th>
+                <th>Bath</th>
+                <th>Sq Ft</th>
+                {!isMaintenance && <th>Rent</th>}
+                <th>Tenant</th>
+              </tr>
+            </thead>
+            <tbody>
+              {pagedUnits.map((unit) => {
+                const participants = unit.leases?.[0]?.participants;
+                const tenant = (participants?.find((p) => p.isPrimary) ?? participants?.[0])?.tenant;
+                return (
+                  <tr
+                    key={unit.id}
+                    onClick={() => router.push(`/properties/${propertyId}/units/${unit.id}`)}
+                    style={{ cursor: 'pointer' }}
+                  >
+                    <td style={{ fontWeight: 500 }}>Unit {unit.unitNumber}</td>
+                    <td>{unit.type ? (UNIT_TYPE_LABELS[unit.type] ?? unit.type) : '—'}</td>
+                    <td>
+                      <span className={`badge badge-${unit.status}`}>
+                        {unit.status === 'notice' ? 'Notice' : unit.status}
+                      </span>
+                    </td>
+                    <td>{unit.bedrooms}</td>
+                    <td>{unit.bathrooms}</td>
+                    <td>{unit.sqFt ? `${unit.sqFt.toLocaleString()} sqft` : '—'}</td>
+                    {!isMaintenance && <td>${Number(unit.rentAmount).toLocaleString()}/mo</td>}
+                    <td>{tenant?.name ?? '—'}</td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+      )}
+
+      {/* Pagination controls */}
+      {property.units.length > 0 && (
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: '16px', flexWrap: 'wrap', gap: '8px' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+            <span style={{ fontSize: '13px', color: 'var(--color-text-muted)' }}>Per page:</span>
+            <select
+              value={pageSize}
+              onChange={(e) => setPageSize(e.target.value === 'all' ? 'all' : Number(e.target.value))}
+              className="filter-select"
+              style={{ width: 'auto' }}
+            >
+              <option value={20}>20</option>
+              <option value={40}>40</option>
+              <option value={60}>60</option>
+              <option value={80}>80</option>
+              <option value="all">All</option>
+            </select>
+            <span style={{ fontSize: '13px', color: 'var(--color-text-muted)' }}>
+              {hasActiveFilters
+                ? `Showing ${filteredUnits.length} of ${property.units.length} units`
+                : `${property.units.length} unit${property.units.length !== 1 ? 's' : ''}`}
+            </span>
+          </div>
+          {pageSize !== 'all' && totalPages > 1 && (
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <button
+                className="btn btn-sm btn-secondary"
+                disabled={currentPage === 1}
+                onClick={() => setCurrentPage((p) => p - 1)}
+              >
+                Prev
+              </button>
+              <span style={{ fontSize: '13px' }}>Page {currentPage} of {totalPages}</span>
+              <button
+                className="btn btn-sm btn-secondary"
+                disabled={currentPage === totalPages}
+                onClick={() => setCurrentPage((p) => p + 1)}
+              >
+                Next
+              </button>
+            </div>
+          )}
+        </div>
       )}
 
       {!isMaintenance && <DocumentPanel entityType="property" entityId={propertyId} />}
 
+      {/* Add Unit modal */}
       {showAddUnit && (
         <div className="modal-overlay" onClick={() => setShowAddUnit(false)}>
           <div className="modal" onClick={(e) => e.stopPropagation()}>
@@ -335,6 +717,7 @@ export default function PropertyDetailPage() {
         </div>
       )}
 
+      {/* Edit Property modal */}
       {showEditProperty && (
         <div className="modal-overlay" onClick={() => setShowEditProperty(false)}>
           <div className="modal" onClick={(e) => e.stopPropagation()}>
@@ -383,17 +766,92 @@ export default function PropertyDetailPage() {
                   <span>Current type: {PROPERTY_TYPE_LABELS[property.type] ?? property.type}</span>
                 </div>
               </div>
-              <div className="modal-footer">
-                <button type="button" className="btn btn-secondary" onClick={() => setShowEditProperty(false)}>
-                  Cancel
+              <div className="modal-footer" style={{ justifyContent: 'space-between' }}>
+                <button
+                  type="button"
+                  className="btn btn-sm btn-danger"
+                  onClick={() => { setShowEditProperty(false); setDeleteError(null); setShowDeleteConfirm(true); }}
+                >
+                  Delete Property
                 </button>
-                <button type="submit" className="btn btn-primary">
-                  Save Changes
-                </button>
+                <div style={{ display: 'flex', gap: '8px' }}>
+                  <button type="button" className="btn btn-secondary" onClick={() => setShowEditProperty(false)}>
+                    Cancel
+                  </button>
+                  <button type="submit" className="btn btn-primary">
+                    Save Changes
+                  </button>
+                </div>
               </div>
             </form>
           </div>
         </div>
+      )}
+
+      {/* Delete Property confirmation modal */}
+      {showDeleteConfirm && (
+        <div className="modal-overlay" onClick={() => { if (!deleting) { setShowDeleteConfirm(false); setDeleteError(null); } }}>
+          <div className="modal" onClick={(e) => e.stopPropagation()}>
+            <div className="modal-header">
+              <h2>Delete Property</h2>
+              <button
+                className="btn btn-sm btn-secondary"
+                onClick={() => { setShowDeleteConfirm(false); setDeleteError(null); }}
+                disabled={deleting}
+              >
+                X
+              </button>
+            </div>
+            <div className="modal-body">
+              <div style={{ background: 'var(--color-danger-light, #fff5f5)', border: '1px solid var(--color-danger)', borderRadius: '6px', padding: '12px 16px', marginBottom: '16px' }}>
+                <p style={{ margin: 0, fontWeight: 600, color: 'var(--color-danger)' }}>This action cannot be undone.</p>
+              </div>
+              <p style={{ margin: '0 0 8px' }}>
+                You are about to permanently delete <strong>{property.name}</strong>
+                {' '}({property.address}, {property.city}, {property.state} {property.zip}).
+              </p>
+              <p style={{ margin: '0 0 8px', color: 'var(--color-text-muted)', fontSize: '14px' }}>
+                All property records will be removed. A confirmation email will be sent to the account owner.
+              </p>
+              <p style={{ margin: 0, color: 'var(--color-text-muted)', fontSize: '14px' }}>
+                Note: all units must be removed before a property can be deleted.
+              </p>
+              {deleteError && (
+                <div style={{ marginTop: '12px', padding: '10px 14px', background: '#fff5f5', border: '1px solid var(--color-danger)', borderRadius: '6px', color: 'var(--color-danger)', fontSize: '14px' }}>
+                  {deleteError}
+                </div>
+              )}
+            </div>
+            <div className="modal-footer">
+              <button
+                type="button"
+                className="btn btn-secondary"
+                onClick={() => { setShowDeleteConfirm(false); setDeleteError(null); }}
+                disabled={deleting}
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                className="btn btn-danger"
+                onClick={handleDeleteProperty}
+                disabled={deleting}
+              >
+                {deleting ? 'Deleting…' : 'Yes, Delete Property'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Bulk Create modal */}
+      {showBulkCreate && (
+        <BulkCreateModal
+          propertyId={propertyId}
+          property={property}
+          onClose={() => setShowBulkCreate(false)}
+          onSuccess={() => { loadProperty(); setShowBulkCreate(false); }}
+        />
       )}
     </>
   );

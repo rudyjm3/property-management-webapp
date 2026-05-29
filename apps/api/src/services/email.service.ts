@@ -356,3 +356,43 @@ export async function sendLeaseExpiryToTenant(params: LeaseExpiryTenantParams) {
     html: baseLayout('Lease Expiring Soon', body),
   });
 }
+
+// ─── Property Deletion Notification (to owner) ────────────────────────────────
+
+export interface PropertyDeletionParams {
+  ownerName: string;
+  ownerEmail: string;
+  propertyName: string;
+  propertyAddress: string;
+  unitCount: number;
+  deletedAt: Date;
+  organizationName: string;
+}
+
+export async function sendPropertyDeletionNotification(params: PropertyDeletionParams) {
+  const { ownerName, ownerEmail, propertyName, propertyAddress, unitCount, deletedAt, organizationName } = params;
+
+  const body = `
+    <h1>Property Deleted</h1>
+    <p>Hi ${ownerName},</p>
+    <p>A property in your <strong>${organizationName}</strong> account has been permanently deleted.</p>
+    <div class="alert-box">
+      <p><strong>This action cannot be undone.</strong> The property and all associated records have been removed.</p>
+    </div>
+    <div class="info-box">
+      <div class="row"><span class="label">Property Name</span><span class="value">${propertyName}</span></div>
+      <div class="row"><span class="label">Address</span><span class="value">${propertyAddress}</span></div>
+      <div class="row"><span class="label">Units at Deletion</span><span class="value">${unitCount}</span></div>
+      <div class="row"><span class="label">Deleted At</span><span class="value">${formatDate(deletedAt)}</span></div>
+    </div>
+    <p>If you did not authorize this deletion, please contact your account administrator immediately.</p>
+    <p style="margin-top:24px;font-size:13px;color:#9ca3af;">Managed by ${organizationName}</p>
+  `;
+
+  return resend.emails.send({
+    from: FROM,
+    to: ownerEmail,
+    subject: `[${organizationName}] Property deleted — ${propertyName}`,
+    html: baseLayout('Property Deleted', body),
+  });
+}

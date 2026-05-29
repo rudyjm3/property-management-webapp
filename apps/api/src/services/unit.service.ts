@@ -180,3 +180,34 @@ export async function deleteUnit(
     data: { unitCount: { decrement: 1 } },
   });
 }
+
+export async function bulkCreateUnits(
+  organizationId: string,
+  propertyId: string,
+  units: Record<string, unknown>[]
+) {
+  const property = await prisma.property.findFirst({
+    where: { id: propertyId, organizationId },
+  });
+
+  if (!property) {
+    throw new AppError(404, 'PROPERTY_NOT_FOUND', 'Property not found');
+  }
+
+  const rows = units.map((u) => ({
+    ...(u as any),
+    propertyId,
+    status: (u.status as string) ?? 'vacant',
+  }));
+
+  const createdCount = await prisma.$transaction(async (tx) => {
+    const result = await tx.unit.createMany({ data: rows, skipDuplicates: true });
+    await tx.property.update({
+      where: { id: propertyId },
+      data: { unitCount: { increment: result.count } },
+    });
+    return result.count;
+  });
+
+  return { created: createdCount, skipped: units.length - createdCount };
+}

@@ -74,6 +74,14 @@ export const createUnitSchema = z.object({
   notes: z.string().max(2000).nullable().optional(),
 });
 
+// ─── Bulk Unit Create ─────────────────────────────────────────────────────────
+
+export const bulkCreateUnitSchema = z.object({
+  units: z.array(createUnitSchema).min(1).max(500),
+});
+
+export type BulkCreateUnitInput = z.infer<typeof bulkCreateUnitSchema>;
+
 // ─── Tenant ───────────────────────────────────────────────────────────────────
 
 export const createTenantSchema = z.object({

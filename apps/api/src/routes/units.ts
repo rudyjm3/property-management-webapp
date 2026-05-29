@@ -1,5 +1,5 @@
 import { Router, Request, Response, NextFunction } from 'express';
-import { createUnitSchema } from '@propflow/shared';
+import { createUnitSchema, bulkCreateUnitSchema } from '@propflow/shared';
 import { validate } from '../middleware/validate';
 import * as unitService from '../services/unit.service';
 import { requireRoles } from '../middleware/auth';
@@ -13,6 +13,21 @@ router.get('/', async (req: Request, res: Response, next: NextFunction) => {
   try {
     const units = await unitService.listUnits(req.params.orgId as string, req.params.propertyId as string);
     res.json({ data: units });
+  } catch (err) {
+    next(err);
+  }
+});
+
+// POST /api/v1/organizations/:orgId/properties/:propertyId/units/bulk
+// Must be registered before /:unitId to avoid "bulk" being captured as a unitId param
+router.post('/bulk', requireManagerAccess, validate(bulkCreateUnitSchema), async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const result = await unitService.bulkCreateUnits(
+      req.params.orgId as string,
+      req.params.propertyId as string,
+      req.body.units
+    );
+    res.status(201).json({ data: result });
   } catch (err) {
     next(err);
   }
