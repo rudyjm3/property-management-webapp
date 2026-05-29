@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useMemo } from 'react';
+import React, { useState, useMemo } from 'react';
 import { api } from '@/lib/api';
 
 interface Property {
@@ -249,8 +249,10 @@ export default function BulkCreateModal({ propertyId, property, onClose, onSucce
     fontSize: '14px',
   } as React.CSSProperties);
 
+  const csvLimitError = csvValidRows.length > 500 ? 'Maximum 500 units per bulk operation' : null;
+
   const canSubmitRange = rangePreviewCount > 0 && !rangeError && !!shared.rentAmount && !submitting;
-  const canSubmitCSV = csvValidRows.length > 0 && !submitting;
+  const canSubmitCSV = csvValidRows.length > 0 && !csvLimitError && !submitting;
 
   return (
     <div className="modal-overlay" onClick={() => { if (!submitting) onClose(); }}>
@@ -463,10 +465,13 @@ export default function BulkCreateModal({ propertyId, property, onClose, onSucce
                         </span>
                       )}
                     </span>
-                    <span style={{ fontSize: '13px', color: 'var(--color-success)', fontWeight: 500 }}>
+                    <span style={{ fontSize: '13px', color: csvLimitError ? 'var(--color-danger)' : 'var(--color-success)', fontWeight: 500 }}>
                       {csvValidRows.length} valid
                     </span>
                   </div>
+                  {csvLimitError && (
+                    <p style={{ margin: '4px 0 8px', color: 'var(--color-danger)', fontSize: '13px' }}>{csvLimitError}</p>
+                  )}
                   <div className="table-container" style={{ maxHeight: '240px', overflowY: 'auto' }}>
                     <table>
                       <thead>
