@@ -312,7 +312,7 @@ export const api = {
       apiFetch<void>(`/api/v1/organizations/${_orgId}/properties/${propertyId}/units/${unitId}`, {
         method: 'DELETE',
       }),
-    bulkCreate: (propertyId: string, units: any[]) =>
+    bulkCreate: (propertyId: string, units: Record<string, unknown>[]) =>
       apiFetch<{ created: number; skipped: number }>(
         `/api/v1/organizations/${_orgId}/properties/${propertyId}/units/bulk`,
         { method: 'POST', body: JSON.stringify({ units }) }

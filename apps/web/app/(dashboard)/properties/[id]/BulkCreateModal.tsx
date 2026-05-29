@@ -88,12 +88,15 @@ function parseCSV(text: string): CSVRow[] {
   });
 }
 
+const VALID_UNIT_TYPES = new Set(['studio', 'one_bed', 'two_bed', 'three_bed', 'four_plus_bed', 'commercial']);
+
 function validateCSVRow(row: CSVRow): string | null {
   if (!row.unitNumber) return 'Unit number is required';
   if (!row.rentAmount || isNaN(Number(row.rentAmount))) return 'Valid rent amount is required';
   if (row.bedrooms && isNaN(Number(row.bedrooms))) return 'Bedrooms must be a number';
   if (row.bathrooms && isNaN(Number(row.bathrooms))) return 'Bathrooms must be a number';
   if (row.sqFt && isNaN(Number(row.sqFt))) return 'Sq Ft must be a number';
+  if (row.type && !VALID_UNIT_TYPES.has(row.type)) return `Invalid type "${row.type}". Must be: studio, one_bed, two_bed, three_bed, four_plus_bed, commercial`;
   return null;
 }
 
@@ -200,8 +203,8 @@ export default function BulkCreateModal({ propertyId, property, onClose, onSucce
         unitNumber: String(s + i),
         floor: shared.floor ? parseInt(shared.floor) : null,
         type: shared.type || null,
-        bedrooms: parseInt(shared.bedrooms) || 1,
-        bathrooms: parseFloat(shared.bathrooms) || 1,
+        bedrooms: Number.isNaN(parseInt(shared.bedrooms)) ? 1 : parseInt(shared.bedrooms),
+        bathrooms: Number.isNaN(parseFloat(shared.bathrooms)) ? 1 : parseFloat(shared.bathrooms),
         sqFt: shared.sqFt ? parseInt(shared.sqFt) : null,
         marketRent: shared.marketRent ? parseFloat(shared.marketRent) : null,
         rentAmount: parseFloat(shared.rentAmount),
