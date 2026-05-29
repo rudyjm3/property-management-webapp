@@ -90,6 +90,7 @@ export async function tenantSignLease(signingToken: string, signatureName: strin
       esignatureStatus: true,
       unit: {
         select: {
+          id: true,
           unitNumber: true,
           property: {
             select: {
@@ -129,6 +130,10 @@ export async function tenantSignLease(signingToken: string, signatureName: strin
       status: newEsigStatus === 'completed' ? 'active' : lease.status,
     },
   });
+
+  if (newEsigStatus === 'completed') {
+    await prisma.unit.update({ where: { id: lease.unit.id }, data: { status: 'occupied' } });
+  }
 
   const display = `${lease.unit.property.name} — Unit ${lease.unit.unitNumber}`;
   const managerEmails = lease.unit.property.organization.users.map((u) => u.email);
@@ -171,6 +176,7 @@ export async function managerSignLease(
       esignatureStatus: true,
       unit: {
         select: {
+          id: true,
           unitNumber: true,
           property: {
             select: {
@@ -210,6 +216,10 @@ export async function managerSignLease(
       status: newEsigStatus === 'completed' ? 'active' : lease.status,
     },
   });
+
+  if (newEsigStatus === 'completed') {
+    await prisma.unit.update({ where: { id: lease.unit.id }, data: { status: 'occupied' } });
+  }
 
   const display = `${lease.unit.property.name} — Unit ${lease.unit.unitNumber}`;
   const managerEmails = lease.unit.property.organization.users.map((u) => u.email);

@@ -38,7 +38,7 @@ router.get('/applications', async (req: Request, res: Response, next: NextFuncti
   }
   try {
     const result = await listApplications(orgId, parsed.data);
-    res.json({ data: result.data, nextCursor: result.nextCursor });
+    res.json({ data: result });
   } catch (err) {
     next(err);
   }

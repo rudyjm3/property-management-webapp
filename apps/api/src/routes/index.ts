@@ -1,5 +1,5 @@
 import { Router } from 'express';
-import { requireAuth, requireOrg, requireTenantAuth } from '../middleware/auth';
+import { requireAuth, requireOrg, requireRoles, requireTenantAuth } from '../middleware/auth';
 import authRoutes from './auth';
 import inviteRoutes from './invite';
 import organizationRoutes from './organizations';
@@ -57,7 +57,7 @@ router.use('/organizations/:orgId/connect', requireAuth, requireOrg, connectRout
 router.use('/organizations/:orgId/ledger', requireAuth, requireOrg, ledgerRoutes);
 router.use('/organizations/:orgId/billing', requireAuth, requireOrg, billingRoutes);
 // Application links, application review, and manager lease signing
-router.use('/organizations/:orgId', requireAuth, requireOrg, applicationRoutes);
+router.use('/organizations/:orgId', requireAuth, requireOrg, requireRoles(['owner', 'manager']), applicationRoutes);
 
 // Tenant portal routes — protected by tenant auth (separate from manager auth)
 router.use('/tenant', requireTenantAuth, tenantPortalRoutes);
