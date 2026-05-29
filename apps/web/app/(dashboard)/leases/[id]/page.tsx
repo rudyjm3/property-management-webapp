@@ -32,6 +32,11 @@ interface LeaseDetail {
   hasParkingAddendum: boolean;
   parkingFee: string | null;
   documentUrl: string | null;
+  esignatureStatus: string;
+  tenantSignedAt: string | null;
+  managerSignedAt: string | null;
+  tenantSignatureName: string | null;
+  managerSignatureName: string | null;
   notes: string | null;
   renewalOfLeaseId: string | null;
   createdLeaseId?: string;
@@ -159,6 +164,12 @@ export default function LeaseDetailPage() {
   const [renewEndDate, setRenewEndDate] = useState('');
   const [renewRentAmount, setRenewRentAmount] = useState('');
   const [renewLeaseType, setRenewLeaseType] = useState('');
+
+  // E-signature state
+  const [showSignModal, setShowSignModal] = useState(false);
+  const [signatureName, setSignatureName] = useState('');
+  const [signing, setSigning] = useState(false);
+  const [signError, setSignError] = useState('');
 
   useEffect(() => {
     async function load() {
@@ -404,6 +415,22 @@ export default function LeaseDetailPage() {
       router.push('/leases');
     } catch (err: any) {
       alert(err.message || 'Failed to delete lease');
+    }
+  }
+
+  async function handleSign() {
+    if (!signatureName.trim()) { setSignError('Please type your full name.'); return; }
+    setSigning(true);
+    setSignError('');
+    try {
+      const result = await api.leases.sign(leaseId, signatureName);
+      setLease((prev) => prev ? { ...prev, esignatureStatus: (result as any).esignatureStatus, managerSignedAt: new Date().toISOString(), managerSignatureName: signatureName } : prev);
+      setShowSignModal(false);
+      setSignatureName('');
+    } catch (err: any) {
+      setSignError(err.message || 'Failed to sign lease.');
+    } finally {
+      setSigning(false);
     }
   }
 
@@ -687,6 +714,46 @@ export default function LeaseDetailPage() {
                 </button>
               </div>
             )}
+          </div>
+        </div>
+      </div>
+
+      {/* E-Signature */}
+      <div className="card" style={{ marginTop: '24px' }}>
+        <div className="card-body">
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '16px' }}>
+            <h3 style={{ margin: 0, fontSize: '16px', fontWeight: 600 }}>Electronic Signature</h3>
+            {lease.esignatureStatus !== 'completed' && !lease.managerSignedAt && (
+              <button className="btn btn-primary btn-sm" onClick={() => { setSignatureName(''); setSignError(''); setShowSignModal(true); }}>
+                Sign as Manager
+              </button>
+            )}
+          </div>
+          <div className="detail-grid">
+            <div className="detail-item">
+              <label>Status</label>
+              <span className={`badge ${lease.esignatureStatus === 'completed' ? 'badge-occupied' : lease.esignatureStatus === 'partially_signed' ? 'badge-notice' : 'badge-neutral'}`} style={{ textTransform: 'capitalize' }}>
+                {lease.esignatureStatus.replace(/_/g, ' ')}
+              </span>
+            </div>
+            <div className="detail-item">
+              <label>Tenant Signature</label>
+              <span>
+                {lease.tenantSignedAt
+                  ? <>{lease.tenantSignatureName && <strong>{lease.tenantSignatureName}</strong>}{' '}<span style={{ color: '#6b7280', fontSize: '13px' }}>signed {new Date(lease.tenantSignedAt).toLocaleDateString()}</span></>
+                  : <span style={{ color: '#9ca3af' }}>Pending</span>
+                }
+              </span>
+            </div>
+            <div className="detail-item">
+              <label>Manager Signature</label>
+              <span>
+                {lease.managerSignedAt
+                  ? <>{lease.managerSignatureName && <strong>{lease.managerSignatureName}</strong>}{' '}<span style={{ color: '#6b7280', fontSize: '13px' }}>signed {new Date(lease.managerSignedAt).toLocaleDateString()}</span></>
+                  : <span style={{ color: '#9ca3af' }}>Pending</span>
+                }
+              </span>
+            </div>
           </div>
         </div>
       </div>
@@ -1104,6 +1171,39 @@ export default function LeaseDetailPage() {
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* Manager Sign Modal */}
+      {showSignModal && (
+        <div className="modal-overlay" onClick={() => setShowSignModal(false)}>
+          <div className="modal" style={{ maxWidth: '440px' }} onClick={(e) => e.stopPropagation()}>
+            <div className="modal-header">
+              <h2 className="modal-title">Sign Lease as Manager</h2>
+              <button className="modal-close" onClick={() => setShowSignModal(false)}>×</button>
+            </div>
+            <div className="modal-body">
+              <p style={{ fontSize: '13px', lineHeight: '1.6', color: '#374151', marginBottom: '16px' }}>
+                By typing your full name and clicking &quot;Sign,&quot; you are electronically signing this lease agreement. Your signature, timestamp, and IP address will be recorded. This is legally binding under ESIGN/UETA.
+              </p>
+              <div className="form-group">
+                <label>Type your full legal name *</label>
+                <input
+                  className="form-control"
+                  placeholder="Full legal name"
+                  value={signatureName}
+                  onChange={(e) => setSignatureName(e.target.value)}
+                />
+              </div>
+              {signError && <p style={{ color: '#dc2626', fontSize: '14px', margin: '8px 0 0' }}>{signError}</p>}
+            </div>
+            <div className="modal-footer">
+              <button className="btn btn-secondary" onClick={() => setShowSignModal(false)}>Cancel</button>
+              <button className="btn btn-primary" onClick={handleSign} disabled={signing}>
+                {signing ? 'Signing…' : 'Sign Lease'}
+              </button>
+            </div>
           </div>
         </div>
       )}

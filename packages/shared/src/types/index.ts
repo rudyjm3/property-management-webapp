@@ -86,6 +86,13 @@ export type DocumentCategory = 'lease' | 'inspection' | 'insurance' | 'id' | 'ph
 
 export type LedgerEntryType = 'credit' | 'debit';
 
+export type RentalApplicationStatus =
+  | 'pending'
+  | 'under_review'
+  | 'approved'
+  | 'denied'
+  | 'withdrawn';
+
 // ─── Entity Interfaces ────────────────────────────────────────────────────────
 
 export interface Organization {
@@ -279,6 +286,9 @@ export interface Lease {
   esignatureStatus: EsignatureStatus;
   tenantSignedAt: Date | null;
   managerSignedAt: Date | null;
+  signingToken: string | null;
+  tenantSignatureName: string | null;
+  managerSignatureName: string | null;
   renewalOfLeaseId: string | null;
   notes: string | null;
   createdAt: Date;
@@ -401,6 +411,53 @@ export interface Document {
   docCategory: DocumentCategory | null;
   label: string | null;
   createdAt: Date;
+}
+
+export interface RentalApplication {
+  id: string;
+  organizationId: string;
+  unitId: string;
+  token: string;
+  status: RentalApplicationStatus;
+  applicantName: string;
+  applicantEmail: string;
+  applicantPhone: string | null;
+  dateOfBirth: string | null;
+  currentAddress: string | null;
+  previousAddress: string | null;
+  employerName: string | null;
+  employerPhone: string | null;
+  monthlyGrossIncome: number | null;
+  incomeSource: IncomeSource | null;
+  occupantCount: number;
+  pets: TenantPet[] | null;
+  vehicles: TenantVehicle[] | null;
+  emergencyContactName: string | null;
+  emergencyContactPhone: string | null;
+  consentGiven: boolean;
+  consentAt: Date | null;
+  reviewNotes: string | null;
+  reviewedAt: Date | null;
+  reviewedByUserId: string | null;
+  createdTenantId: string | null;
+  submittedAt: Date | null;
+  createdAt: Date;
+  updatedAt: Date;
+  unit?: {
+    id: string;
+    unitNumber: string;
+    rentAmount: number;
+    depositAmount: number;
+    bedrooms: number;
+    bathrooms: number;
+    property: {
+      id: string;
+      name: string;
+      address: string;
+      city: string;
+      state: string;
+    };
+  };
 }
 
 export interface LedgerEntry {

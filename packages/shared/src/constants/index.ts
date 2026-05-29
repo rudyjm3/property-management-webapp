@@ -120,6 +120,16 @@ export const DOCUMENT_CATEGORIES = [
   'other',
 ] as const;
 
+// ─── Rental Application ───────────────────────────────────────────────────────
+
+export const RENTAL_APPLICATION_STATUSES = [
+  'pending',
+  'under_review',
+  'approved',
+  'denied',
+  'withdrawn',
+] as const;
+
 // ─── Ledger ───────────────────────────────────────────────────────────────────
 
 export const LEDGER_ENTRY_TYPES = ['credit', 'debit'] as const;
