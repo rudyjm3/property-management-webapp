@@ -204,9 +204,16 @@ export default function PropertyDetailPage() {
           if (unit.bedrooms !== n) return false;
         }
       }
-      if (filterBathrooms && unit.bathrooms !== Number(filterBathrooms)) return false;
-      if (filterSqFtMin && unit.sqFt !== null && unit.sqFt < Number(filterSqFtMin)) return false;
-      if (filterSqFtMax && unit.sqFt !== null && unit.sqFt > Number(filterSqFtMax)) return false;
+      if (filterBathrooms) {
+        const n = Number(filterBathrooms);
+        if (filterBathrooms === '3') {
+          if (unit.bathrooms < 3) return false;
+        } else {
+          if (unit.bathrooms !== n) return false;
+        }
+      }
+      if (filterSqFtMin && (unit.sqFt === null || unit.sqFt < Number(filterSqFtMin))) return false;
+      if (filterSqFtMax && (unit.sqFt === null || unit.sqFt > Number(filterSqFtMax))) return false;
       if (filterAddress && unit.address !== filterAddress) return false;
       if (unitSearch) {
         const q = unitSearch.toLowerCase();
