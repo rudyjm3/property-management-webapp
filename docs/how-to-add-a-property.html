@@ -1,0 +1,941 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>How to Add a Property — PropFlow</title>
+  <style>
+    /* ── Page chrome ── */
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      background: #f8fafc;
+      color: #1e293b;
+      line-height: 1.6;
+    }
+
+    /* ── Doc layout ── */
+    .doc-header {
+      background: #ffffff;
+      border-bottom: 1px solid #e2e8f0;
+      padding: 32px 48px;
+    }
+    .doc-header .product-name {
+      font-size: 13px;
+      font-weight: 600;
+      color: #2563eb;
+      letter-spacing: .05em;
+      text-transform: uppercase;
+      margin-bottom: 8px;
+    }
+    .doc-header h1 {
+      font-size: 28px;
+      font-weight: 700;
+      color: #1e293b;
+      margin-bottom: 8px;
+    }
+    .doc-header p {
+      font-size: 15px;
+      color: #64748b;
+      max-width: 580px;
+    }
+
+    .doc-body {
+      max-width: 860px;
+      margin: 48px auto;
+      padding: 0 24px 80px;
+    }
+
+    /* ── Steps ── */
+    .step {
+      margin-bottom: 64px;
+    }
+    .step-label {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      margin-bottom: 16px;
+    }
+    .step-number {
+      width: 32px;
+      height: 32px;
+      border-radius: 50%;
+      background: #2563eb;
+      color: #fff;
+      font-size: 14px;
+      font-weight: 700;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      flex-shrink: 0;
+    }
+    .step-label h2 {
+      font-size: 18px;
+      font-weight: 600;
+      color: #1e293b;
+    }
+    .step-desc {
+      font-size: 14px;
+      color: #64748b;
+      margin-bottom: 24px;
+      max-width: 620px;
+    }
+
+    /* ── Illustration wrapper ── */
+    .illustration {
+      background: #ffffff;
+      border: 1px solid #e2e8f0;
+      border-radius: 10px;
+      overflow: hidden;
+      box-shadow: 0 1px 3px rgba(0,0,0,.08), 0 1px 2px rgba(0,0,0,.05);
+    }
+
+    /* ── Browser chrome bar ── */
+    .browser-bar {
+      background: #f1f5f9;
+      border-bottom: 1px solid #e2e8f0;
+      padding: 10px 14px;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+    .browser-dots { display: flex; gap: 6px; }
+    .browser-dots span {
+      width: 11px; height: 11px; border-radius: 50%;
+    }
+    .dot-red   { background: #ef4444; }
+    .dot-yellow{ background: #f59e0b; }
+    .dot-green { background: #22c55e; }
+    .browser-url {
+      flex: 1;
+      background: #fff;
+      border: 1px solid #e2e8f0;
+      border-radius: 6px;
+      padding: 4px 12px;
+      font-size: 12px;
+      color: #64748b;
+      max-width: 360px;
+    }
+
+    /* ── App shell (sidebar + main) ── */
+    .app-shell {
+      display: flex;
+      height: 440px;
+      overflow: hidden;
+    }
+
+    /* ── Sidebar ── */
+    .sidebar {
+      width: 210px;
+      flex-shrink: 0;
+      background: #ffffff;
+      border-right: 1px solid #e2e8f0;
+      display: flex;
+      flex-direction: column;
+      padding: 0;
+    }
+    .sidebar-logo {
+      padding: 16px 18px;
+      font-size: 18px;
+      font-weight: 700;
+      color: #2563eb;
+      border-bottom: 1px solid #e2e8f0;
+    }
+    .sidebar-nav {
+      padding: 10px 8px;
+      display: flex;
+      flex-direction: column;
+      gap: 2px;
+    }
+    .nav-item {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 9px 10px;
+      border-radius: 6px;
+      font-size: 13px;
+      font-weight: 500;
+      color: #64748b;
+      cursor: default;
+    }
+    .nav-item.active {
+      background: #eff6ff;
+      color: #2563eb;
+    }
+    .nav-item svg { flex-shrink: 0; }
+
+    /* ── Main content area ── */
+    .main-content {
+      flex: 1;
+      background: #f8fafc;
+      overflow: hidden;
+      padding: 20px 24px;
+      position: relative;
+    }
+
+    /* ── Page header row ── */
+    .page-header-row {
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      margin-bottom: 20px;
+    }
+    .page-title-block h1 {
+      font-size: 20px;
+      font-weight: 700;
+      color: #1e293b;
+    }
+    .page-title-block p {
+      font-size: 12px;
+      color: #64748b;
+      margin-top: 2px;
+    }
+
+    /* ── Buttons (mirroring globals.css) ── */
+    .btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 8px 16px;
+      border-radius: 8px;
+      font-size: 13px;
+      font-weight: 500;
+      border: none;
+      cursor: default;
+      white-space: nowrap;
+    }
+    .btn-primary { background: #2563eb; color: #fff; }
+    .btn-secondary { background: #fff; color: #1e293b; border: 1px solid #e2e8f0; }
+    .btn-sm { padding: 4px 10px; font-size: 12px; }
+
+    /* ── Highlight pulse ring (to point out a UI element) ── */
+    .highlight-ring {
+      display: inline-block;
+      border-radius: 10px;
+      box-shadow: 0 0 0 3px rgba(37,99,235,.35), 0 0 0 6px rgba(37,99,235,.12);
+    }
+
+    /* ── Property grid + cards ── */
+    .property-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 14px;
+    }
+    .property-card {
+      background: #fff;
+      border: 1px solid #e2e8f0;
+      border-radius: 8px;
+      padding: 16px 18px;
+    }
+    .property-card h3 {
+      font-size: 15px;
+      font-weight: 600;
+      color: #1e293b;
+      margin-bottom: 3px;
+    }
+    .property-card .address {
+      font-size: 12px;
+      color: #64748b;
+      margin-bottom: 10px;
+    }
+    .property-meta {
+      display: flex;
+      gap: 14px;
+      font-size: 11px;
+      color: #64748b;
+    }
+    .new-card-highlight {
+      border-color: #2563eb;
+      box-shadow: 0 0 0 2px rgba(37,99,235,.18);
+    }
+
+    /* ── Empty state ── */
+    .empty-state {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      height: 260px;
+      color: #64748b;
+      text-align: center;
+    }
+    .empty-state h3 { font-size: 16px; font-weight: 600; margin-bottom: 6px; color: #1e293b; }
+    .empty-state p  { font-size: 13px; }
+
+    /* ── Modal overlay ── */
+    .modal-overlay-sim {
+      position: absolute;
+      inset: 0;
+      background: rgba(0,0,0,.4);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      z-index: 10;
+    }
+    .modal-sim {
+      background: #fff;
+      border-radius: 8px;
+      box-shadow: 0 20px 60px rgba(0,0,0,.18);
+      width: 100%;
+      max-width: 420px;
+      overflow: hidden;
+    }
+    .modal-header-sim {
+      padding: 14px 18px;
+      border-bottom: 1px solid #e2e8f0;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+    .modal-header-sim h2 { font-size: 16px; font-weight: 600; color: #1e293b; }
+    .modal-body-sim { padding: 16px 18px; }
+    .modal-footer-sim {
+      padding: 12px 18px;
+      border-top: 1px solid #e2e8f0;
+      display: flex;
+      justify-content: flex-end;
+      gap: 8px;
+    }
+
+    /* ── Form elements ── */
+    .form-group-sim { margin-bottom: 12px; }
+    .form-group-sim label {
+      display: block;
+      font-size: 12px;
+      font-weight: 500;
+      color: #1e293b;
+      margin-bottom: 4px;
+    }
+    .form-input-sim {
+      width: 100%;
+      padding: 7px 10px;
+      border: 1px solid #e2e8f0;
+      border-radius: 8px;
+      font-size: 12px;
+      color: #1e293b;
+      background: #fff;
+    }
+    .form-input-sim.placeholder { color: #94a3b8; }
+    .form-input-sim.filled      { color: #1e293b; }
+    .form-input-sim.focused {
+      border-color: #2563eb;
+      box-shadow: 0 0 0 3px rgba(37,99,235,.12);
+    }
+    .form-row-sim {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 10px;
+    }
+
+    /* ── Callout annotations ── */
+    .callout {
+      display: flex;
+      align-items: flex-start;
+      gap: 10px;
+      background: #eff6ff;
+      border: 1px solid #bfdbfe;
+      border-radius: 8px;
+      padding: 12px 16px;
+      margin-top: 20px;
+      font-size: 13px;
+      color: #1e40af;
+    }
+    .callout svg { flex-shrink: 0; margin-top: 1px; }
+
+    /* ── Tip / info box ── */
+    .tip-box {
+      background: #f0fdf4;
+      border: 1px solid #bbf7d0;
+      border-radius: 8px;
+      padding: 12px 16px;
+      margin-top: 20px;
+      font-size: 13px;
+      color: #166534;
+    }
+    .tip-box strong { font-weight: 600; }
+
+    /* ── Footer ── */
+    .doc-footer {
+      border-top: 1px solid #e2e8f0;
+      padding: 24px 48px;
+      font-size: 12px;
+      color: #94a3b8;
+      text-align: center;
+    }
+  </style>
+</head>
+<body>
+
+<!-- ─────────────────────────────────────────────
+     DOCUMENT HEADER
+────────────────────────────────────────────── -->
+<div class="doc-header">
+  <div class="product-name">PropFlow — User Guide</div>
+  <h1>How to Add a Property</h1>
+  <p>Follow the steps below to add a new property to your portfolio. The entire flow takes less than a minute.</p>
+</div>
+
+<div class="doc-body">
+
+
+<!-- ═══════════════════════════════════════════
+     STEP 1 — Navigate to Properties
+════════════════════════════════════════════ -->
+<div class="step">
+  <div class="step-label">
+    <div class="step-number">1</div>
+    <h2>Open the Properties page</h2>
+  </div>
+  <p class="step-desc">
+    Click <strong>Properties</strong> in the left sidebar. The icon looks like a building.
+    The link is highlighted in blue when you're on the Properties page.
+  </p>
+
+  <div class="illustration">
+    <!-- Browser bar -->
+    <div class="browser-bar">
+      <div class="browser-dots">
+        <span class="dot-red"></span>
+        <span class="dot-yellow"></span>
+        <span class="dot-green"></span>
+      </div>
+      <div class="browser-url">app.propflow.io/properties</div>
+    </div>
+
+    <!-- App shell -->
+    <div class="app-shell">
+
+      <!-- Sidebar -->
+      <div class="sidebar">
+        <div class="sidebar-logo">PropFlow</div>
+        <div class="sidebar-nav">
+
+          <!-- Dashboard -->
+          <div class="nav-item">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <rect x="3" y="3" width="7" height="7"/>
+              <rect x="14" y="3" width="7" height="7"/>
+              <rect x="14" y="14" width="7" height="7"/>
+              <rect x="3" y="14" width="7" height="7"/>
+            </svg>
+            Dashboard
+          </div>
+
+          <!-- Properties — ACTIVE -->
+          <div class="nav-item active highlight-ring">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M3 9.5L12 3l9 6.5V20a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V9.5z"/>
+              <path d="M9 21V12h6v9"/>
+            </svg>
+            Properties
+          </div>
+
+          <!-- Tenants -->
+          <div class="nav-item">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/>
+              <circle cx="9" cy="7" r="4"/>
+              <path d="M23 21v-2a4 4 0 0 0-3-3.87"/>
+              <path d="M16 3.13a4 4 0 0 1 0 7.75"/>
+            </svg>
+            Tenants
+          </div>
+
+          <!-- Leases -->
+          <div class="nav-item">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+              <polyline points="14 2 14 8 20 8"/>
+              <line x1="16" y1="13" x2="8" y2="13"/>
+              <line x1="16" y1="17" x2="8" y2="17"/>
+              <polyline points="10 9 9 9 8 9"/>
+            </svg>
+            Leases
+          </div>
+
+          <!-- Payments -->
+          <div class="nav-item">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <rect x="1" y="4" width="22" height="16" rx="2" ry="2"/>
+              <line x1="1" y1="10" x2="23" y2="10"/>
+            </svg>
+            Payments
+          </div>
+
+          <!-- Maintenance -->
+          <div class="nav-item">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"/>
+            </svg>
+            Maintenance
+          </div>
+
+        </div>
+      </div>
+
+      <!-- Main content -->
+      <div class="main-content">
+        <div class="page-header-row">
+          <div class="page-title-block">
+            <h1>Properties</h1>
+            <p>2 properties in your portfolio</p>
+          </div>
+          <button class="btn btn-primary">+ Add Property</button>
+        </div>
+
+        <!-- Existing property cards -->
+        <div class="property-grid">
+          <div class="property-card">
+            <h3>Sunset Gardens</h3>
+            <div class="address">1200 Sunset Blvd, Austin, TX 78701</div>
+            <div class="property-meta">
+              <span>12 units</span>
+              <span>Multifamily</span>
+            </div>
+          </div>
+          <div class="property-card">
+            <h3>Riverfront Lofts</h3>
+            <div class="address">88 River Rd, Austin, TX 78702</div>
+            <div class="property-meta">
+              <span>6 units</span>
+              <span>Mixed Use</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+    </div><!-- /.app-shell -->
+  </div><!-- /.illustration -->
+
+  <div class="callout">
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+      <circle cx="12" cy="12" r="10"/>
+      <line x1="12" y1="8" x2="12" y2="12"/>
+      <line x1="12" y1="16" x2="12.01" y2="16"/>
+    </svg>
+    The <strong>Properties</strong> link turns blue and shows a blue background when active. If you don't see <strong>+ Add Property</strong>, your account may have a Maintenance-only role which does not have permission to create properties.
+  </div>
+</div>
+
+
+<!-- ═══════════════════════════════════════════
+     STEP 2 — Click "+ Add Property"
+════════════════════════════════════════════ -->
+<div class="step">
+  <div class="step-label">
+    <div class="step-number">2</div>
+    <h2>Click "+ Add Property"</h2>
+  </div>
+  <p class="step-desc">
+    Click the blue <strong>+ Add Property</strong> button in the top-right corner of the page header.
+    A dialog box will appear over the page.
+  </p>
+
+  <div class="illustration">
+    <div class="browser-bar">
+      <div class="browser-dots">
+        <span class="dot-red"></span><span class="dot-yellow"></span><span class="dot-green"></span>
+      </div>
+      <div class="browser-url">app.propflow.io/properties</div>
+    </div>
+
+    <div class="app-shell">
+      <div class="sidebar">
+        <div class="sidebar-logo">PropFlow</div>
+        <div class="sidebar-nav">
+          <div class="nav-item">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/></svg>
+            Dashboard
+          </div>
+          <div class="nav-item active">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 9.5L12 3l9 6.5V20a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V9.5z"/><path d="M9 21V12h6v9"/></svg>
+            Properties
+          </div>
+          <div class="nav-item">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+            Tenants
+          </div>
+          <div class="nav-item">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/></svg>
+            Leases
+          </div>
+          <div class="nav-item">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="1" y="4" width="22" height="16" rx="2"/><line x1="1" y1="10" x2="23" y2="10"/></svg>
+            Payments
+          </div>
+        </div>
+      </div>
+
+      <div class="main-content" style="filter: brightness(.92);">
+        <div class="page-header-row">
+          <div class="page-title-block">
+            <h1>Properties</h1>
+            <p>2 properties in your portfolio</p>
+          </div>
+          <!-- button highlighted with ring -->
+          <span class="highlight-ring" style="border-radius:8px;">
+            <button class="btn btn-primary" style="background:#1d4ed8;">+ Add Property</button>
+          </span>
+        </div>
+        <div class="property-grid">
+          <div class="property-card">
+            <h3>Sunset Gardens</h3>
+            <div class="address">1200 Sunset Blvd, Austin, TX 78701</div>
+            <div class="property-meta"><span>12 units</span><span>Multifamily</span></div>
+          </div>
+          <div class="property-card">
+            <h3>Riverfront Lofts</h3>
+            <div class="address">88 River Rd, Austin, TX 78702</div>
+            <div class="property-meta"><span>6 units</span><span>Mixed Use</span></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+
+<!-- ═══════════════════════════════════════════
+     STEP 3 — Fill in the form
+════════════════════════════════════════════ -->
+<div class="step">
+  <div class="step-label">
+    <div class="step-number">3</div>
+    <h2>Fill in the property details</h2>
+  </div>
+  <p class="step-desc">
+    The <strong>Add Property</strong> dialog contains six fields. All fields are required.
+    Use the table below the illustration as a quick reference.
+  </p>
+
+  <div class="illustration">
+    <div class="browser-bar">
+      <div class="browser-dots">
+        <span class="dot-red"></span><span class="dot-yellow"></span><span class="dot-green"></span>
+      </div>
+      <div class="browser-url">app.propflow.io/properties</div>
+    </div>
+
+    <div class="app-shell">
+      <div class="sidebar">
+        <div class="sidebar-logo">PropFlow</div>
+        <div class="sidebar-nav">
+          <div class="nav-item">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/></svg>
+            Dashboard
+          </div>
+          <div class="nav-item active">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 9.5L12 3l9 6.5V20a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V9.5z"/><path d="M9 21V12h6v9"/></svg>
+            Properties
+          </div>
+          <div class="nav-item">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/></svg>
+            Tenants
+          </div>
+          <div class="nav-item">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+            Leases
+          </div>
+          <div class="nav-item">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="1" y="4" width="22" height="16" rx="2"/><line x1="1" y1="10" x2="23" y2="10"/></svg>
+            Payments
+          </div>
+        </div>
+      </div>
+
+      <!-- Main — dimmed to make modal pop -->
+      <div class="main-content" style="padding:0; position:relative;">
+        <div style="padding:20px 24px; filter:brightness(.7); pointer-events:none;">
+          <div class="page-header-row">
+            <div class="page-title-block"><h1>Properties</h1><p>2 properties in your portfolio</p></div>
+            <button class="btn btn-primary">+ Add Property</button>
+          </div>
+          <div class="property-grid">
+            <div class="property-card"><h3>Sunset Gardens</h3><div class="address">1200 Sunset Blvd, Austin, TX 78701</div><div class="property-meta"><span>12 units</span><span>Multifamily</span></div></div>
+            <div class="property-card"><h3>Riverfront Lofts</h3><div class="address">88 River Rd, Austin, TX 78702</div><div class="property-meta"><span>6 units</span><span>Mixed Use</span></div></div>
+          </div>
+        </div>
+
+        <!-- Modal overlay -->
+        <div class="modal-overlay-sim">
+          <div class="modal-sim">
+
+            <div class="modal-header-sim">
+              <h2>Add Property</h2>
+              <button class="btn btn-sm btn-secondary">✕</button>
+            </div>
+
+            <div class="modal-body-sim">
+
+              <!-- Property Name -->
+              <div class="form-group-sim">
+                <label>Property Name</label>
+                <div class="form-input-sim filled">Oakwood Commons</div>
+              </div>
+
+              <!-- Address -->
+              <div class="form-group-sim">
+                <label>Address</label>
+                <div class="form-input-sim filled">450 Oak Street</div>
+              </div>
+
+              <!-- City + State -->
+              <div class="form-row-sim">
+                <div class="form-group-sim">
+                  <label>City</label>
+                  <div class="form-input-sim filled">Austin</div>
+                </div>
+                <div class="form-group-sim">
+                  <label>State</label>
+                  <div class="form-input-sim filled focused">TX</div>
+                </div>
+              </div>
+
+              <!-- Zip + Type -->
+              <div class="form-row-sim">
+                <div class="form-group-sim">
+                  <label>Zip Code</label>
+                  <div class="form-input-sim filled">78704</div>
+                </div>
+                <div class="form-group-sim">
+                  <label>Type</label>
+                  <div class="form-input-sim filled" style="display:flex;align-items:center;justify-content:space-between;">
+                    Multifamily
+                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#64748b" stroke-width="2"><polyline points="6 9 12 15 18 9"/></svg>
+                  </div>
+                </div>
+              </div>
+
+            </div><!-- /.modal-body-sim -->
+
+            <div class="modal-footer-sim">
+              <button class="btn btn-secondary">Cancel</button>
+              <button class="btn btn-primary">Create Property</button>
+            </div>
+
+          </div><!-- /.modal-sim -->
+        </div><!-- /.modal-overlay-sim -->
+
+      </div><!-- /.main-content -->
+    </div><!-- /.app-shell -->
+  </div><!-- /.illustration -->
+
+  <!-- Field reference table -->
+  <div style="margin-top:24px; overflow-x:auto;">
+    <table style="width:100%; border-collapse:collapse; font-size:13px;">
+      <thead>
+        <tr style="background:#f8fafc; border-bottom:2px solid #e2e8f0;">
+          <th style="text-align:left; padding:10px 14px; font-weight:600; color:#1e293b; width:140px;">Field</th>
+          <th style="text-align:left; padding:10px 14px; font-weight:600; color:#1e293b;">What to enter</th>
+          <th style="text-align:left; padding:10px 14px; font-weight:600; color:#1e293b; width:90px;">Required</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr style="border-bottom:1px solid #e2e8f0;">
+          <td style="padding:10px 14px; font-weight:500;">Property Name</td>
+          <td style="padding:10px 14px; color:#64748b;">A recognizable name for the building or complex (e.g. <em>Sunset Gardens</em>)</td>
+          <td style="padding:10px 14px; color:#16a34a; font-weight:600;">Yes</td>
+        </tr>
+        <tr style="border-bottom:1px solid #e2e8f0; background:#fafafa;">
+          <td style="padding:10px 14px; font-weight:500;">Address</td>
+          <td style="padding:10px 14px; color:#64748b;">Street number and street name (e.g. <em>1200 Sunset Blvd</em>)</td>
+          <td style="padding:10px 14px; color:#16a34a; font-weight:600;">Yes</td>
+        </tr>
+        <tr style="border-bottom:1px solid #e2e8f0;">
+          <td style="padding:10px 14px; font-weight:500;">City</td>
+          <td style="padding:10px 14px; color:#64748b;">City the property is located in</td>
+          <td style="padding:10px 14px; color:#16a34a; font-weight:600;">Yes</td>
+        </tr>
+        <tr style="border-bottom:1px solid #e2e8f0; background:#fafafa;">
+          <td style="padding:10px 14px; font-weight:500;">State</td>
+          <td style="padding:10px 14px; color:#64748b;">Two-letter state abbreviation (e.g. <em>TX</em>). The field caps at 2 characters.</td>
+          <td style="padding:10px 14px; color:#16a34a; font-weight:600;">Yes</td>
+        </tr>
+        <tr style="border-bottom:1px solid #e2e8f0;">
+          <td style="padding:10px 14px; font-weight:500;">Zip Code</td>
+          <td style="padding:10px 14px; color:#64748b;">5-digit ZIP code</td>
+          <td style="padding:10px 14px; color:#16a34a; font-weight:600;">Yes</td>
+        </tr>
+        <tr>
+          <td style="padding:10px 14px; font-weight:500;">Type</td>
+          <td style="padding:10px 14px; color:#64748b;">
+            Choose one: <strong>Multifamily</strong>, <strong>Single Family</strong>, <strong>Commercial</strong>, or <strong>Mixed Use</strong>.
+            Defaults to Multifamily.
+          </td>
+          <td style="padding:10px 14px; color:#16a34a; font-weight:600;">Yes</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="callout" style="margin-top:16px;">
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+    The <strong>State</strong> field is limited to 2 characters. Typing more will not register additional keystrokes — enter only the two-letter abbreviation (e.g. <em>CA</em>, <em>NY</em>, <em>TX</em>).
+  </div>
+</div>
+
+
+<!-- ═══════════════════════════════════════════
+     STEP 4 — Click "Create Property"
+════════════════════════════════════════════ -->
+<div class="step">
+  <div class="step-label">
+    <div class="step-number">4</div>
+    <h2>Click "Create Property" to save</h2>
+  </div>
+  <p class="step-desc">
+    Once all fields are filled, click the blue <strong>Create Property</strong> button.
+    The dialog closes and your new property appears as a card in the grid.
+    To dismiss without saving, click <strong>Cancel</strong> or click anywhere outside the dialog.
+  </p>
+
+  <div class="illustration">
+    <div class="browser-bar">
+      <div class="browser-dots">
+        <span class="dot-red"></span><span class="dot-yellow"></span><span class="dot-green"></span>
+      </div>
+      <div class="browser-url">app.propflow.io/properties</div>
+    </div>
+
+    <div class="app-shell">
+      <div class="sidebar">
+        <div class="sidebar-logo">PropFlow</div>
+        <div class="sidebar-nav">
+          <div class="nav-item">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/></svg>
+            Dashboard
+          </div>
+          <div class="nav-item active">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 9.5L12 3l9 6.5V20a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V9.5z"/><path d="M9 21V12h6v9"/></svg>
+            Properties
+          </div>
+          <div class="nav-item">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/></svg>
+            Tenants
+          </div>
+          <div class="nav-item">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+            Leases
+          </div>
+          <div class="nav-item">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="1" y="4" width="22" height="16" rx="2"/><line x1="1" y1="10" x2="23" y2="10"/></svg>
+            Payments
+          </div>
+        </div>
+      </div>
+
+      <div class="main-content">
+        <div class="page-header-row">
+          <div class="page-title-block">
+            <h1>Properties</h1>
+            <p>3 properties in your portfolio</p>
+          </div>
+          <button class="btn btn-primary">+ Add Property</button>
+        </div>
+
+        <div class="property-grid">
+          <div class="property-card">
+            <h3>Sunset Gardens</h3>
+            <div class="address">1200 Sunset Blvd, Austin, TX 78701</div>
+            <div class="property-meta"><span>12 units</span><span>Multifamily</span></div>
+          </div>
+          <div class="property-card">
+            <h3>Riverfront Lofts</h3>
+            <div class="address">88 River Rd, Austin, TX 78702</div>
+            <div class="property-meta"><span>6 units</span><span>Mixed Use</span></div>
+          </div>
+          <!-- Newly added card — highlighted -->
+          <div class="property-card new-card-highlight">
+            <div style="display:flex;align-items:center;gap:8px;margin-bottom:3px;">
+              <h3 style="margin:0;">Oakwood Commons</h3>
+              <span style="font-size:10px;font-weight:600;background:#eff6ff;color:#2563eb;padding:1px 7px;border-radius:10px;">New</span>
+            </div>
+            <div class="address">450 Oak Street, Austin, TX 78704</div>
+            <div class="property-meta"><span>0 units</span><span>Multifamily</span></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="tip-box">
+    <strong>Next step:</strong> Your new property starts with 0 units. Click the property card to open its detail page and add individual units.
+  </div>
+</div>
+
+
+<!-- ═══════════════════════════════════════════
+     BONUS — Empty state (first property)
+════════════════════════════════════════════ -->
+<div class="step">
+  <div class="step-label">
+    <div class="step-number" style="background:#64748b;">★</div>
+    <h2>Starting fresh? Here's what the empty state looks like</h2>
+  </div>
+  <p class="step-desc">
+    If you have no properties yet, the page shows an empty state prompt instead of a grid.
+    The workflow to add your first property is identical — click <strong>+ Add Property</strong> in the top right.
+  </p>
+
+  <div class="illustration">
+    <div class="browser-bar">
+      <div class="browser-dots">
+        <span class="dot-red"></span><span class="dot-yellow"></span><span class="dot-green"></span>
+      </div>
+      <div class="browser-url">app.propflow.io/properties</div>
+    </div>
+
+    <div class="app-shell">
+      <div class="sidebar">
+        <div class="sidebar-logo">PropFlow</div>
+        <div class="sidebar-nav">
+          <div class="nav-item">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/></svg>
+            Dashboard
+          </div>
+          <div class="nav-item active">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 9.5L12 3l9 6.5V20a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V9.5z"/><path d="M9 21V12h6v9"/></svg>
+            Properties
+          </div>
+          <div class="nav-item">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/></svg>
+            Tenants
+          </div>
+          <div class="nav-item">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+            Leases
+          </div>
+        </div>
+      </div>
+
+      <div class="main-content">
+        <div class="page-header-row">
+          <div class="page-title-block">
+            <h1>Properties</h1>
+            <p>0 properties in your portfolio</p>
+          </div>
+          <button class="btn btn-primary">+ Add Property</button>
+        </div>
+        <div class="empty-state">
+          <!-- Building icon -->
+          <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="#cbd5e1" stroke-width="1.5" style="margin-bottom:16px;">
+            <path d="M3 9.5L12 3l9 6.5V20a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V9.5z"/>
+            <path d="M9 21V12h6v9"/>
+          </svg>
+          <h3>No properties yet</h3>
+          <p>Add your first property to get started.</p>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+
+</div><!-- /.doc-body -->
+
+<div class="doc-footer">
+  PropFlow User Documentation &nbsp;·&nbsp; Properties module &nbsp;·&nbsp; Last updated May 2026
+</div>
+
+</body>
+</html>
