@@ -1,5 +1,6 @@
 import { prisma, Prisma } from '@propflow/db';
 import { AppError } from '../middleware/error-handler';
+import { sendPropertyDeletionNotification } from './email.service';
 import { CURRENT_LEASE_STATUSES } from '../constants';
 
 export async function listProperties(organizationId: string) {
@@ -78,7 +79,10 @@ export async function updateProperty(
 export async function deleteProperty(organizationId: string, propertyId: string) {
   const existing = await prisma.property.findFirst({
     where: { id: propertyId, organizationId },
-    include: { _count: { select: { units: true } } },
+    include: {
+      _count: { select: { units: true } },
+      organization: { select: { name: true } },
+    },
   });
 
   if (!existing) {
@@ -94,4 +98,22 @@ export async function deleteProperty(organizationId: string, propertyId: string)
   }
 
   await prisma.property.delete({ where: { id: propertyId } });
+
+  // Fire-and-forget email to org owner — failure must not surface as an error
+  const owner = await prisma.user.findFirst({
+    where: { organizationId, role: 'owner' },
+    select: { name: true, email: true },
+  });
+
+  if (owner) {
+    sendPropertyDeletionNotification({
+      ownerName: owner.name,
+      ownerEmail: owner.email,
+      propertyName: existing.name,
+      propertyAddress: `${existing.address}, ${existing.city}, ${existing.state} ${existing.zip}`,
+      unitCount: existing._count.units,
+      deletedAt: new Date(),
+      organizationName: existing.organization.name,
+    }).catch(() => {});
+  }
 }
