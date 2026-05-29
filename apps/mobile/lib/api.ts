@@ -94,10 +94,29 @@ export const tenantApi = {
     thread: (threadId: string): Promise<TenantMessage[]> =>
       apiFetch(`/api/v1/tenant/messages/threads/${threadId}`),
 
-    reply: (threadId: string, body: string): Promise<TenantMessage> =>
+    reply: (
+      threadId: string,
+      body: string,
+      attachment?: { s3Key: string; name: string; mimeType: string } | null
+    ): Promise<TenantMessage> =>
       apiFetch(`/api/v1/tenant/messages/${threadId}/reply`, {
         method: 'POST',
-        body: JSON.stringify({ body }),
+        body: JSON.stringify({
+          body,
+          ...(attachment
+            ? {
+                attachmentS3Key: attachment.s3Key,
+                attachmentName: attachment.name,
+                attachmentMimeType: attachment.mimeType,
+              }
+            : {}),
+        }),
+      }),
+
+    attachmentUploadUrl: (fileName: string, contentType: string): Promise<{ uploadUrl: string; s3Key: string }> =>
+      apiFetch('/api/v1/tenant/messages/attachment-upload-url', {
+        method: 'POST',
+        body: JSON.stringify({ fileName, contentType }),
       }),
   },
 

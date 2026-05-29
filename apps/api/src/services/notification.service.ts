@@ -7,6 +7,7 @@ import {
   sendLeaseExpiryToTenant,
   sendLateFeeToTenant,
 } from './email.service';
+import { sendSms } from './sms.service';
 
 // ─── Config ───────────────────────────────────────────────────────────────────
 
@@ -56,7 +57,7 @@ export async function runRentReminderJob(organizationId?: string) {
       ...(organizationId ? { lease: { unit: { property: { organizationId } } } } : {}),
     },
     include: {
-      tenant: { select: { id: true, name: true, email: true } },
+      tenant: { select: { id: true, name: true, email: true, phone: true, preferredContact: true } },
       lease: {
         include: {
           unit: {
@@ -78,16 +79,24 @@ export async function runRentReminderJob(organizationId?: string) {
       const org = payment.lease.unit.property.organization;
       const property = payment.lease.unit.property;
       const unit = payment.lease.unit;
+      const tenant = payment.tenant;
 
-      await sendRentReminder({
-        tenantName: payment.tenant.name,
-        tenantEmail: payment.tenant.email,
-        unitNumber: unit.unitNumber,
-        propertyName: property.name,
-        rentAmount: payment.amount.toNumber(),
-        dueDate: payment.dueDate,
-        organizationName: org.name,
-      });
+      if (tenant.preferredContact === 'sms' && tenant.phone) {
+        await sendSms(
+          tenant.phone,
+          `Hi ${tenant.name}, your rent of $${payment.amount.toNumber().toFixed(2)} for Unit ${unit.unitNumber} at ${property.name} is due in ${RENT_REMINDER_DAYS_BEFORE} days. Please log in to your tenant portal to pay.`
+        );
+      } else {
+        await sendRentReminder({
+          tenantName: tenant.name,
+          tenantEmail: tenant.email,
+          unitNumber: unit.unitNumber,
+          propertyName: property.name,
+          rentAmount: payment.amount.toNumber(),
+          dueDate: payment.dueDate,
+          organizationName: org.name,
+        });
+      }
     })
   );
 
@@ -119,7 +128,7 @@ export async function runOverdueRentJob(organizationId?: string) {
       ...(organizationId ? { lease: { unit: { property: { organizationId } } } } : {}),
     },
     include: {
-      tenant: { select: { id: true, name: true, email: true } },
+      tenant: { select: { id: true, name: true, email: true, phone: true, preferredContact: true } },
       lease: {
         include: {
           unit: {
@@ -157,26 +166,36 @@ export async function runOverdueRentJob(organizationId?: string) {
       const org = payment.lease.unit.property.organization;
       const property = payment.lease.unit.property;
       const unit = payment.lease.unit;
+      const tenant = payment.tenant;
       const daysOverdue = Math.floor(
         (now.getTime() - new Date(payment.dueDate).getTime()) / (1000 * 60 * 60 * 24)
       );
 
       const emailTasks: Promise<unknown>[] = [];
 
-      // Email tenant (always if overdue)
-      emailTasks.push(
-        sendRentOverdueToTenant({
-          tenantName: payment.tenant.name,
-          tenantEmail: payment.tenant.email,
-          unitNumber: unit.unitNumber,
-          propertyName: property.name,
-          rentAmount: payment.amount.toNumber(),
-          dueDate: payment.dueDate,
-          daysOverdue,
-          lateFeeAmount: payment.lease.lateFeeAmount?.toNumber() ?? undefined,
-          organizationName: org.name,
-        })
-      );
+      // Notify tenant — SMS if preferred, otherwise email
+      if (tenant.preferredContact === 'sms' && tenant.phone) {
+        emailTasks.push(
+          sendSms(
+            tenant.phone,
+            `Hi ${tenant.name}, your rent of $${payment.amount.toNumber().toFixed(2)} for Unit ${unit.unitNumber} at ${property.name} is ${daysOverdue} day${daysOverdue !== 1 ? 's' : ''} overdue. Please log in to your tenant portal to pay.`
+          )
+        );
+      } else {
+        emailTasks.push(
+          sendRentOverdueToTenant({
+            tenantName: tenant.name,
+            tenantEmail: tenant.email,
+            unitNumber: unit.unitNumber,
+            propertyName: property.name,
+            rentAmount: payment.amount.toNumber(),
+            dueDate: payment.dueDate,
+            daysOverdue,
+            lateFeeAmount: payment.lease.lateFeeAmount?.toNumber() ?? undefined,
+            organizationName: org.name,
+          })
+        );
+      }
 
       // Notify managers who have email or both
       for (const user of org.users) {
@@ -187,7 +206,7 @@ export async function runOverdueRentJob(organizationId?: string) {
             sendRentOverdueToManager({
               managerName: user.name,
               managerEmail: user.email,
-              tenantName: payment.tenant.name,
+              tenantName: tenant.name,
               unitNumber: unit.unitNumber,
               propertyName: property.name,
               rentAmount: payment.amount.toNumber(),
@@ -204,7 +223,7 @@ export async function runOverdueRentJob(organizationId?: string) {
               userId: user.id,
               organizationId: org.id,
               type: 'rent_overdue',
-              title: `Overdue rent — ${payment.tenant.name}`,
+              title: `Overdue rent — ${tenant.name}`,
               body: `${property.name} Unit ${unit.unitNumber} rent is ${daysOverdue} day${daysOverdue !== 1 ? 's' : ''} overdue (${new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(Number(payment.amount))}).`,
               actionUrl: `/leases`,
             })
@@ -397,7 +416,7 @@ export async function runLateFeeNotificationJob(organizationId?: string) {
       ...(organizationId ? { lease: { unit: { property: { organizationId } } } } : {}),
     },
     include: {
-      tenant: { select: { id: true, name: true, email: true } },
+      tenant: { select: { id: true, name: true, email: true, phone: true, preferredContact: true } },
       lease: {
         include: {
           payments: {
@@ -447,19 +466,28 @@ export async function runLateFeeNotificationJob(organizationId?: string) {
 
       const tasks: Promise<unknown>[] = [];
 
-      // Email tenant
-      tasks.push(
-        sendLateFeeToTenant({
-          tenantName: payment.tenant.name,
-          tenantEmail: payment.tenant.email,
-          unitNumber: unit.unitNumber,
-          propertyName: property.name,
-          originalDueDate: relatedRent?.dueDate ?? payment.dueDate,
-          lateFeeAmount,
-          totalOwed,
-          organizationName: org.name,
-        })
-      );
+      // Notify tenant — SMS if preferred, otherwise email
+      if (payment.tenant.preferredContact === 'sms' && payment.tenant.phone) {
+        tasks.push(
+          sendSms(
+            payment.tenant.phone,
+            `Hi ${payment.tenant.name}, a late fee of $${lateFeeAmount.toFixed(2)} has been applied to your account for Unit ${unit.unitNumber} at ${property.name}. Total owed: $${totalOwed.toFixed(2)}. Please log in to your tenant portal to pay.`
+          )
+        );
+      } else {
+        tasks.push(
+          sendLateFeeToTenant({
+            tenantName: payment.tenant.name,
+            tenantEmail: payment.tenant.email,
+            unitNumber: unit.unitNumber,
+            propertyName: property.name,
+            originalDueDate: relatedRent?.dueDate ?? payment.dueDate,
+            lateFeeAmount,
+            totalOwed,
+            organizationName: org.name,
+          })
+        );
+      }
 
       // In-app notification for managers
       for (const user of org.users) {

@@ -4,6 +4,15 @@ import { useEffect, useRef, useState } from 'react';
 import { api } from '@/lib/api';
 import { useAuth } from '@/contexts/AuthContext';
 
+const ALLOWED_MIME_TYPES = [
+  'image/jpeg', 'image/png', 'image/gif', 'image/webp',
+  'application/pdf',
+  'application/msword',
+  'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+  'text/plain',
+];
+const MAX_FILE_BYTES = 10 * 1024 * 1024; // 10 MB
+
 interface Thread {
   threadId: string;
   subject: string | null;
@@ -24,6 +33,9 @@ interface Message {
   recipientTenantId: string | null;
   sender: { id: string; name: string } | null;
   recipient: { id: string; name: string } | null;
+  attachmentName: string | null;
+  attachmentMimeType: string | null;
+  attachmentDownloadUrl: string | null;
 }
 
 export default function MessagesPage() {
@@ -37,6 +49,9 @@ export default function MessagesPage() {
   const [loadingMessages, setLoadingMessages] = useState(false);
   const [sendingMessage, setSendingMessage] = useState(false);
   const [replyBody, setReplyBody] = useState('');
+  const [attachmentFile, setAttachmentFile] = useState<File | null>(null);
+  const [attachmentError, setAttachmentError] = useState('');
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   // Compose modal
   const [showCompose, setShowCompose] = useState(false);
@@ -46,6 +61,8 @@ export default function MessagesPage() {
   const [composeBody, setComposeBody] = useState('');
   const [composeError, setComposeError] = useState('');
   const [composeSubmitting, setComposeSubmitting] = useState(false);
+  const [composeAttachmentFile, setComposeAttachmentFile] = useState<File | null>(null);
+  const composeFileInputRef = useRef<HTMLInputElement>(null);
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const activeThreadPollRef = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -106,6 +123,23 @@ export default function MessagesPage() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeThreadId]);
 
+  function handleFileSelect(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0] ?? null;
+    setAttachmentError('');
+    if (!file) { setAttachmentFile(null); return; }
+    if (!ALLOWED_MIME_TYPES.includes(file.type)) {
+      setAttachmentError('File type not supported. Use images, PDF, or Word docs.');
+      e.target.value = '';
+      return;
+    }
+    if (file.size > MAX_FILE_BYTES) {
+      setAttachmentError('File too large (max 10 MB).');
+      e.target.value = '';
+      return;
+    }
+    setAttachmentFile(file);
+  }
+
   async function handleSendReply(e: React.FormEvent) {
     e.preventDefault();
     if (!activeThreadId || !replyBody.trim() || !currentUserId) return;
@@ -115,15 +149,39 @@ export default function MessagesPage() {
 
     setSendingMessage(true);
     try {
+      let attachmentS3Key: string | null = null;
+      let attachmentName: string | null = null;
+      let attachmentMimeType: string | null = null;
+
+      if (attachmentFile) {
+        const { uploadUrl, s3Key } = await api.messages.attachmentUploadUrl(
+          attachmentFile.name,
+          attachmentFile.type
+        );
+        await fetch(uploadUrl, {
+          method: 'PUT',
+          body: attachmentFile,
+          headers: { 'Content-Type': attachmentFile.type },
+        });
+        attachmentS3Key = s3Key;
+        attachmentName = attachmentFile.name;
+        attachmentMimeType = attachmentFile.type;
+      }
+
       const msg = await api.messages.send({
         senderUserId: currentUserId,
         recipientTenantId: activeThread.tenant.id,
         body: replyBody.trim(),
         threadId: activeThreadId,
+        attachmentS3Key,
+        attachmentName,
+        attachmentMimeType,
       });
       shouldAutoScrollRef.current = true;
       setThreadMessages((prev) => [...prev, msg]);
       setReplyBody('');
+      setAttachmentFile(null);
+      if (fileInputRef.current) fileInputRef.current.value = '';
       await loadThreads();
     } catch (err) {
       console.error('Failed to send message:', err);
@@ -137,6 +195,7 @@ export default function MessagesPage() {
     setComposeSubject('');
     setComposeBody('');
     setComposeError('');
+    setComposeAttachmentFile(null);
     setShowCompose(true);
     try {
       const data = await api.tenants.list();
@@ -155,11 +214,33 @@ export default function MessagesPage() {
     setComposeError('');
     setComposeSubmitting(true);
     try {
+      let attachmentS3Key: string | null = null;
+      let attachmentName: string | null = null;
+      let attachmentMimeType: string | null = null;
+
+      if (composeAttachmentFile) {
+        const { uploadUrl, s3Key } = await api.messages.attachmentUploadUrl(
+          composeAttachmentFile.name,
+          composeAttachmentFile.type
+        );
+        await fetch(uploadUrl, {
+          method: 'PUT',
+          body: composeAttachmentFile,
+          headers: { 'Content-Type': composeAttachmentFile.type },
+        });
+        attachmentS3Key = s3Key;
+        attachmentName = composeAttachmentFile.name;
+        attachmentMimeType = composeAttachmentFile.type;
+      }
+
       const msg = await api.messages.send({
         senderUserId: currentUserId,
         recipientTenantId: composeRecipientId,
         body: composeBody.trim(),
         subject: composeSubject.trim() || null,
+        attachmentS3Key,
+        attachmentName,
+        attachmentMimeType,
       });
       setShowCompose(false);
       await loadThreads();
@@ -312,6 +393,29 @@ export default function MessagesPage() {
                           }}
                         >
                           {msg.body}
+                          {msg.attachmentDownloadUrl && msg.attachmentName && (
+                            <div style={{ marginTop: '8px' }}>
+                              <a
+                                href={msg.attachmentDownloadUrl}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                style={{
+                                  display: 'inline-flex',
+                                  alignItems: 'center',
+                                  gap: '6px',
+                                  padding: '4px 10px',
+                                  borderRadius: '6px',
+                                  background: isFromManager ? 'rgba(255,255,255,0.2)' : 'var(--color-border)',
+                                  color: isFromManager ? '#fff' : 'var(--color-text)',
+                                  fontSize: '12px',
+                                  textDecoration: 'none',
+                                  fontWeight: 500,
+                                }}
+                              >
+                                📎 {msg.attachmentName}
+                              </a>
+                            </div>
+                          )}
                         </div>
                         <div style={{ fontSize: '11px', color: 'var(--color-text-muted)', marginTop: '3px' }}>
                           {isFromManager ? (msg.sender?.name ?? 'You') : (msg.recipient?.name ?? 'Tenant')} · {formatTime(msg.createdAt)}
@@ -326,29 +430,55 @@ export default function MessagesPage() {
               {/* Reply input */}
               <form
                 onSubmit={handleSendReply}
-                style={{ padding: '12px 16px', borderTop: '1px solid var(--color-border)', display: 'flex', gap: '8px', background: 'var(--color-surface)' }}
+                style={{ padding: '12px 16px', borderTop: '1px solid var(--color-border)', display: 'flex', flexDirection: 'column', gap: '8px', background: 'var(--color-surface)' }}
               >
-                <textarea
-                  rows={2}
-                  placeholder="Write a message…"
-                  value={replyBody}
-                  onChange={(e) => setReplyBody(e.target.value)}
-                  onKeyDown={(e) => {
-                    if (e.key === 'Enter' && !e.shiftKey) {
-                      e.preventDefault();
-                      handleSendReply(e as any);
-                    }
-                  }}
-                  style={{ flex: 1, resize: 'none', fontSize: '14px' }}
-                />
-                <button
-                  type="submit"
-                  className="btn btn-primary"
-                  disabled={sendingMessage || !replyBody.trim()}
-                  style={{ alignSelf: 'flex-end' }}
-                >
-                  {sendingMessage ? 'Sending…' : 'Send'}
-                </button>
+                {attachmentError && (
+                  <div style={{ fontSize: '13px', color: 'var(--color-danger)' }}>{attachmentError}</div>
+                )}
+                {attachmentFile && (
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '13px', color: 'var(--color-text-muted)' }}>
+                    <span>📎 {attachmentFile.name}</span>
+                    <button type="button" onClick={() => { setAttachmentFile(null); if (fileInputRef.current) fileInputRef.current.value = ''; }} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--color-danger)', fontSize: '13px', padding: 0 }}>Remove</button>
+                  </div>
+                )}
+                <div style={{ display: 'flex', gap: '8px', alignItems: 'flex-end' }}>
+                  <button
+                    type="button"
+                    title="Attach file"
+                    onClick={() => fileInputRef.current?.click()}
+                    style={{ background: 'none', border: '1px solid var(--color-border)', borderRadius: '6px', cursor: 'pointer', padding: '6px 10px', fontSize: '16px', color: 'var(--color-text-muted)', flexShrink: 0, alignSelf: 'flex-end' }}
+                  >
+                    📎
+                  </button>
+                  <input
+                    ref={fileInputRef}
+                    type="file"
+                    accept=".jpg,.jpeg,.png,.gif,.webp,.pdf,.doc,.docx,.txt"
+                    style={{ display: 'none' }}
+                    onChange={handleFileSelect}
+                  />
+                  <textarea
+                    rows={2}
+                    placeholder="Write a message…"
+                    value={replyBody}
+                    onChange={(e) => setReplyBody(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter' && !e.shiftKey) {
+                        e.preventDefault();
+                        handleSendReply(e as any);
+                      }
+                    }}
+                    style={{ flex: 1, resize: 'none', fontSize: '14px' }}
+                  />
+                  <button
+                    type="submit"
+                    className="btn btn-primary"
+                    disabled={sendingMessage || !replyBody.trim()}
+                    style={{ alignSelf: 'flex-end' }}
+                  >
+                    {sendingMessage ? 'Sending…' : 'Send'}
+                  </button>
+                </div>
               </form>
             </>
           )}
@@ -395,6 +525,27 @@ export default function MessagesPage() {
                     onChange={(e) => setComposeBody(e.target.value)}
                     required
                   />
+                </div>
+                <div className="form-group">
+                  <label>Attachment (optional)</label>
+                  <input
+                    ref={composeFileInputRef}
+                    type="file"
+                    accept=".jpg,.jpeg,.png,.gif,.webp,.pdf,.doc,.docx,.txt"
+                    onChange={(e) => {
+                      const file = e.target.files?.[0] ?? null;
+                      if (file && (file.size > MAX_FILE_BYTES || !ALLOWED_MIME_TYPES.includes(file.type))) {
+                        setComposeError('File type not supported or too large (max 10 MB).');
+                        e.target.value = '';
+                        return;
+                      }
+                      setComposeAttachmentFile(file);
+                    }}
+                    style={{ fontSize: '14px' }}
+                  />
+                  {composeAttachmentFile && (
+                    <span style={{ fontSize: '12px', color: 'var(--color-text-muted)' }}>📎 {composeAttachmentFile.name}</span>
+                  )}
                 </div>
               </div>
               <div className="modal-footer">

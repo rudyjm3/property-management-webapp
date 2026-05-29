@@ -1,7 +1,9 @@
 import { useRef, useState } from 'react';
 import {
+  Alert,
   FlatList,
   KeyboardAvoidingView,
+  Linking,
   Platform,
   Text,
   TextInput,
@@ -12,8 +14,29 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Stack, useLocalSearchParams } from 'expo-router';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import * as ImagePicker from 'expo-image-picker';
 import { tenantApi } from '@/lib/api';
 import type { TenantMessage } from '@propflow/shared';
+
+interface AttachmentPayload {
+  s3Key: string;
+  name: string;
+  mimeType: string;
+}
+
+function AttachmentChip({ url, name, isFromTenant }: { url: string; name: string; isFromTenant: boolean }) {
+  return (
+    <TouchableOpacity
+      onPress={() => Linking.openURL(url).catch(() => Alert.alert('Error', 'Could not open attachment.'))}
+      style={[styles.attachmentChip, isFromTenant ? styles.attachmentChipRight : styles.attachmentChipLeft]}
+      activeOpacity={0.7}
+    >
+      <Text style={[styles.attachmentChipText, isFromTenant ? styles.attachmentChipTextRight : styles.attachmentChipTextLeft]}>
+        📎 {name}
+      </Text>
+    </TouchableOpacity>
+  );
+}
 
 function MessageBubble({ item }: { item: TenantMessage }) {
   const fromTenant = item.isFromTenant;
@@ -23,6 +46,13 @@ function MessageBubble({ item }: { item: TenantMessage }) {
       <Text style={[styles.bubbleText, fromTenant ? styles.bubbleTextRight : styles.bubbleTextLeft]}>
         {item.body}
       </Text>
+      {item.attachmentDownloadUrl && item.attachmentName && (
+        <AttachmentChip
+          url={item.attachmentDownloadUrl}
+          name={item.attachmentName}
+          isFromTenant={fromTenant}
+        />
+      )}
       <Text style={[styles.bubbleTime, fromTenant ? styles.bubbleTimeRight : styles.bubbleTimeLeft]}>
         {new Date(item.createdAt).toLocaleTimeString('en-US', {
           hour: 'numeric',
@@ -36,6 +66,9 @@ function MessageBubble({ item }: { item: TenantMessage }) {
 export default function ConversationScreen() {
   const { threadId, subject } = useLocalSearchParams<{ threadId: string; subject: string }>();
   const [draft, setDraft] = useState('');
+  const [pendingAttachment, setPendingAttachment] = useState<AttachmentPayload | null>(null);
+  const [pendingAttachmentName, setPendingAttachmentName] = useState<string | null>(null);
+  const [uploadingAttachment, setUploadingAttachment] = useState(false);
   const flatListRef = useRef<FlatList>(null);
   const queryClient = useQueryClient();
 
@@ -47,15 +80,59 @@ export default function ConversationScreen() {
   });
 
   const { mutate: sendReply, isPending } = useMutation({
-    mutationFn: (body: string) => tenantApi.messages.reply(threadId, body),
+    mutationFn: ({ body, attachment }: { body: string; attachment: AttachmentPayload | null }) =>
+      tenantApi.messages.reply(threadId, body, attachment),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['thread', threadId] });
       queryClient.invalidateQueries({ queryKey: ['threads'] });
       setDraft('');
+      setPendingAttachment(null);
+      setPendingAttachmentName(null);
     },
   });
 
-  const canSend = draft.trim().length > 0 && !isPending;
+  async function pickImage() {
+    const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+    if (status !== 'granted') {
+      Alert.alert('Permission required', 'Please allow photo library access to attach images.');
+      return;
+    }
+
+    const result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ['images'],
+      quality: 0.8,
+      allowsEditing: false,
+    });
+
+    if (result.canceled || !result.assets[0]) return;
+    const asset = result.assets[0];
+    const fileName = asset.fileName ?? `photo_${Date.now()}.jpg`;
+    const mimeType = asset.mimeType ?? 'image/jpeg';
+    const uri = asset.uri;
+
+    setUploadingAttachment(true);
+    try {
+      const { uploadUrl, s3Key } = await tenantApi.messages.attachmentUploadUrl(fileName, mimeType);
+
+      const response = await fetch(uri);
+      const blob = await response.blob();
+
+      await fetch(uploadUrl, {
+        method: 'PUT',
+        body: blob,
+        headers: { 'Content-Type': mimeType },
+      });
+
+      setPendingAttachment({ s3Key, name: fileName, mimeType });
+      setPendingAttachmentName(fileName);
+    } catch {
+      Alert.alert('Upload failed', 'Could not upload the attachment. Please try again.');
+    } finally {
+      setUploadingAttachment(false);
+    }
+  }
+
+  const canSend = (draft.trim().length > 0 || pendingAttachment !== null) && !isPending && !uploadingAttachment;
 
   return (
     <>
@@ -81,7 +158,28 @@ export default function ConversationScreen() {
             renderItem={({ item }) => <MessageBubble item={item} />}
           />
 
+          {/* Pending attachment preview */}
+          {pendingAttachmentName && (
+            <View style={styles.attachmentPreviewBar}>
+              <Text style={styles.attachmentPreviewText} numberOfLines={1}>📎 {pendingAttachmentName}</Text>
+              <TouchableOpacity
+                onPress={() => { setPendingAttachment(null); setPendingAttachmentName(null); }}
+                style={styles.attachmentPreviewRemove}
+              >
+                <Text style={styles.attachmentPreviewRemoveText}>✕</Text>
+              </TouchableOpacity>
+            </View>
+          )}
+
           <View style={styles.inputRow}>
+            <TouchableOpacity
+              style={styles.attachBtn}
+              onPress={pickImage}
+              disabled={uploadingAttachment}
+              activeOpacity={0.7}
+            >
+              <Text style={styles.attachBtnText}>{uploadingAttachment ? '…' : '📎'}</Text>
+            </TouchableOpacity>
             <TextInput
               style={styles.input}
               value={draft}
@@ -94,7 +192,11 @@ export default function ConversationScreen() {
             />
             <TouchableOpacity
               style={[styles.sendBtn, !canSend && styles.sendBtnDisabled]}
-              onPress={() => { if (canSend) sendReply(draft.trim()); }}
+              onPress={() => {
+                if (canSend) {
+                  sendReply({ body: draft.trim() || ' ', attachment: pendingAttachment });
+                }
+              }}
               disabled={!canSend}
               activeOpacity={0.7}
             >
@@ -138,9 +240,37 @@ const styles = StyleSheet.create({
   bubbleTimeLeft: { color: '#9ca3af', alignSelf: 'flex-end' },
   bubbleTimeRight: { color: 'rgba(255,255,255,0.7)', alignSelf: 'flex-end' },
 
+  // Attachment chip inside bubble
+  attachmentChip: {
+    borderRadius: 8,
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    marginTop: 6,
+  },
+  attachmentChipLeft: { backgroundColor: '#f3f4f6' },
+  attachmentChipRight: { backgroundColor: 'rgba(255,255,255,0.2)' },
+  attachmentChipText: { fontSize: 13, fontWeight: '500' },
+  attachmentChipTextLeft: { color: '#374151' },
+  attachmentChipTextRight: { color: '#fff' },
+
   // Empty state
   empty: { paddingTop: 60, alignItems: 'center' },
   emptyText: { color: '#9ca3af', fontSize: 14 },
+
+  // Attachment preview bar above input
+  attachmentPreviewBar: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    backgroundColor: '#eff6ff',
+    borderTopWidth: 1,
+    borderTopColor: '#dbeafe',
+    gap: 8,
+  },
+  attachmentPreviewText: { flex: 1, fontSize: 13, color: '#1e40af' },
+  attachmentPreviewRemove: { padding: 4 },
+  attachmentPreviewRemoveText: { fontSize: 14, color: '#1e40af', fontWeight: '600' },
 
   // Input row
   inputRow: {
@@ -152,6 +282,16 @@ const styles = StyleSheet.create({
     borderTopWidth: 1,
     borderTopColor: '#f3f4f6',
   },
+  attachBtn: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: '#f3f4f6',
+    alignItems: 'center',
+    justifyContent: 'center',
+    flexShrink: 0,
+  },
+  attachBtnText: { fontSize: 18 },
   input: {
     flex: 1,
     minHeight: 40,

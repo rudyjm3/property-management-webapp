@@ -693,6 +693,9 @@ model Message {
   recipientTenantId String?   @map("recipient_tenant_id")
   body              String
   attachmentUrl     String?   @map("attachment_url")
+  attachmentS3Key   String?   @map("attachment_s3_key") @db.VarChar(1000)
+  attachmentName    String?   @map("attachment_name") @db.VarChar(500)
+  attachmentMimeType String?  @map("attachment_mime_type") @db.VarChar(100)
   readAt            DateTime? @map("read_at")
   createdAt         DateTime  @default(now()) @map("created_at")
 

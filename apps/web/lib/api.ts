@@ -359,6 +359,11 @@ export const api = {
       get: (threadId: string) =>
         apiFetch<any[]>(`/api/v1/organizations/${_orgId}/messages/threads/${threadId}`),
     },
+    attachmentUploadUrl: (fileName: string, contentType: string) =>
+      apiFetch<{ uploadUrl: string; s3Key: string }>(
+        `/api/v1/organizations/${_orgId}/messages/attachment-upload-url`,
+        { method: 'POST', body: JSON.stringify({ fileName, contentType }) }
+      ),
     send: (data: {
       senderUserId: string;
       recipientTenantId: string;
@@ -367,6 +372,9 @@ export const api = {
       subject?: string | null;
       unitId?: string | null;
       workOrderId?: string | null;
+      attachmentS3Key?: string | null;
+      attachmentName?: string | null;
+      attachmentMimeType?: string | null;
     }) =>
       apiFetch<any>(`/api/v1/organizations/${_orgId}/messages`, {
         method: 'POST',
