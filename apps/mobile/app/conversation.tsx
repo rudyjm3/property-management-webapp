@@ -194,7 +194,7 @@ export default function ConversationScreen() {
               style={[styles.sendBtn, !canSend && styles.sendBtnDisabled]}
               onPress={() => {
                 if (canSend) {
-                  sendReply({ body: draft.trim() || ' ', attachment: pendingAttachment });
+                  sendReply({ body: draft.trim(), attachment: pendingAttachment });
                 }
               }}
               disabled={!canSend}

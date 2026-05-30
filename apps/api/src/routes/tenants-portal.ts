@@ -197,19 +197,19 @@ router.post('/messages/:threadId/reply', async (req: Request, res: Response, nex
       attachmentName?: string;
       attachmentMimeType?: string;
     };
-    if (!body?.trim()) {
-      res.status(400).json({ error: { code: 'MISSING_BODY', message: 'body is required.' } });
-      return;
-    }
     const attachment =
       attachmentS3Key && attachmentName && attachmentMimeType
         ? { s3Key: attachmentS3Key, name: attachmentName, mimeType: attachmentMimeType }
         : null;
+    if (!body?.trim() && !attachment) {
+      res.status(400).json({ error: { code: 'MISSING_BODY', message: 'body or an attachment is required.' } });
+      return;
+    }
     const message = await messageService.sendTenantReply(
       tenantId,
       orgId,
       req.params.threadId as string,
-      body.trim(),
+      body?.trim() ?? '',
       attachment
     );
     res.status(201).json({ data: message });

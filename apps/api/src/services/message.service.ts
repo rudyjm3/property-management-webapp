@@ -280,7 +280,7 @@ export async function sendTenantReply(
         organizationId: orgId,
         type: 'new_message',
         title: 'New message from tenant',
-        body: body.length > 120 ? body.slice(0, 117) + '…' : body,
+        body: body ? (body.length > 120 ? body.slice(0, 117) + '…' : body) : `📎 ${attachment?.name ?? 'attachment'}`,
         actionUrl: `/messages?threadId=${threadId}`,
       })
     )
