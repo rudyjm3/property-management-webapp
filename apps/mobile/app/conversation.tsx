@@ -15,6 +15,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { Stack, useLocalSearchParams } from 'expo-router';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import * as ImagePicker from 'expo-image-picker';
+import * as DocumentPicker from 'expo-document-picker';
 import { tenantApi } from '@/lib/api';
 import type { TenantMessage } from '@propflow/shared';
 
@@ -69,6 +70,7 @@ export default function ConversationScreen() {
   const [pendingAttachment, setPendingAttachment] = useState<AttachmentPayload | null>(null);
   const [pendingAttachmentName, setPendingAttachmentName] = useState<string | null>(null);
   const [uploadingAttachment, setUploadingAttachment] = useState(false);
+  const [showAttachMenu, setShowAttachMenu] = useState(false);
   const flatListRef = useRef<FlatList>(null);
   const queryClient = useQueryClient();
 
@@ -91,38 +93,14 @@ export default function ConversationScreen() {
     },
   });
 
-  async function pickImage() {
-    const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
-    if (status !== 'granted') {
-      Alert.alert('Permission required', 'Please allow photo library access to attach images.');
-      return;
-    }
-
-    const result = await ImagePicker.launchImageLibraryAsync({
-      mediaTypes: ['images'],
-      quality: 0.8,
-      allowsEditing: false,
-    });
-
-    if (result.canceled || !result.assets[0]) return;
-    const asset = result.assets[0];
-    const fileName = asset.fileName ?? `photo_${Date.now()}.jpg`;
-    const mimeType = asset.mimeType ?? 'image/jpeg';
-    const uri = asset.uri;
-
+  async function uploadAndSet(uri: string, fileName: string, mimeType: string) {
     setUploadingAttachment(true);
+    setShowAttachMenu(false);
     try {
       const { uploadUrl, s3Key } = await tenantApi.messages.attachmentUploadUrl(fileName, mimeType);
-
       const response = await fetch(uri);
       const blob = await response.blob();
-
-      await fetch(uploadUrl, {
-        method: 'PUT',
-        body: blob,
-        headers: { 'Content-Type': mimeType },
-      });
-
+      await fetch(uploadUrl, { method: 'PUT', body: blob, headers: { 'Content-Type': mimeType } });
       setPendingAttachment({ s3Key, name: fileName, mimeType });
       setPendingAttachmentName(fileName);
     } catch {
@@ -130,6 +108,47 @@ export default function ConversationScreen() {
     } finally {
       setUploadingAttachment(false);
     }
+  }
+
+  async function pickImage() {
+    const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+    if (status !== 'granted') {
+      Alert.alert('Permission required', 'Please allow photo library access to attach images.');
+      setShowAttachMenu(false);
+      return;
+    }
+    const result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ['images'],
+      quality: 0.8,
+      allowsEditing: false,
+    });
+    if (result.canceled || !result.assets[0]) { setShowAttachMenu(false); return; }
+    const asset = result.assets[0];
+    await uploadAndSet(
+      asset.uri,
+      asset.fileName ?? `photo_${Date.now()}.jpg`,
+      asset.mimeType ?? 'image/jpeg'
+    );
+  }
+
+  async function pickDocument() {
+    setShowAttachMenu(false);
+    const result = await DocumentPicker.getDocumentAsync({
+      type: [
+        'application/pdf',
+        'application/msword',
+        'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+        'text/plain',
+      ],
+      copyToCacheDirectory: true,
+    });
+    if (result.canceled || !result.assets?.[0]) return;
+    const asset = result.assets[0];
+    await uploadAndSet(
+      asset.uri,
+      asset.name,
+      asset.mimeType ?? 'application/octet-stream'
+    );
   }
 
   const canSend = (draft.trim().length > 0 || pendingAttachment !== null) && !isPending && !uploadingAttachment;
@@ -171,10 +190,25 @@ export default function ConversationScreen() {
             </View>
           )}
 
+          {/* Attach type menu */}
+          {showAttachMenu && (
+            <View style={styles.attachMenu}>
+              <TouchableOpacity style={styles.attachMenuItem} onPress={pickImage} activeOpacity={0.7}>
+                <Text style={styles.attachMenuIcon}>🖼️</Text>
+                <Text style={styles.attachMenuLabel}>Photo</Text>
+              </TouchableOpacity>
+              <View style={styles.attachMenuDivider} />
+              <TouchableOpacity style={styles.attachMenuItem} onPress={pickDocument} activeOpacity={0.7}>
+                <Text style={styles.attachMenuIcon}>📄</Text>
+                <Text style={styles.attachMenuLabel}>Document</Text>
+              </TouchableOpacity>
+            </View>
+          )}
+
           <View style={styles.inputRow}>
             <TouchableOpacity
               style={styles.attachBtn}
-              onPress={pickImage}
+              onPress={() => setShowAttachMenu((v) => !v)}
               disabled={uploadingAttachment}
               activeOpacity={0.7}
             >
@@ -256,6 +290,29 @@ const styles = StyleSheet.create({
   // Empty state
   empty: { paddingTop: 60, alignItems: 'center' },
   emptyText: { color: '#9ca3af', fontSize: 14 },
+
+  // Attach type menu (Photo / Document)
+  attachMenu: {
+    flexDirection: 'row',
+    backgroundColor: '#fff',
+    borderTopWidth: 1,
+    borderTopColor: '#f3f4f6',
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+  },
+  attachMenuItem: {
+    flex: 1,
+    alignItems: 'center',
+    gap: 4,
+    paddingVertical: 4,
+  },
+  attachMenuDivider: {
+    width: 1,
+    backgroundColor: '#e5e7eb',
+    marginVertical: 4,
+  },
+  attachMenuIcon: { fontSize: 24 },
+  attachMenuLabel: { fontSize: 12, color: '#6b7280', fontWeight: '500' },
 
   // Attachment preview bar above input
   attachmentPreviewBar: {
