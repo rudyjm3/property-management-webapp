@@ -47,4 +47,7 @@ module.exports = withSentryConfig(nextConfig, {
   silent: true,
   hideSourceMaps: true,
   disableLogger: true,
+  // Routes browser SDK events through /monitoring on this app instead of
+  // directly to *.ingest.sentry.io — keeps the restrictive CSP intact.
+  tunnelRoute: '/monitoring',
 });
