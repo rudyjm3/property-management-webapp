@@ -471,6 +471,17 @@ export const financialSummaryFiltersSchema = z.object({
   propertyId: z.string().uuid().optional(),
 });
 
+export const revenueTrendFiltersSchema = z.object({
+  periodStart: z.string().date(),
+  periodEnd: z.string().date(),
+  propertyId: z.string().uuid().optional(),
+});
+
+export const rentRollFiltersSchema = z.object({
+  propertyId: z.string().uuid().optional(),
+  status: z.enum(UNIT_STATUSES).optional(),
+});
+
 // --- Tenant Portal ---
 
 export const updateTenantProfileSchema = z.object({

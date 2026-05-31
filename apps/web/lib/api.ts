@@ -651,5 +651,25 @@ export const api = {
       if (params.propertyId) query.set('propertyId', params.propertyId);
       return apiFetch<any>(`/api/v1/organizations/${_orgId}/reports/financial-summary?${query.toString()}`);
     },
+    revenueTrend: (params: { periodStart: string; periodEnd: string; propertyId?: string }) => {
+      const query = new URLSearchParams();
+      query.set('periodStart', params.periodStart);
+      query.set('periodEnd', params.periodEnd);
+      if (params.propertyId) query.set('propertyId', params.propertyId);
+      return apiFetch<any>(`/api/v1/organizations/${_orgId}/reports/financial-trend?${query.toString()}`);
+    },
+    rentRoll: (params?: { propertyId?: string; status?: string }) => {
+      const query = new URLSearchParams();
+      if (params?.propertyId) query.set('propertyId', params.propertyId);
+      if (params?.status) query.set('status', params.status);
+      const qs = query.toString();
+      return apiFetch<any>(`/api/v1/organizations/${_orgId}/reports/rent-roll${qs ? `?${qs}` : ''}`);
+    },
+    vacancySnapshot: (params?: { propertyId?: string }) => {
+      const query = new URLSearchParams();
+      if (params?.propertyId) query.set('propertyId', params.propertyId);
+      const qs = query.toString();
+      return apiFetch<any>(`/api/v1/organizations/${_orgId}/reports/vacancy-snapshot${qs ? `?${qs}` : ''}`);
+    },
   },
 };
