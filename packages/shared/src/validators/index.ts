@@ -454,7 +454,14 @@ export const createOwnerStatementSchema = z.object({
   notes: z.string().max(2000).nullable().optional(),
 });
 
-export const updateOwnerStatementSchema = createOwnerStatementSchema.partial();
+export const updateOwnerStatementSchema = z.object({
+  totalIncome: z.number().min(0).optional(),
+  totalExpenses: z.number().min(0).optional(),
+  netOperatingIncome: z.number().optional(),
+  distributionAmount: z.number().min(0).optional(),
+  status: z.enum(OWNER_STATEMENT_STATUSES).optional(),
+  notes: z.string().max(2000).nullable().optional(),
+});
 
 // ─── Financial Report ─────────────────────────────────────────────────────────
 

@@ -80,16 +80,6 @@ export async function getFinancialSummary(
           },
         },
       },
-      workOrders: {
-        where: {
-          status: { in: ['completed', 'closed'] },
-          completedAt: { gte: start, lte: end },
-          totalCost: { not: null },
-        },
-        select: {
-          totalCost: true,
-        },
-      },
       propertyOwners: {
         include: {
           owner: { select: { id: true, name: true } },
@@ -104,7 +94,7 @@ export async function getFinancialSummary(
     let lateFees = 0;
     let deposits = 0;
     let other = 0;
-    let unitExpenses = 0;
+    let totalExpenses = 0;
 
     for (const unit of property.units) {
       for (const lease of unit.leases) {
@@ -118,18 +108,11 @@ export async function getFinancialSummary(
         }
       }
       for (const wo of unit.workOrders) {
-        unitExpenses += Number(wo.totalCost ?? 0);
+        totalExpenses += Number(wo.totalCost ?? 0);
       }
     }
 
-    // Property-level work orders (not linked to a specific unit)
-    const propertyExpenses = property.workOrders.reduce(
-      (sum, wo) => sum + Number(wo.totalCost ?? 0),
-      0
-    );
-
     const totalIncome = rent + lateFees + deposits + other;
-    const totalExpenses = unitExpenses + propertyExpenses;
     const netOperatingIncome = totalIncome - totalExpenses;
 
     const owners = property.propertyOwners.map((po) => ({

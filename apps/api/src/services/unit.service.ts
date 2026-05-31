@@ -1,4 +1,5 @@
 import { prisma } from '@propflow/db';
+import { Prisma } from '@prisma/client';
 import { AppError } from '../middleware/error-handler';
 import { CURRENT_LEASE_STATUSES } from '../constants';
 
@@ -195,10 +196,10 @@ export async function bulkCreateUnits(
   }
 
   const rows = units.map((u) => ({
-    ...(u as any),
+    ...u,
     propertyId,
     status: (u.status as string) ?? 'vacant',
-  }));
+  })) as Prisma.UnitCreateManyInput[];
 
   const createdCount = await prisma.$transaction(async (tx) => {
     const result = await tx.unit.createMany({ data: rows, skipDuplicates: true });

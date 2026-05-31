@@ -233,19 +233,20 @@ export async function createOwnerStatement(
 export async function updateOwnerStatement(
   organizationId: string,
   statementId: string,
-  data: Partial<{
-    totalIncome: number;
-    totalExpenses: number;
-    netOperatingIncome: number;
-    distributionAmount: number;
-    status: 'draft' | 'sent';
-    notes: string | null;
-  }>
+  data: {
+    totalIncome?: number;
+    totalExpenses?: number;
+    netOperatingIncome?: number;
+    distributionAmount?: number;
+    status?: 'draft' | 'sent';
+    notes?: string | null;
+  }
 ) {
   await getOwnerStatement(organizationId, statementId);
+  const { totalIncome, totalExpenses, netOperatingIncome, distributionAmount, status, notes } = data;
   return prisma.ownerStatement.update({
     where: { id: statementId },
-    data,
+    data: { totalIncome, totalExpenses, netOperatingIncome, distributionAmount, status, notes },
     include: {
       owner: { select: { id: true, name: true, email: true } },
       property: { select: { id: true, name: true } },
