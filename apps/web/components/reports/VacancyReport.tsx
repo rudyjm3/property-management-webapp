@@ -17,7 +17,7 @@ export function VacancyReport({ propertyId }: Props) {
     setError(null);
     api.reports
       .vacancySnapshot({ propertyId })
-      .then((res: any) => setData(res.data))
+      .then((res: any) => setData(res))
       .catch((e: Error) => setError(e.message))
       .finally(() => setLoading(false));
   }, [propertyId]);

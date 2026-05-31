@@ -491,7 +491,7 @@ export default function ReportsPage() {
 
         {/* ─── Owner Statements ──────────────────────────────────── */}
         {activeTab === 'statements' && (
-          <OwnerStatements propertyId={selectedPropertyId || undefined} />
+          <OwnerStatements propertyId={selectedPropertyId || undefined} properties={properties} />
         )}
       </div>
     </div>

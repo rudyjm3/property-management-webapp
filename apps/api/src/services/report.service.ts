@@ -264,7 +264,7 @@ export async function getRentRoll(
     include: {
       property: { select: { id: true, name: true, address: true, city: true, state: true } },
       leases: {
-        where: { status: { in: ['active', 'pending'] }, deletedAt: null },
+        where: { status: { in: ['active', 'month_to_month', 'notice_given'] }, deletedAt: null },
         orderBy: { startDate: 'desc' },
         take: 1,
         include: {

@@ -5,13 +5,14 @@ import { api } from '@/lib/api';
 
 interface Props {
   propertyId?: string;
+  properties?: { id: string; name: string }[];
 }
 
 function fmt(n: number) {
   return new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 }).format(n);
 }
 
-export function OwnerStatements({ propertyId }: Props) {
+export function OwnerStatements({ propertyId, properties = [] }: Props) {
   const [statements, setStatements] = useState<any[]>([]);
   const [owners, setOwners] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
@@ -19,7 +20,6 @@ export function OwnerStatements({ propertyId }: Props) {
   const [showModal, setShowModal] = useState(false);
   const [generating, setGenerating] = useState(false);
 
-  // Form state
   const [form, setForm] = useState({
     ownerId: '',
     propertyId: propertyId ?? '',
@@ -36,16 +36,16 @@ export function OwnerStatements({ propertyId }: Props) {
       api.owners.list(),
     ])
       .then(([stmts, ownrs]: [any, any]) => {
-        setStatements(Array.isArray(stmts) ? stmts : stmts?.data ?? []);
-        setOwners(Array.isArray(ownrs) ? ownrs : ownrs?.data ?? []);
+        setStatements(Array.isArray(stmts) ? stmts : []);
+        setOwners(Array.isArray(ownrs) ? ownrs : []);
       })
       .catch((e: Error) => setError(e.message))
       .finally(() => setLoading(false));
   };
 
-  useEffect(load, [propertyId]);
+  useEffect(load, [propertyId]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Auto-fetch financials when period + owner are set
+  // Auto-fetch financials when period + property are set
   useEffect(() => {
     if (!form.periodStart || !form.periodEnd || !form.propertyId) {
       setFinancials(null);
@@ -55,8 +55,7 @@ export function OwnerStatements({ propertyId }: Props) {
     api.reports
       .financialSummary({ periodStart: form.periodStart, periodEnd: form.periodEnd, propertyId: form.propertyId })
       .then((res: any) => {
-        const props = res.data?.properties ?? [];
-        const prop = props.find((p: any) => p.propertyId === form.propertyId);
+        const prop = (res?.properties ?? []).find((p: any) => p.propertyId === form.propertyId);
         setFinancials(prop ?? null);
       })
       .catch(() => setFinancials(null))
@@ -97,6 +96,8 @@ export function OwnerStatements({ propertyId }: Props) {
 
   if (loading) return <div className="py-16 text-center text-sm text-gray-500">Loading statements…</div>;
   if (error) return <div className="py-16 text-center text-sm text-red-500">{error}</div>;
+
+  const canGenerate = !generating && !!form.ownerId && !!form.propertyId && !!form.periodStart && !!form.periodEnd;
 
   return (
     <div className="space-y-4">
@@ -150,7 +151,9 @@ export function OwnerStatements({ propertyId }: Props) {
           </tbody>
         </table>
         {statements.length === 0 && (
-          <div className="py-10 text-center text-sm text-gray-400">No owner statements yet. Click "Generate Statement" to create one.</div>
+          <div className="py-10 text-center text-sm text-gray-400">
+            No owner statements yet. Click &quot;Generate Statement&quot; to create one.
+          </div>
         )}
       </div>
 
@@ -171,6 +174,21 @@ export function OwnerStatements({ propertyId }: Props) {
                   <option value="">Select owner…</option>
                   {owners.map((o: any) => (
                     <option key={o.id} value={o.id}>{o.name}</option>
+                  ))}
+                </select>
+              </div>
+
+              {/* Property selector — required when "All Properties" is active */}
+              <div>
+                <label className="block text-xs font-medium text-gray-600 mb-1">Property</label>
+                <select
+                  value={form.propertyId}
+                  onChange={(e) => setForm((f) => ({ ...f, propertyId: e.target.value }))}
+                  className="w-full border border-gray-300 rounded-md text-sm px-3 py-1.5"
+                >
+                  <option value="">Select property…</option>
+                  {properties.map((p) => (
+                    <option key={p.id} value={p.id}>{p.name}</option>
                   ))}
                 </select>
               </div>
@@ -222,7 +240,7 @@ export function OwnerStatements({ propertyId }: Props) {
               </button>
               <button
                 onClick={handleGenerate}
-                disabled={generating || !form.ownerId || !form.periodStart || !form.periodEnd}
+                disabled={!canGenerate}
                 className="text-sm bg-indigo-600 text-white rounded-md px-3 py-1.5 hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 {generating ? 'Generating…' : 'Generate'}

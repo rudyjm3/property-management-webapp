@@ -34,7 +34,7 @@ export function RevenueTrendChart({ periodStart, periodEnd, propertyId }: Props)
     setError(null);
     api.reports
       .revenueTrend({ periodStart, periodEnd, propertyId })
-      .then((res: any) => setData(res.data?.months ?? []))
+      .then((res: any) => setData(res?.months ?? []))
       .catch((e: Error) => setError(e.message))
       .finally(() => setLoading(false));
   }, [periodStart, periodEnd, propertyId]);
