@@ -16,6 +16,8 @@ const allNavItems = [
   { href: '/work-orders', label: 'Work Orders', icon: 'wrench' },
   { href: '/messages', label: 'Messages', icon: 'mail' },
   { href: '/documents', label: 'Documents', icon: 'folder' },
+  { href: '/owners', label: 'Owners', icon: 'owner' },
+  { href: '/reports', label: 'Reports', icon: 'chart' },
   { href: '/notifications', label: 'Notifications', icon: 'bell' },
   { href: '/settings/organization', label: 'Settings', icon: 'settings' },
 ];
@@ -94,6 +96,21 @@ const icons: Record<string, React.ReactNode> = {
       <rect x="9" y="1" width="6" height="4" rx="1" ry="1" />
       <line x1="9" y1="12" x2="15" y2="12" />
       <line x1="9" y1="16" x2="13" y2="16" />
+    </svg>
+  ),
+  owner: (
+    <svg className="sidebar-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+      <circle cx="12" cy="8" r="4" />
+      <path d="M4 20c0-4 3.6-7 8-7s8 3 8 7" />
+      <path d="M17 14l1.5 1.5L21 13" />
+    </svg>
+  ),
+  chart: (
+    <svg className="sidebar-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+      <line x1="18" y1="20" x2="18" y2="10" />
+      <line x1="12" y1="20" x2="12" y2="4" />
+      <line x1="6" y1="20" x2="6" y2="14" />
+      <line x1="2" y1="20" x2="22" y2="20" />
     </svg>
   ),
 };

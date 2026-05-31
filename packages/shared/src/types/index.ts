@@ -86,6 +86,8 @@ export type DocumentCategory = 'lease' | 'inspection' | 'insurance' | 'id' | 'ph
 
 export type LedgerEntryType = 'credit' | 'debit';
 
+export type OwnerStatementStatus = 'draft' | 'sent';
+
 export type RentalApplicationStatus =
   | 'pending'
   | 'under_review'
@@ -157,6 +159,44 @@ export interface Property {
   taxParcelId: string | null;
   insurancePolicyNumber: string | null;
   insuranceExpiresAt: Date | null;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+export interface Owner {
+  id: string;
+  organizationId: string;
+  name: string;
+  email: string;
+  phone: string | null;
+  address: string | null;
+  taxId: string | null;
+  notes: string | null;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+export interface PropertyOwner {
+  id: string;
+  propertyId: string;
+  ownerId: string;
+  ownershipPct: number;
+  createdAt: Date;
+}
+
+export interface OwnerStatement {
+  id: string;
+  organizationId: string;
+  propertyId: string;
+  ownerId: string;
+  periodStart: Date;
+  periodEnd: Date;
+  totalIncome: number;
+  totalExpenses: number;
+  netOperatingIncome: number;
+  distributionAmount: number;
+  status: OwnerStatementStatus;
+  notes: string | null;
   createdAt: Date;
   updatedAt: Date;
 }

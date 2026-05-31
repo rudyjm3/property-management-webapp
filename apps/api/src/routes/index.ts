@@ -21,6 +21,8 @@ import tenantPortalRoutes from './tenants-portal';
 import applicationRoutes from './applications';
 import applyRoutes from './apply';
 import signRoutes from './sign';
+import ownerRoutes from './owners';
+import reportRoutes from './reports';
 
 const router = Router();
 
@@ -58,6 +60,12 @@ router.use('/organizations/:orgId/ledger', requireAuth, requireOrg, ledgerRoutes
 router.use('/organizations/:orgId/billing', requireAuth, requireOrg, billingRoutes);
 // Application links, application review, and manager lease signing
 router.use('/organizations/:orgId', requireAuth, requireOrg, requireRoles(['owner', 'manager']), applicationRoutes);
+
+// Owner management and owner statements
+router.use('/organizations/:orgId/owners', requireAuth, requireOrg, ownerRoutes);
+
+// Financial reports
+router.use('/organizations/:orgId/reports', requireAuth, requireOrg, reportRoutes);
 
 // Tenant portal routes — protected by tenant auth (separate from manager auth)
 router.use('/tenant', requireTenantAuth, tenantPortalRoutes);

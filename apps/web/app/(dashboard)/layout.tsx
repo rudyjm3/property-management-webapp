@@ -22,7 +22,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
       router.replace('/dashboard');
     }
     if (profile.role === 'maintenance') {
-      const blocked = ['/payments', '/leases', '/messages', '/documents', '/tenants', '/notifications', '/settings'];
+      const blocked = ['/payments', '/leases', '/messages', '/documents', '/tenants', '/notifications', '/settings', '/owners', '/reports'];
       if (blocked.some((p) => pathname.startsWith(p))) {
         router.replace('/work-orders');
       }
@@ -44,7 +44,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   }
 
   if (profile?.role === 'maintenance') {
-    const blocked = ['/payments', '/leases', '/messages', '/documents', '/tenants', '/notifications', '/settings'];
+    const blocked = ['/payments', '/leases', '/messages', '/documents', '/tenants', '/notifications', '/settings', '/owners', '/reports'];
     if (blocked.some((p) => pathname.startsWith(p))) return null;
   }
 

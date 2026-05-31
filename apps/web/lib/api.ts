@@ -583,4 +583,73 @@ export const api = {
       apiFetch<{ count: number }>(`/api/v1/organizations/${_orgId}/applications?status=pending&limit=1`)
         .then((r: any) => (r.data?.length ?? 0)),
   },
+
+  owners: {
+    list: () => apiFetch<any[]>(`/api/v1/organizations/${_orgId}/owners`),
+    get: (id: string) => apiFetch<any>(`/api/v1/organizations/${_orgId}/owners/${id}`),
+    create: (data: any) =>
+      apiFetch<any>(`/api/v1/organizations/${_orgId}/owners`, {
+        method: 'POST',
+        body: JSON.stringify(data),
+      }),
+    update: (id: string, data: any) =>
+      apiFetch<any>(`/api/v1/organizations/${_orgId}/owners/${id}`, {
+        method: 'PATCH',
+        body: JSON.stringify(data),
+      }),
+    delete: (id: string) =>
+      apiFetch<void>(`/api/v1/organizations/${_orgId}/owners/${id}`, { method: 'DELETE' }),
+    listPropertyOwners: (propertyId: string) =>
+      apiFetch<any[]>(`/api/v1/organizations/${_orgId}/owners/properties/${propertyId}/owners`),
+    assignToProperty: (propertyId: string, data: { ownerId: string; ownershipPct: number }) =>
+      apiFetch<any>(`/api/v1/organizations/${_orgId}/owners/properties/${propertyId}/owners`, {
+        method: 'POST',
+        body: JSON.stringify(data),
+      }),
+    removeFromProperty: (propertyId: string, ownerId: string) =>
+      apiFetch<void>(
+        `/api/v1/organizations/${_orgId}/owners/properties/${propertyId}/owners/${ownerId}`,
+        { method: 'DELETE' }
+      ),
+  },
+
+  ownerStatements: {
+    list: (params?: { ownerId?: string; propertyId?: string }) => {
+      const query = new URLSearchParams();
+      if (params?.ownerId) query.set('ownerId', params.ownerId);
+      if (params?.propertyId) query.set('propertyId', params.propertyId);
+      const qs = query.toString();
+      return apiFetch<any[]>(`/api/v1/organizations/${_orgId}/owners/statements${qs ? `?${qs}` : ''}`);
+    },
+    get: (id: string) =>
+      apiFetch<any>(`/api/v1/organizations/${_orgId}/owners/statements/${id}`),
+    create: (data: any) =>
+      apiFetch<any>(`/api/v1/organizations/${_orgId}/owners/statements`, {
+        method: 'POST',
+        body: JSON.stringify(data),
+      }),
+    update: (id: string, data: any) =>
+      apiFetch<any>(`/api/v1/organizations/${_orgId}/owners/statements/${id}`, {
+        method: 'PATCH',
+        body: JSON.stringify(data),
+      }),
+    delete: (id: string) =>
+      apiFetch<void>(`/api/v1/organizations/${_orgId}/owners/statements/${id}`, {
+        method: 'DELETE',
+      }),
+  },
+
+  reports: {
+    financialSummary: (params: {
+      periodStart: string;
+      periodEnd: string;
+      propertyId?: string;
+    }) => {
+      const query = new URLSearchParams();
+      query.set('periodStart', params.periodStart);
+      query.set('periodEnd', params.periodEnd);
+      if (params.propertyId) query.set('propertyId', params.propertyId);
+      return apiFetch<any>(`/api/v1/organizations/${_orgId}/reports/financial-summary?${query.toString()}`);
+    },
+  },
 };

@@ -41,6 +41,8 @@ model Organization {
   notifications       Notification[]
   ledgerEntries       LedgerEntry[]
   rentalApplications  RentalApplication[]
+  owners              Owner[]
+  ownerStatements     OwnerStatement[]
 
   @@map("organizations")
 }
@@ -134,9 +136,11 @@ model Property {
   createdAt             DateTime     @default(now()) @map("created_at")
   updatedAt             DateTime     @updatedAt @map("updated_at")
 
-  organization Organization @relation(fields: [organizationId], references: [id])
-  units        Unit[]
-  workOrders   WorkOrder[]
+  organization    Organization    @relation(fields: [organizationId], references: [id])
+  units           Unit[]
+  workOrders      WorkOrder[]
+  propertyOwners  PropertyOwner[]
+  ownerStatements OwnerStatement[]
 
   @@index([organizationId])
   @@map("properties")
@@ -753,6 +757,78 @@ enum DocumentCategory {
   id
   photo
   other
+}
+
+// ─── Owner ────────────────────────────────────────────────────────────────────
+
+model Owner {
+  id             String   @id @default(uuid())
+  organizationId String   @map("organization_id")
+  name           String   @db.VarChar(200)
+  email          String   @db.VarChar(320)
+  phone          String?  @db.VarChar(20)
+  address        String?  @db.VarChar(500)
+  taxId          String?  @map("tax_id") @db.VarChar(20)
+  notes          String?
+  createdAt      DateTime @default(now()) @map("created_at")
+  updatedAt      DateTime @updatedAt @map("updated_at")
+
+  organization    Organization    @relation(fields: [organizationId], references: [id])
+  propertyOwners  PropertyOwner[]
+  statements      OwnerStatement[]
+
+  @@unique([organizationId, email])
+  @@index([organizationId])
+  @@map("owners")
+}
+
+// ─── PropertyOwner ────────────────────────────────────────────────────────────
+
+model PropertyOwner {
+  id           String   @id @default(uuid())
+  propertyId   String   @map("property_id")
+  ownerId      String   @map("owner_id")
+  ownershipPct Decimal  @map("ownership_pct") @db.Decimal(5, 2)
+  createdAt    DateTime @default(now()) @map("created_at")
+
+  property Property @relation(fields: [propertyId], references: [id])
+  owner    Owner    @relation(fields: [ownerId], references: [id])
+
+  @@unique([propertyId, ownerId])
+  @@map("property_owners")
+}
+
+// ─── OwnerStatement ───────────────────────────────────────────────────────────
+
+enum OwnerStatementStatus {
+  draft
+  sent
+}
+
+model OwnerStatement {
+  id                 String               @id @default(uuid())
+  organizationId     String               @map("organization_id")
+  propertyId         String               @map("property_id")
+  ownerId            String               @map("owner_id")
+  periodStart        DateTime             @map("period_start") @db.Date
+  periodEnd          DateTime             @map("period_end") @db.Date
+  totalIncome        Decimal              @map("total_income") @db.Decimal(12, 2)
+  totalExpenses      Decimal              @map("total_expenses") @db.Decimal(12, 2)
+  netOperatingIncome Decimal              @map("net_operating_income") @db.Decimal(12, 2)
+  distributionAmount Decimal              @map("distribution_amount") @db.Decimal(12, 2)
+  status             OwnerStatementStatus @default(draft)
+  notes              String?
+  createdAt          DateTime             @default(now()) @map("created_at")
+  updatedAt          DateTime             @updatedAt @map("updated_at")
+
+  organization Organization @relation(fields: [organizationId], references: [id])
+  property     Property     @relation(fields: [propertyId], references: [id])
+  owner        Owner        @relation(fields: [ownerId], references: [id])
+
+  @@index([organizationId])
+  @@index([propertyId])
+  @@index([ownerId])
+  @@map("owner_statements")
 }
 
 // ─── Notification ─────────────────────────────────────────────────────────────
