@@ -1,3 +1,5 @@
+const { withSentryConfig } = require('@sentry/nextjs');
+
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   transpilePackages: ['@propflow/shared'],
@@ -41,4 +43,11 @@ const nextConfig = {
   },
 };
 
-module.exports = nextConfig;
+module.exports = withSentryConfig(nextConfig, {
+  silent: true,
+  hideSourceMaps: true,
+  disableLogger: true,
+  // Routes browser SDK events through /monitoring on this app instead of
+  // directly to *.ingest.sentry.io — keeps the restrictive CSP intact.
+  tunnelRoute: '/monitoring',
+});

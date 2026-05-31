@@ -1,4 +1,4 @@
-import { prisma } from '@propflow/db';
+import { prisma, UnitStatus } from '@propflow/db';
 
 function monthsBetween(start: Date, end: Date): string[] {
   const months: string[] = [];
@@ -258,8 +258,7 @@ export async function getRentRoll(
         organizationId,
         ...(filters.propertyId ? { id: filters.propertyId } : {}),
       },
-      deletedAt: null,
-      ...(filters.status ? { status: filters.status as any } : {}),
+      ...(filters.status ? { status: filters.status as UnitStatus } : {}),
     },
     include: {
       property: { select: { id: true, name: true, address: true, city: true, state: true } },
@@ -270,7 +269,7 @@ export async function getRentRoll(
         include: {
           participants: {
             where: { isPrimary: true },
-            include: { tenant: { select: { firstName: true, lastName: true, email: true } } },
+            include: { tenant: { select: { name: true, email: true } } },
             take: 1,
           },
         },
@@ -302,7 +301,7 @@ export async function getRentRoll(
       leaseStatus: lease?.status ?? null,
       leaseStart: lease?.startDate ? (lease.startDate as Date).toISOString().slice(0, 10) : null,
       leaseEnd: lease?.endDate ? (lease.endDate as Date).toISOString().slice(0, 10) : null,
-      tenantName: tenant ? `${tenant.firstName} ${tenant.lastName}` : null,
+      tenantName: tenant?.name ?? null,
       tenantEmail: tenant?.email ?? null,
       daysVacant,
     };
@@ -337,7 +336,6 @@ export async function getVacancySnapshot(
     },
     include: {
       units: {
-        where: { deletedAt: null },
         select: { status: true, updatedAt: true },
       },
     },
