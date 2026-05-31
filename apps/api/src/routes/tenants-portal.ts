@@ -4,6 +4,7 @@ import * as tenantPortalService from '../services/tenant-portal.service';
 import { validate } from '../middleware/validate';
 
 import * as messageService from '../services/message.service';
+import { generateUploadPresignedUrl, buildS3Key } from '../services/s3.service';
 import type { SubmitWorkOrderInput, UpdateTenantProfileInput } from '@propflow/shared';
 import { updateTenantProfileSchema } from '@propflow/shared';
 
@@ -169,16 +170,48 @@ router.get('/messages/threads/:threadId', async (req: Request, res: Response, ne
   }
 });
 
+// POST /api/v1/tenant/messages/attachment-upload-url
+router.post('/messages/attachment-upload-url', async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const { orgId } = req.tenant!;
+    const { fileName, contentType } = req.body as { fileName?: string; contentType?: string };
+    if (!fileName || !contentType) {
+      res.status(400).json({ error: { code: 'MISSING_FIELDS', message: 'fileName and contentType are required.' } });
+      return;
+    }
+    const s3Key = buildS3Key(orgId, 'messages', 'attachments', fileName);
+    const result = await generateUploadPresignedUrl(s3Key, contentType);
+    res.json({ data: result });
+  } catch (err) {
+    next(err);
+  }
+});
+
 // POST /api/v1/tenant/messages/:threadId/reply
 router.post('/messages/:threadId/reply', async (req: Request, res: Response, next: NextFunction) => {
   try {
     const { tenantId, orgId } = req.tenant!;
-    const { body } = req.body as { body?: string };
-    if (!body?.trim()) {
-      res.status(400).json({ error: { code: 'MISSING_BODY', message: 'body is required.' } });
+    const { body, attachmentS3Key, attachmentName, attachmentMimeType } = req.body as {
+      body?: string;
+      attachmentS3Key?: string;
+      attachmentName?: string;
+      attachmentMimeType?: string;
+    };
+    const attachment =
+      attachmentS3Key && attachmentName && attachmentMimeType
+        ? { s3Key: attachmentS3Key, name: attachmentName, mimeType: attachmentMimeType }
+        : null;
+    if (!body?.trim() && !attachment) {
+      res.status(400).json({ error: { code: 'MISSING_BODY', message: 'body or an attachment is required.' } });
       return;
     }
-    const message = await messageService.sendTenantReply(tenantId, orgId, req.params.threadId as string, body.trim());
+    const message = await messageService.sendTenantReply(
+      tenantId,
+      orgId,
+      req.params.threadId as string,
+      body?.trim() ?? '',
+      attachment
+    );
     res.status(201).json({ data: message });
   } catch (err) {
     next(err);

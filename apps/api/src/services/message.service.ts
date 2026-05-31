@@ -2,6 +2,7 @@ import { prisma } from '@propflow/db';
 import { AppError } from '../middleware/error-handler';
 import { sendExpoPush } from './push.service';
 import { createInAppNotification } from './notification.service';
+import { generateDownloadPresignedUrl } from './s3.service';
 
 // ─── Shared include shape ─────────────────────────────────────────────────────
 
@@ -80,7 +81,14 @@ export async function getThread(organizationId: string, threadId: string) {
     data: { readAt: new Date() },
   });
 
-  return messages;
+  // Attach presigned download URLs for any messages with attachments
+  return Promise.all(
+    messages.map(async (msg) => {
+      if (!msg.attachmentS3Key) return msg;
+      const attachmentDownloadUrl = await generateDownloadPresignedUrl(msg.attachmentS3Key);
+      return { ...msg, attachmentDownloadUrl };
+    })
+  );
 }
 
 // ─── Send message ─────────────────────────────────────────────────────────────
@@ -93,6 +101,9 @@ interface SendMessageData {
   subject?: string | null;
   unitId?: string | null;
   workOrderId?: string | null;
+  attachmentS3Key?: string | null;
+  attachmentName?: string | null;
+  attachmentMimeType?: string | null;
 }
 
 export async function sendMessage(organizationId: string, data: SendMessageData) {
@@ -118,6 +129,9 @@ export async function sendMessage(organizationId: string, data: SendMessageData)
       subject: data.subject ?? null,
       unitId: data.unitId ?? null,
       workOrderId: data.workOrderId ?? null,
+      attachmentS3Key: data.attachmentS3Key ?? null,
+      attachmentName: data.attachmentName ?? null,
+      attachmentMimeType: data.attachmentMimeType ?? null,
     },
     include: messageInclude,
   });
@@ -201,19 +215,31 @@ export async function getTenantThread(tenantId: string, threadId: string) {
     data: { readAt: new Date() },
   });
 
-  return messages.map((msg) => ({
-    id: msg.id,
-    body: msg.body,
-    isFromTenant: msg.senderUserId === null,
-    createdAt: msg.createdAt,
-  }));
+  return Promise.all(
+    messages.map(async (msg) => {
+      const base = {
+        id: msg.id,
+        body: msg.body,
+        isFromTenant: msg.senderUserId === null,
+        createdAt: msg.createdAt,
+        attachmentName: msg.attachmentName ?? null,
+        attachmentMimeType: msg.attachmentMimeType ?? null,
+        attachmentDownloadUrl: null as string | null,
+      };
+      if (msg.attachmentS3Key) {
+        base.attachmentDownloadUrl = await generateDownloadPresignedUrl(msg.attachmentS3Key);
+      }
+      return base;
+    })
+  );
 }
 
 export async function sendTenantReply(
   tenantId: string,
   orgId: string,
   threadId: string,
-  body: string
+  body: string,
+  attachment?: { s3Key: string; name: string; mimeType: string } | null
 ) {
   // Verify the thread exists and belongs to this tenant
   const existing = await prisma.message.findFirst({
@@ -231,6 +257,9 @@ export async function sendTenantReply(
       senderUserId: null,
       recipientTenantId: tenantId,
       body,
+      attachmentS3Key: attachment?.s3Key ?? null,
+      attachmentName: attachment?.name ?? null,
+      attachmentMimeType: attachment?.mimeType ?? null,
     },
   });
 
@@ -251,7 +280,7 @@ export async function sendTenantReply(
         organizationId: orgId,
         type: 'new_message',
         title: 'New message from tenant',
-        body: body.length > 120 ? body.slice(0, 117) + '…' : body,
+        body: body ? (body.length > 120 ? body.slice(0, 117) + '…' : body) : `📎 ${attachment?.name ?? 'attachment'}`,
         actionUrl: `/messages?threadId=${threadId}`,
       })
     )

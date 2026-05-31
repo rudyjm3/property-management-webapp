@@ -393,6 +393,10 @@ export interface Message {
   recipientTenantId: string | null;
   body: string;
   attachmentUrl: string | null;
+  attachmentS3Key: string | null;
+  attachmentName: string | null;
+  attachmentMimeType: string | null;
+  attachmentDownloadUrl?: string | null;
   readAt: Date | null;
   createdAt: Date;
 }
@@ -650,4 +654,7 @@ export interface TenantMessage {
   body: string;
   isFromTenant: boolean;
   createdAt: Date;
+  attachmentName: string | null;
+  attachmentMimeType: string | null;
+  attachmentDownloadUrl: string | null;
 }
