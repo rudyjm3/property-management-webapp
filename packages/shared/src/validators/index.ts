@@ -21,6 +21,7 @@ import {
   DOCUMENT_CATEGORIES,
   LEDGER_ENTRY_TYPES,
   RENTAL_APPLICATION_STATUSES,
+  OWNER_STATEMENT_STATUSES,
 } from '../constants';
 
 // ─── Organization ─────────────────────────────────────────────────────────────
@@ -418,6 +419,49 @@ export const signLeaseSchema = z.object({
 export const paginationSchema = z.object({
   cursor: z.string().optional(),
   limit: z.coerce.number().int().min(1).max(100).default(25),
+});
+
+// ─── Owner ────────────────────────────────────────────────────────────────────
+
+export const createOwnerSchema = z.object({
+  name: z.string().min(1).max(200),
+  email: z.string().email(),
+  phone: z.string().max(20).nullable().optional(),
+  address: z.string().max(500).nullable().optional(),
+  taxId: z.string().max(20).nullable().optional(),
+  notes: z.string().max(2000).nullable().optional(),
+});
+
+export const updateOwnerSchema = createOwnerSchema.partial();
+
+export const assignPropertyOwnerSchema = z.object({
+  ownerId: z.string().uuid(),
+  ownershipPct: z.number().min(0.01).max(100),
+});
+
+// ─── Owner Statement ──────────────────────────────────────────────────────────
+
+export const createOwnerStatementSchema = z.object({
+  propertyId: z.string().uuid(),
+  ownerId: z.string().uuid(),
+  periodStart: z.string().date(),
+  periodEnd: z.string().date(),
+  totalIncome: z.number().min(0),
+  totalExpenses: z.number().min(0),
+  netOperatingIncome: z.number(),
+  distributionAmount: z.number().min(0),
+  status: z.enum(OWNER_STATEMENT_STATUSES).default('draft'),
+  notes: z.string().max(2000).nullable().optional(),
+});
+
+export const updateOwnerStatementSchema = createOwnerStatementSchema.partial();
+
+// ─── Financial Report ─────────────────────────────────────────────────────────
+
+export const financialSummaryFiltersSchema = z.object({
+  periodStart: z.string().date(),
+  periodEnd: z.string().date(),
+  propertyId: z.string().uuid().optional(),
 });
 
 // --- Tenant Portal ---

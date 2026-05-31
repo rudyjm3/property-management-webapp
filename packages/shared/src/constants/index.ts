@@ -134,6 +134,10 @@ export const RENTAL_APPLICATION_STATUSES = [
 
 export const LEDGER_ENTRY_TYPES = ['credit', 'debit'] as const;
 
+// ─── Owner Statement ──────────────────────────────────────────────────────────
+
+export const OWNER_STATEMENT_STATUSES = ['draft', 'sent'] as const;
+
 // ─── API ──────────────────────────────────────────────────────────────────────
 
 export const DEFAULT_PAGE_SIZE = 25;
