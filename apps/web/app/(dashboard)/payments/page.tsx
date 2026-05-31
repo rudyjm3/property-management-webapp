@@ -710,23 +710,23 @@ export default function PaymentsPage() {
 
             {hasActivePaymentFilters && (
               <div className="filter-summary">
-                <span className="filter-label">Results</span>
                 <div className="filter-summary-row">
+                  <span className="filter-label">Results</span>
                   <span className="filter-count">{visiblePayments.length}</span>
-                  <button
-                    type="button"
-                    className="filter-clear-button"
-                    onClick={() => {
-                      setSearchPayment('');
-                      setFilterStatus('');
-                      setFilterType('');
-                      setFilterPropertyId('');
-                      setFilterTenantId('');
-                    }}
-                  >
-                    Clear filters
-                  </button>
                 </div>
+                <button
+                  type="button"
+                  className="filter-clear-button"
+                  onClick={() => {
+                    setSearchPayment('');
+                    setFilterStatus('');
+                    setFilterType('');
+                    setFilterPropertyId('');
+                    setFilterTenantId('');
+                  }}
+                >
+                  Clear filters
+                </button>
               </div>
             )}
           </div>
@@ -1044,24 +1044,29 @@ export default function PaymentsPage() {
                       fontWeight: 600,
                     }}
                   >
-                    PaymentIntent created successfully
+                    ACH debit submitted
+                  </p>
+                  <p style={{ fontSize: '14px', marginBottom: '4px' }}>
+                    <strong>{achPayment.tenant.name}</strong> &mdash; Unit{' '}
+                    {achPayment.lease.unit.unitNumber}, {achPayment.lease.unit.property.name}
+                  </p>
+                  <p style={{ fontSize: '14px', marginBottom: '12px' }}>
+                    {TYPE_LABELS[achPayment.type] ?? achPayment.type} &middot;{' '}
+                    <strong>${Number(achPayment.amount).toLocaleString()}</strong> &middot; Status:{' '}
+                    <strong>{achResult.status}</strong>
                   </p>
                   <p style={{ fontSize: '13px', color: 'var(--color-text-muted)' }}>
-                    Status: <strong>{achResult.status}</strong>
+                    Payment status will update automatically when the transfer settles (typically
+                    3–5 business days).
                   </p>
                   <p
                     style={{
-                      fontSize: '12px',
+                      fontSize: '11px',
                       color: 'var(--color-text-muted)',
-                      marginTop: '4px',
-                      wordBreak: 'break-all',
+                      marginTop: '8px',
                     }}
                   >
-                    Intent ID: {achResult.paymentIntentId}
-                  </p>
-                  <p style={{ fontSize: '13px', marginTop: '12px' }}>
-                    The ACH debit has been submitted. Payment status will update automatically via
-                    webhook when the transfer settles (typically 3–5 business days).
+                    Ref: {achResult.paymentIntentId}
                   </p>
                 </div>
               ) : (

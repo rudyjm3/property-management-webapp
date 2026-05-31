@@ -84,7 +84,7 @@ export async function applyLateFees(organizationId?: string): Promise<LateFeeJob
             type: 'late_fee',
             status: 'pending',
             amount: feeAmount,
-            dueDate: today,
+            dueDate: graceCutoff,
           },
         }),
       ]);

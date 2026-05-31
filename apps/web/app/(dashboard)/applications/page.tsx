@@ -112,12 +112,53 @@ export default function ApplicationsPage() {
 
       {/* Filters */}
       <div className="filter-bar">
-        <input
-          className="filter-search"
-          placeholder="Search by name or email…"
-          value={search}
-          onChange={(e) => setSearch(e.target.value)}
-        />
+        <div className="filter-search">
+          <label className="filter-label" htmlFor="applications-search">
+            Search
+          </label>
+          <div className="filter-search-input-wrap">
+            <svg
+              className="filter-search-icon"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2.5"
+            >
+              <circle cx="11" cy="11" r="8" />
+              <path d="m21 21-4.35-4.35" />
+            </svg>
+            <input
+              id="applications-search"
+              type="text"
+              placeholder="Search by name or email…"
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              className={`filter-search-input${search ? ' has-clear' : ''}`}
+            />
+            {search && (
+              <button
+                type="button"
+                aria-label="Clear search"
+                onClick={() => setSearch('')}
+                style={{
+                  position: 'absolute',
+                  right: '8px',
+                  top: '50%',
+                  transform: 'translateY(-50%)',
+                  background: 'none',
+                  border: 'none',
+                  cursor: 'pointer',
+                  color: 'var(--color-text-muted)',
+                  fontSize: '16px',
+                  lineHeight: 1,
+                  padding: '0 2px',
+                }}
+              >
+                &times;
+              </button>
+            )}
+          </div>
+        </div>
         <select className="filter-select" value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)}>
           <option value="">All statuses</option>
           <option value="pending">Pending</option>

@@ -421,21 +421,21 @@ export default function LeasesPage() {
 
           {hasActiveFilters && (
             <div className="filter-summary">
-              <span className="filter-label">Results</span>
               <div className="filter-summary-row">
+                <span className="filter-label">Results</span>
                 <span className="filter-count">{filteredLeases.length}</span>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setSearchLease('');
-                    setFilterStatus('');
-                    setFilterExpiry('');
-                  }}
-                  className="filter-clear-button"
-                >
-                  Clear filters
-                </button>
               </div>
+              <button
+                type="button"
+                onClick={() => {
+                  setSearchLease('');
+                  setFilterStatus('');
+                  setFilterExpiry('');
+                }}
+                className="filter-clear-button"
+              >
+                Clear filters
+              </button>
             </div>
           )}
         </div>

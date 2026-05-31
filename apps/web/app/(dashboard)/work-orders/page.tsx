@@ -384,22 +384,22 @@ export default function WorkOrdersPage() {
 
         {hasActiveWorkOrderFilters && (
           <div className="filter-summary">
-            <span className="filter-label">Results</span>
             <div className="filter-summary-row">
+              <span className="filter-label">Results</span>
               <span className="filter-count">{visibleWorkOrders.length}</span>
-              <button
-                type="button"
-                className="filter-clear-button"
-                onClick={() => {
-                  setSearchWorkOrders('');
-                  setFilterStatus('');
-                  setFilterPriority('');
-                  setFilterCategory('');
-                }}
-              >
-                Clear filters
-              </button>
             </div>
+            <button
+              type="button"
+              className="filter-clear-button"
+              onClick={() => {
+                setSearchWorkOrders('');
+                setFilterStatus('');
+                setFilterPriority('');
+                setFilterCategory('');
+              }}
+            >
+              Clear filters
+            </button>
           </div>
         )}
       </div>

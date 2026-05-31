@@ -52,9 +52,15 @@ async function processStripeEvent(event: Stripe.Event): Promise<void> {
           lease: {
             select: {
               id: true,
-              unit: { select: { property: { select: { organizationId: true } } } },
+              unit: {
+                select: {
+                  unitNumber: true,
+                  property: { select: { organizationId: true, name: true } },
+                },
+              },
             },
           },
+          tenant: { select: { name: true } },
         },
       });
       if (payments.length === 0) break;
@@ -84,7 +90,7 @@ async function processStripeEvent(event: Stripe.Event): Promise<void> {
           paymentId: payment.id,
           type: 'credit',
           amount: Number(payment.amount),
-          description: `ACH payment received — ${payment.type} for lease ${payment.leaseId}`,
+          description: `ACH payment received · ${payment.type} · Unit ${payment.lease.unit.unitNumber} · ${payment.lease.unit.property.name} · ${payment.tenant?.name ?? pi.metadata?.tenantName ?? 'Unknown'}`,
           stripeEventId: `${event.id}:${payment.id}`,
         });
       }

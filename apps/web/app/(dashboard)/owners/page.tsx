@@ -172,14 +172,54 @@ export default function OwnersPage() {
       <div style={{ display: 'flex', gap: '1.5rem', marginTop: '1.5rem' }}>
         {/* Owner List */}
         <div style={{ flex: 1, minWidth: 0 }}>
-          <div style={{ marginBottom: '1rem' }}>
-            <input
-              className="form-input"
-              placeholder="Search owners…"
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              style={{ maxWidth: '320px' }}
-            />
+          <div className="filter-bar" style={{ marginBottom: '1rem' }}>
+            <div className="filter-search">
+              <label className="filter-label" htmlFor="owners-search">
+                Search
+              </label>
+              <div className="filter-search-input-wrap">
+                <svg
+                  className="filter-search-icon"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2.5"
+                >
+                  <circle cx="11" cy="11" r="8" />
+                  <path d="m21 21-4.35-4.35" />
+                </svg>
+                <input
+                  id="owners-search"
+                  type="text"
+                  placeholder="Search owners…"
+                  value={search}
+                  onChange={(e) => setSearch(e.target.value)}
+                  className={`filter-search-input${search ? ' has-clear' : ''}`}
+                />
+                {search && (
+                  <button
+                    type="button"
+                    aria-label="Clear search"
+                    onClick={() => setSearch('')}
+                    style={{
+                      position: 'absolute',
+                      right: '8px',
+                      top: '50%',
+                      transform: 'translateY(-50%)',
+                      background: 'none',
+                      border: 'none',
+                      cursor: 'pointer',
+                      color: 'var(--color-text-muted)',
+                      fontSize: '16px',
+                      lineHeight: 1,
+                      padding: '0 2px',
+                    }}
+                  >
+                    &times;
+                  </button>
+                )}
+              </div>
+            </div>
           </div>
 
           {filtered.length === 0 ? (

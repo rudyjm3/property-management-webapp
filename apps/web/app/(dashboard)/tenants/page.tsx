@@ -230,21 +230,21 @@ export default function TenantsPage() {
           {/* Clear + result count — only when filtered */}
           {hasActiveFilters && (
             <div className="filter-summary">
-              <span className="filter-label">Results</span>
               <div className="filter-summary-row">
+                <span className="filter-label">Results</span>
                 <span className="filter-count">{filteredTenants.length}</span>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setSearch('');
-                    setLeaseFilter('all');
-                    setExpiryFilter('all');
-                  }}
-                  className="filter-clear-button"
-                >
-                  Clear filters
-                </button>
               </div>
+              <button
+                type="button"
+                onClick={() => {
+                  setSearch('');
+                  setLeaseFilter('all');
+                  setExpiryFilter('all');
+                }}
+                className="filter-clear-button"
+              >
+                Clear filters
+              </button>
             </div>
           )}
         </div>
