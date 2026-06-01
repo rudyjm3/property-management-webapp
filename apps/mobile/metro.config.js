@@ -17,14 +17,25 @@ config.resolver.nodeModulesPaths = [
 
 // 3. Point @propflow/shared directly to its src/ directory so Metro can
 //    process the TypeScript source files rather than looking for a dist/
-//
-// Force react and react-native to resolve from a single location so Metro
-// never loads two instances of the same package across the monorepo. React
-// must match the version the react-native renderer was compiled against (19.1.0).
 config.resolver.extraNodeModules = {
   '@propflow/shared': path.resolve(workspaceRoot, 'packages/shared/src'),
-  'react': path.resolve(projectRoot, 'node_modules/react'),
-  'react-native': path.resolve(workspaceRoot, 'node_modules/react-native'),
+};
+
+// 4. Force react to resolve to a single instance for ALL imports — including
+//    imports originating inside node_modules/react-native. extraNodeModules
+//    only applies to app-level code; resolveRequest intercepts everything.
+//    react-native's renderer is compiled against 19.1.0, so we pin to the
+//    mobile workspace copy (apps/mobile/node_modules/react@19.1.0).
+const mobilReactPath = path.resolve(projectRoot, 'node_modules/react');
+const origResolveRequest = config.resolver.resolveRequest;
+config.resolver.resolveRequest = (context, moduleName, platform) => {
+  if (moduleName === 'react') {
+    return { filePath: path.join(mobilReactPath, 'index.js'), type: 'sourceFile' };
+  }
+  if (origResolveRequest) {
+    return origResolveRequest(context, moduleName, platform);
+  }
+  return context.resolveRequest(context, moduleName, platform);
 };
 
 // Block nativewind and its deps from being watched — they're incompatible with RN 0.76
