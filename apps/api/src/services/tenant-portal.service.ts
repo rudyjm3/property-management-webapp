@@ -356,7 +356,19 @@ export async function initiateTenantPayment(
 
   const payment = await prisma.payment.findFirst({
     where: { id: paymentId, deletedAt: null },
-    include: { tenant: { select: { id: true, name: true } } },
+    include: {
+      tenant: { select: { id: true, name: true } },
+      lease: {
+        select: {
+          unit: {
+            select: {
+              unitNumber: true,
+              property: { select: { name: true } },
+            },
+          },
+        },
+      },
+    },
   });
 
   if (!payment) {
@@ -384,6 +396,8 @@ export async function initiateTenantPayment(
     leaseId: payment.leaseId,
     paymentId,
     tenantName: payment.tenant.name,
+    unitNumber: payment.lease.unit.unitNumber,
+    propertyName: payment.lease.unit.property.name,
     amount: Number(payment.amount),
     stripeAccountId: freshOrg.stripeAccountId!,
   });
@@ -415,7 +429,19 @@ export async function initiateMultiTenantPayment(
 
   const payments = await prisma.payment.findMany({
     where: { id: { in: paymentIds }, deletedAt: null },
-    include: { tenant: { select: { id: true, name: true } } },
+    include: {
+      tenant: { select: { id: true, name: true } },
+      lease: {
+        select: {
+          unit: {
+            select: {
+              unitNumber: true,
+              property: { select: { name: true } },
+            },
+          },
+        },
+      },
+    },
   });
 
   if (payments.length !== paymentIds.length) {
@@ -443,15 +469,19 @@ export async function initiateMultiTenantPayment(
 
   const firstPayment = payments[0]!;
   const totalAmount = payments.reduce((sum, p) => sum + Number(p.amount), 0);
-  const types = payments.map((p) => p.type).join(', ');
+  const types = [...new Set(payments.map((p) => p.type))].join(', ');
+  const unitNumber = firstPayment.lease.unit.unitNumber;
+  const propertyName = firstPayment.lease.unit.property.name;
 
   const pi = await stripeService.createMultiPaymentIntent({
     leaseId: firstPayment.leaseId,
     paymentIds,
     tenantName: firstPayment.tenant.name,
+    unitNumber,
+    propertyName,
     amount: totalAmount,
     stripeAccountId: freshOrg.stripeAccountId!,
-    description: `Payment for lease ${firstPayment.leaseId}: ${types}`,
+    description: `${types} · Unit ${unitNumber} · ${propertyName} · ${firstPayment.tenant.name}`,
   });
 
   // Store the PI ID on all payment records

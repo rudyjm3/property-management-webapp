@@ -117,6 +117,8 @@ router.post('/:paymentId/initiate-ach', requireManagerAccess, async (req: Reques
       leaseId: payment.leaseId,
       paymentId,
       tenantName: payment.tenant.name,
+      unitNumber: payment.lease.unit.unitNumber,
+      propertyName: payment.lease.unit.property.name,
       amount: Number(payment.amount),
       stripeAccountId: freshOrg.stripeAccountId!,
     });

@@ -21,6 +21,23 @@ config.resolver.extraNodeModules = {
   '@propflow/shared': path.resolve(workspaceRoot, 'packages/shared/src'),
 };
 
+// 4. Force react to resolve to a single instance for ALL imports — including
+//    imports originating inside node_modules/react-native. extraNodeModules
+//    only applies to app-level code; resolveRequest intercepts everything.
+//    react-native's renderer is compiled against 19.1.0, so we pin to the
+//    mobile workspace copy (apps/mobile/node_modules/react@19.1.0).
+const mobilReactPath = path.resolve(projectRoot, 'node_modules/react');
+const origResolveRequest = config.resolver.resolveRequest;
+config.resolver.resolveRequest = (context, moduleName, platform) => {
+  if (moduleName === 'react') {
+    return { filePath: path.join(mobilReactPath, 'index.js'), type: 'sourceFile' };
+  }
+  if (origResolveRequest) {
+    return origResolveRequest(context, moduleName, platform);
+  }
+  return context.resolveRequest(context, moduleName, platform);
+};
+
 // Block nativewind and its deps from being watched — they're incompatible with RN 0.76
 config.resolver.blockList = [
   /node_modules\/nativewind\/.*/,

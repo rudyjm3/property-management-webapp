@@ -95,12 +95,27 @@ export async function syncAccountStatus(orgId: string, stripeAccountId: string):
   });
 }
 
+// ─── Build human-readable payment description ─────────────────────────────────
+
+function buildDescription(
+  label: string,
+  unitNumber?: string,
+  propertyName?: string,
+  tenantName?: string
+): string {
+  return [label, unitNumber && `Unit ${unitNumber}`, propertyName, tenantName]
+    .filter(Boolean)
+    .join(' · ');
+}
+
 // ─── Create ACH PaymentIntent ─────────────────────────────────────────────────
 
 export interface CreatePaymentIntentOptions {
   leaseId: string;
   paymentId: string;
   tenantName: string;
+  unitNumber?: string;
+  propertyName?: string;
   amount: number; // dollars — converted to cents internally
   stripeAccountId: string;
   description?: string;
@@ -119,7 +134,7 @@ export async function createPaymentIntent(
     currency: 'usd',
     payment_method_types: ['us_bank_account'],
     transfer_data: { destination: opts.stripeAccountId },
-    description: opts.description ?? `Rent payment for lease ${opts.leaseId}`,
+    description: opts.description ?? buildDescription('Rent', opts.unitNumber, opts.propertyName, opts.tenantName),
     metadata: {
       leaseId: opts.leaseId,
       paymentId: opts.paymentId,
@@ -134,6 +149,8 @@ export interface CreateMultiPaymentIntentOptions {
   leaseId: string;
   paymentIds: string[]; // all line item payment IDs (rent, late fees, etc.)
   tenantName: string;
+  unitNumber?: string;
+  propertyName?: string;
   amount: number; // total dollars — converted to cents internally
   stripeAccountId: string;
   description?: string;
@@ -149,7 +166,7 @@ export async function createMultiPaymentIntent(
     currency: 'usd',
     payment_method_types: ['us_bank_account'],
     transfer_data: { destination: opts.stripeAccountId },
-    description: opts.description ?? `Payment for lease ${opts.leaseId}`,
+    description: opts.description ?? buildDescription('Payment', opts.unitNumber, opts.propertyName, opts.tenantName),
     metadata: {
       leaseId: opts.leaseId,
       // Store all IDs comma-separated; webhook uses this to complete all line items
