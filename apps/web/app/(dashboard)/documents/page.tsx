@@ -122,7 +122,7 @@ export default function DocumentsPage() {
 
     try {
       const mimeType = selectedFile.type || 'application/octet-stream';
-      const { uploadUrl, s3Key } = await api.documents.requestUploadUrl({
+      const { uploadUrl, storageKey } = await api.documents.requestUploadUrl({
         entityType: uploadEntityType,
         entityId: uploadEntityId.trim(),
         fileName: selectedFile.name,
@@ -133,9 +133,9 @@ export default function DocumentsPage() {
         visibleToTenant: uploadVisible,
       });
 
-      await api.documents.uploadToS3(uploadUrl, selectedFile, mimeType);
+      await api.documents.uploadToStorage(uploadUrl, selectedFile, mimeType);
       await api.documents.confirmUpload({
-        s3Key,
+        storageKey,
         entityType: uploadEntityType,
         entityId: uploadEntityId.trim(),
         fileName: selectedFile.name,

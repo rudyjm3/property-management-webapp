@@ -149,12 +149,12 @@ export default function MessagesPage() {
 
     setSendingMessage(true);
     try {
-      let attachmentS3Key: string | null = null;
+      let attachmentStorageKey: string | null = null;
       let attachmentName: string | null = null;
       let attachmentMimeType: string | null = null;
 
       if (attachmentFile) {
-        const { uploadUrl, s3Key } = await api.messages.attachmentUploadUrl(
+        const { uploadUrl, storageKey } = await api.messages.attachmentUploadUrl(
           attachmentFile.name,
           attachmentFile.type
         );
@@ -163,7 +163,7 @@ export default function MessagesPage() {
           body: attachmentFile,
           headers: { 'Content-Type': attachmentFile.type },
         });
-        attachmentS3Key = s3Key;
+        attachmentStorageKey = storageKey;
         attachmentName = attachmentFile.name;
         attachmentMimeType = attachmentFile.type;
       }
@@ -173,7 +173,7 @@ export default function MessagesPage() {
         recipientTenantId: activeThread.tenant.id,
         body: replyBody.trim(),
         threadId: activeThreadId,
-        attachmentS3Key,
+        attachmentStorageKey,
         attachmentName,
         attachmentMimeType,
       });
@@ -214,12 +214,12 @@ export default function MessagesPage() {
     setComposeError('');
     setComposeSubmitting(true);
     try {
-      let attachmentS3Key: string | null = null;
+      let attachmentStorageKey: string | null = null;
       let attachmentName: string | null = null;
       let attachmentMimeType: string | null = null;
 
       if (composeAttachmentFile) {
-        const { uploadUrl, s3Key } = await api.messages.attachmentUploadUrl(
+        const { uploadUrl, storageKey } = await api.messages.attachmentUploadUrl(
           composeAttachmentFile.name,
           composeAttachmentFile.type
         );
@@ -228,7 +228,7 @@ export default function MessagesPage() {
           body: composeAttachmentFile,
           headers: { 'Content-Type': composeAttachmentFile.type },
         });
-        attachmentS3Key = s3Key;
+        attachmentStorageKey = storageKey;
         attachmentName = composeAttachmentFile.name;
         attachmentMimeType = composeAttachmentFile.type;
       }
@@ -238,7 +238,7 @@ export default function MessagesPage() {
         recipientTenantId: composeRecipientId,
         body: composeBody.trim(),
         subject: composeSubject.trim() || null,
-        attachmentS3Key,
+        attachmentStorageKey,
         attachmentName,
         attachmentMimeType,
       });

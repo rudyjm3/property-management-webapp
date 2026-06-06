@@ -3,6 +3,7 @@ import { prisma, UserRole, UserStatus } from '@propflow/db';
 import { z } from 'zod';
 import { requireAuth, requireOrg, requireRoles } from '../middleware/auth';
 import { supabaseAdmin } from '../lib/supabase';
+import { sendStaffInviteEmail } from '../services/email.service';
 
 const router = Router({ mergeParams: true });
 const requireSettingsAccess = requireRoles(['owner', 'manager']);
@@ -131,30 +132,39 @@ router.post(
         select: { id: true, email: true, name: true, role: true, status: true, invitedAt: true },
       });
 
-      // Send Supabase invite email so they can set a password
+      // Generate a Supabase invite link (creates auth user, returns magic URL, does NOT send email)
       const onboardingNext = encodeURIComponent('/onboarding?invited=true');
       const {
-        data: { user: supabaseUser },
+        data: { user: supabaseUser, properties },
         error,
-      } = await supabaseAdmin.auth.admin.inviteUserByEmail(email, {
-        redirectTo: `${process.env.APP_URL}/auth/callback?next=${onboardingNext}`,
-        data: { organizationId: orgId, role, name },
+      } = await supabaseAdmin.auth.admin.generateLink({
+        type: 'invite',
+        email,
+        options: {
+          redirectTo: `${process.env.APP_URL}/auth/callback?next=${onboardingNext}`,
+          data: { organizationId: orgId, role, name },
+        },
       });
 
       if (error) {
         // Clean up the DB record if invite failed
         await prisma.user.delete({ where: { id: invitedUser.id } });
-        console.error('Supabase invite error:', error);
+        console.error('Supabase generateLink error:', error);
         res.status(400).json({
           error: {
             code: 'INVITE_FAILED',
             message:
               error.message ||
-              'Failed to send invite email. The address may already be registered.',
+              'Failed to generate invite link. The address may already be registered.',
           },
         });
         return;
       }
+
+      // Send branded invite email via Resend
+      sendStaffInviteEmail(email, name, properties.action_link).catch((err) =>
+        console.error('Staff invite email failed:', err)
+      );
 
       // Link the Supabase user ID to our record
       if (supabaseUser) {

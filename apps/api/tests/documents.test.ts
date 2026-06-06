@@ -21,24 +21,29 @@ vi.mock('@propflow/db', () => ({
   },
 }));
 
-// ─── Mock AWS SDK ─────────────────────────────────────────────────────────────
+// ─── Mock Supabase Storage ────────────────────────────────────────────────────
 
-vi.mock('@aws-sdk/client-s3', () => ({
-  S3Client: function S3Client() {
-    return { send: vi.fn().mockResolvedValue({}) };
+vi.mock('../src/lib/supabase', () => ({
+  supabaseAdmin: {
+    storage: {
+      from: () => ({
+        createSignedUploadUrl: vi.fn().mockResolvedValue({
+          data: { signedUrl: 'https://storage.example.com/presigned-url', token: 'tok', path: 'key' },
+          error: null,
+        }),
+        createSignedUrl: vi.fn().mockResolvedValue({
+          data: { signedUrl: 'https://storage.example.com/presigned-url' },
+          error: null,
+        }),
+        remove: vi.fn().mockResolvedValue({ data: [], error: null }),
+      }),
+    },
   },
-  PutObjectCommand: function PutObjectCommand(input: any) { return input; },
-  GetObjectCommand: function GetObjectCommand(input: any) { return input; },
-  DeleteObjectCommand: function DeleteObjectCommand(input: any) { return input; },
-}));
-
-vi.mock('@aws-sdk/s3-request-presigner', () => ({
-  getSignedUrl: vi.fn().mockResolvedValue('https://s3.example.com/presigned-url'),
 }));
 
 // ─── Imports after mocks ──────────────────────────────────────────────────────
 
-import * as s3Service from '../src/services/s3.service';
+import * as storageService from '../src/services/storage.service';
 import * as documentService from '../src/services/document.service';
 import { prisma } from '@propflow/db';
 
@@ -52,7 +57,7 @@ const mockDocument = {
   entityType: 'property',
   entityId: 'prop-1',
   name: 'lease.pdf',
-  s3Key: 'org/org-1/property/prop-1/uuid-lease.pdf',
+  storageKey: 'org/org-1/property/prop-1/uuid-lease.pdf',
   mimeType: 'application/pdf',
   sizeBytes: 12345,
   uploadedByUserId: 'user-1',
@@ -63,17 +68,17 @@ const mockDocument = {
   uploadedBy: { id: 'user-1', name: 'Alice Manager' },
 };
 
-// ─── s3.service tests ─────────────────────────────────────────────────────────
+// ─── storage.service tests ────────────────────────────────────────────────────
 
-describe('s3.service', () => {
-  describe('buildS3Key', () => {
+describe('storage.service', () => {
+  describe('buildStorageKey', () => {
     it('produces a scoped key with org/entity structure', () => {
-      const key = s3Service.buildS3Key('org-1', 'property', 'prop-1', 'file.pdf');
+      const key = storageService.buildStorageKey('org-1', 'property', 'prop-1', 'file.pdf');
       expect(key).toMatch(/^org\/org-1\/property\/prop-1\/.+-file\.pdf$/);
     });
 
     it('sanitises unsafe characters in the file name', () => {
-      const key = s3Service.buildS3Key('org-1', 'lease', 'lease-1', 'my file (2024).pdf');
+      const key = storageService.buildStorageKey('org-1', 'lease', 'lease-1', 'my file (2024).pdf');
       expect(key).not.toContain(' ');
       expect(key).not.toContain('(');
       expect(key).not.toContain(')');
@@ -81,20 +86,20 @@ describe('s3.service', () => {
   });
 
   describe('generateUploadPresignedUrl', () => {
-    it('returns an uploadUrl and the s3Key', async () => {
-      const { uploadUrl, s3Key } = await s3Service.generateUploadPresignedUrl(
+    it('returns an uploadUrl and the storageKey', async () => {
+      const { uploadUrl, storageKey } = await storageService.generateUploadPresignedUrl(
         'org/org-1/property/prop-1/uuid-file.pdf',
         'application/pdf',
       );
-      expect(uploadUrl).toBe('https://s3.example.com/presigned-url');
-      expect(s3Key).toBe('org/org-1/property/prop-1/uuid-file.pdf');
+      expect(uploadUrl).toBe('https://storage.example.com/presigned-url');
+      expect(storageKey).toBe('org/org-1/property/prop-1/uuid-file.pdf');
     });
   });
 
   describe('generateDownloadPresignedUrl', () => {
-    it('returns a presigned GET URL', async () => {
-      const url = await s3Service.generateDownloadPresignedUrl('some/key.pdf');
-      expect(url).toBe('https://s3.example.com/presigned-url');
+    it('returns a signed download URL', async () => {
+      const url = await storageService.generateDownloadPresignedUrl('some/key.pdf');
+      expect(url).toBe('https://storage.example.com/presigned-url');
     });
   });
 });
@@ -112,7 +117,7 @@ describe('document.service', () => {
   });
 
   describe('requestUpload', () => {
-    it('returns uploadUrl, s3Key, and expiry without writing to the DB', async () => {
+    it('returns uploadUrl, storageKey, and expiry without writing to the DB', async () => {
       const result = await documentService.requestUpload('org-1', 'user-1', {
         entityType: 'property',
         entityId: 'prop-1',
@@ -122,8 +127,8 @@ describe('document.service', () => {
         visibleToTenant: false,
       });
 
-      expect(result.uploadUrl).toBe('https://s3.example.com/presigned-url');
-      expect(result.s3Key).toMatch(/^org\/org-1\/property\/prop-1\//);
+      expect(result.uploadUrl).toBe('https://storage.example.com/presigned-url');
+      expect(result.storageKey).toMatch(/^org\/org-1\/property\/prop-1\//);
       expect(result.expiresInSeconds).toBe(900);
       expect(prisma.document.create).not.toHaveBeenCalled();
     });
@@ -147,7 +152,7 @@ describe('document.service', () => {
   describe('confirmUpload', () => {
     it('creates a Document record in the database', async () => {
       const doc = await documentService.confirmUpload('org-1', 'user-1', {
-        s3Key: 'org/org-1/property/prop-1/uuid-lease.pdf',
+        storageKey: 'org/org-1/property/prop-1/uuid-lease.pdf',
         entityType: 'property',
         entityId: 'prop-1',
         fileName: 'lease.pdf',
@@ -168,7 +173,7 @@ describe('document.service', () => {
 
       await expect(
         documentService.confirmUpload('org-1', 'unknown-user', {
-          s3Key: 'key',
+          storageKey: 'key',
           entityType: 'property',
           entityId: 'prop-1',
           fileName: 'test.pdf',
@@ -198,9 +203,9 @@ describe('document.service', () => {
   });
 
   describe('getDownloadUrl', () => {
-    it('returns a presigned download URL and the document', async () => {
+    it('returns a signed download URL and the document', async () => {
       const result = await documentService.getDownloadUrl('org-1', 'doc-1');
-      expect(result.downloadUrl).toBe('https://s3.example.com/presigned-url');
+      expect(result.downloadUrl).toBe('https://storage.example.com/presigned-url');
       expect(result.document.id).toBe('doc-1');
     });
 
@@ -214,7 +219,7 @@ describe('document.service', () => {
   });
 
   describe('deleteDocument', () => {
-    it('removes the DB record after deleting from S3', async () => {
+    it('removes the DB record after deleting from storage', async () => {
       await documentService.deleteDocument('org-1', 'doc-1');
       expect(prisma.document.delete).toHaveBeenCalledWith({ where: { id: 'doc-1' } });
     });

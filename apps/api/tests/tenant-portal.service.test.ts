@@ -17,14 +17,14 @@ vi.mock('@propflow/db', () => ({
   },
 }));
 
-vi.mock('../src/services/s3.service', () => ({
+vi.mock('../src/services/storage.service', () => ({
   generateDownloadPresignedUrl: vi.fn(),
-  buildS3Key: vi.fn(),
+  buildStorageKey: vi.fn(),
   generateUploadPresignedUrl: vi.fn(),
 }));
 
 import { prisma } from '@propflow/db';
-import * as s3Service from '../src/services/s3.service';
+import * as storageService from '../src/services/storage.service';
 import {
   getTenantDocuments,
   getTenantDocumentDownloadUrl,
@@ -159,8 +159,8 @@ describe('tenant-portal.service', () => {
   });
 
   it('returns download URL for scoped document', async () => {
-    (prisma.document.findFirst as any).mockResolvedValue({ s3Key: 'org/org-1/lease/lease-1/file.pdf' });
-    (s3Service.generateDownloadPresignedUrl as any).mockResolvedValue('https://example.com/download');
+    (prisma.document.findFirst as any).mockResolvedValue({ storageKey: 'org/org-1/lease/lease-1/file.pdf' });
+    (storageService.generateDownloadPresignedUrl as any).mockResolvedValue('https://example.com/download');
 
     const result = await getTenantDocumentDownloadUrl('tenant-1', 'doc-1');
 

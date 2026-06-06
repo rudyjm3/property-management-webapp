@@ -2,11 +2,11 @@ import { prisma } from '@propflow/db';
 import { DocumentCategory, DocumentEntityType } from '@prisma/client';
 import { AppError } from '../middleware/error-handler';
 import {
-  buildS3Key,
+  buildStorageKey,
   generateUploadPresignedUrl,
   generateDownloadPresignedUrl,
-  deleteS3Object,
-} from './s3.service';
+  deleteStorageObject,
+} from './storage.service';
 import type { z } from 'zod';
 import type { requestUploadSchema, confirmUploadSchema, listDocumentsSchema } from '@propflow/shared';
 
@@ -32,18 +32,18 @@ export async function requestUpload(
   });
   if (!user) throw new AppError(403, 'FORBIDDEN', 'Forbidden');
 
-  const s3Key = buildS3Key(
+  const storageKey = buildStorageKey(
     organizationId,
     input.entityType,
     input.entityId,
     input.fileName,
   );
 
-  const { uploadUrl } = await generateUploadPresignedUrl(s3Key, input.mimeType);
+  const { uploadUrl } = await generateUploadPresignedUrl(storageKey, input.mimeType);
 
   return {
     uploadUrl,
-    s3Key,
+    storageKey,
     expiresInSeconds: 900,
   };
 }
@@ -71,7 +71,7 @@ export async function confirmUpload(
       entityType: input.entityType as DocumentEntityType,
       entityId: input.entityId,
       name: input.fileName,
-      s3Key: input.s3Key,
+      storageKey: input.storageKey,
       mimeType: input.mimeType,
       sizeBytes: input.sizeBytes,
       uploadedByUserId,
@@ -123,7 +123,7 @@ export async function getDocument(organizationId: string, documentId: string) {
  */
 export async function getDownloadUrl(organizationId: string, documentId: string) {
   const doc = await getDocument(organizationId, documentId);
-  const downloadUrl = await generateDownloadPresignedUrl(doc.s3Key);
+  const downloadUrl = await generateDownloadPresignedUrl(doc.storageKey);
   return { downloadUrl, document: doc };
 }
 
@@ -133,8 +133,7 @@ export async function getDownloadUrl(organizationId: string, documentId: string)
 export async function deleteDocument(organizationId: string, documentId: string) {
   const doc = await getDocument(organizationId, documentId);
 
-  // Remove from S3 first; if it fails, the DB record remains (recoverable)
-  await deleteS3Object(doc.s3Key);
+  await deleteStorageObject(doc.storageKey);
 
   await prisma.document.delete({ where: { id: documentId } });
 }

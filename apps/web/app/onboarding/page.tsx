@@ -182,7 +182,7 @@ function OnboardingContent() {
         throw new Error('Organization context not ready. Please try again.');
       }
 
-      const { uploadUrl, s3Key } = await api.documents.requestUploadUrl({
+      const { uploadUrl, storageKey } = await api.documents.requestUploadUrl({
         entityType: 'organization',
         entityId,
         fileName: logoFile.name,
@@ -193,9 +193,9 @@ function OnboardingContent() {
         visibleToTenant: false,
       });
 
-      await api.documents.uploadToS3(uploadUrl, logoFile, logoFile.type || 'image/png');
+      await api.documents.uploadToStorage(uploadUrl, logoFile, logoFile.type || 'image/png');
       await api.documents.confirmUpload({
-        s3Key,
+        storageKey,
         entityType: 'organization',
         entityId,
         fileName: logoFile.name,
@@ -206,7 +206,7 @@ function OnboardingContent() {
         visibleToTenant: false,
       });
 
-      await api.organizations.update({ logoUrl: s3Key });
+      await api.organizations.update({ logoUrl: storageKey });
       setStep('billing');
     } catch (err: any) {
       setLogoError(err.message || 'Failed to upload logo. You can skip and add it later.');

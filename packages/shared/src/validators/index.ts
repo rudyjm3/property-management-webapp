@@ -333,7 +333,7 @@ export const requestUploadSchema = z.object({
 });
 
 export const confirmUploadSchema = z.object({
-  s3Key: z.string().min(1).max(1000),
+  storageKey: z.string().min(1).max(1000),
   entityType: z.enum(DOCUMENT_ENTITY_TYPES),
   entityId: z.string().uuid(),
   fileName: z.string().min(1).max(500),

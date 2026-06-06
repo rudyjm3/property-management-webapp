@@ -365,7 +365,7 @@ export const api = {
         apiFetch<any[]>(`/api/v1/organizations/${_orgId}/messages/threads/${threadId}`),
     },
     attachmentUploadUrl: (fileName: string, contentType: string) =>
-      apiFetch<{ uploadUrl: string; s3Key: string }>(
+      apiFetch<{ uploadUrl: string; storageKey: string }>(
         `/api/v1/organizations/${_orgId}/messages/attachment-upload-url`,
         { method: 'POST', body: JSON.stringify({ fileName, contentType }) }
       ),
@@ -377,7 +377,7 @@ export const api = {
       subject?: string | null;
       unitId?: string | null;
       workOrderId?: string | null;
-      attachmentS3Key?: string | null;
+      attachmentStorageKey?: string | null;
       attachmentName?: string | null;
       attachmentMimeType?: string | null;
     }) =>
@@ -461,22 +461,22 @@ export const api = {
       label?: string | null;
       visibleToTenant?: boolean;
     }) =>
-      apiFetch<{ uploadUrl: string; s3Key: string; expiresInSeconds: number }>(
+      apiFetch<{ uploadUrl: string; storageKey: string; expiresInSeconds: number }>(
         `/api/v1/organizations/${_orgId}/documents/upload-url`,
         { method: 'POST', body: JSON.stringify(data) }
       ),
 
-    uploadToS3: async (uploadUrl: string, file: File, contentType: string): Promise<void> => {
+    uploadToStorage: async (uploadUrl: string, file: File, contentType: string): Promise<void> => {
       const res = await fetch(uploadUrl, {
         method: 'PUT',
         headers: { 'Content-Type': contentType },
         body: file,
       });
-      if (!res.ok) throw new Error(`S3 upload failed: ${res.status}`);
+      if (!res.ok) throw new Error(`Storage upload failed: ${res.status}`);
     },
 
     confirmUpload: (data: {
-      s3Key: string;
+      storageKey: string;
       entityType: string;
       entityId: string;
       fileName: string;

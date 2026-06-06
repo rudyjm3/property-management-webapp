@@ -433,7 +433,7 @@ export interface Message {
   recipientTenantId: string | null;
   body: string;
   attachmentUrl: string | null;
-  attachmentS3Key: string | null;
+  attachmentStorageKey: string | null;
   attachmentName: string | null;
   attachmentMimeType: string | null;
   attachmentDownloadUrl?: string | null;
@@ -447,7 +447,7 @@ export interface Document {
   entityType: DocumentEntityType;
   entityId: string;
   name: string;
-  s3Key: string;
+  storageKey: string;
   mimeType: string;
   sizeBytes: number;
   uploadedByUserId: string;
@@ -646,7 +646,7 @@ export interface SubmitWorkOrderInput {
 
 export interface TenantUploadUrlResponse {
   uploadUrl: string;
-  s3Key: string;
+  storageKey: string;
 }
 
 // --- Tenant Documents ---

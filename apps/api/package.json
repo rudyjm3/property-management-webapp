@@ -14,8 +14,6 @@
     "test:coverage": "vitest run --coverage"
   },
   "dependencies": {
-    "@aws-sdk/client-s3": "^3.1016.0",
-    "@aws-sdk/s3-request-presigner": "^3.1016.0",
     "@propflow/db": "*",
     "@propflow/shared": "*",
     "@sentry/node": "^10.54.0",

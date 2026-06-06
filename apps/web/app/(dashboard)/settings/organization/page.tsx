@@ -56,7 +56,7 @@ export default function OrganizationSettingsPage() {
             setLogoImageSrc(org.logoUrl);
           } else {
             const docs = await api.documents.list({ entityType: 'organization', entityId: org.id });
-            const matchedDoc = docs.find((doc: any) => doc.s3Key === org.logoUrl);
+            const matchedDoc = docs.find((doc: any) => doc.storageKey === org.logoUrl);
             if (matchedDoc?.id) {
               const { downloadUrl } = await api.documents.getDownloadUrl(matchedDoc.id);
               setLogoImageSrc(downloadUrl);
@@ -127,7 +127,7 @@ export default function OrganizationSettingsPage() {
       }
 
       const resolvedMimeType = logoFile.type || 'image/png';
-      const { uploadUrl, s3Key } = await api.documents.requestUploadUrl({
+      const { uploadUrl, storageKey } = await api.documents.requestUploadUrl({
         entityType: 'organization',
         entityId,
         fileName: logoFile.name,
@@ -138,9 +138,9 @@ export default function OrganizationSettingsPage() {
         visibleToTenant: false,
       });
 
-      await api.documents.uploadToS3(uploadUrl, logoFile, resolvedMimeType);
+      await api.documents.uploadToStorage(uploadUrl, logoFile, resolvedMimeType);
       const confirmedDoc = await api.documents.confirmUpload({
-        s3Key,
+        storageKey,
         entityType: 'organization',
         entityId,
         fileName: logoFile.name,
@@ -151,9 +151,9 @@ export default function OrganizationSettingsPage() {
         visibleToTenant: false,
       });
 
-      await api.organizations.update({ logoUrl: s3Key });
+      await api.organizations.update({ logoUrl: storageKey });
       await refreshProfile();
-      setLogoUrl(s3Key);
+      setLogoUrl(storageKey);
       if (confirmedDoc?.id) {
         const { downloadUrl } = await api.documents.getDownloadUrl(confirmedDoc.id);
         setLogoImageSrc(downloadUrl);

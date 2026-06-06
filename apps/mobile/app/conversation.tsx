@@ -20,7 +20,7 @@ import { tenantApi } from '@/lib/api';
 import type { TenantMessage } from '@propflow/shared';
 
 interface AttachmentPayload {
-  s3Key: string;
+  storageKey: string;
   name: string;
   mimeType: string;
 }
@@ -97,11 +97,11 @@ export default function ConversationScreen() {
     setUploadingAttachment(true);
     setShowAttachMenu(false);
     try {
-      const { uploadUrl, s3Key } = await tenantApi.messages.attachmentUploadUrl(fileName, mimeType);
+      const { uploadUrl, storageKey } = await tenantApi.messages.attachmentUploadUrl(fileName, mimeType);
       const response = await fetch(uri);
       const blob = await response.blob();
       await fetch(uploadUrl, { method: 'PUT', body: blob, headers: { 'Content-Type': mimeType } });
-      setPendingAttachment({ s3Key, name: fileName, mimeType });
+      setPendingAttachment({ storageKey, name: fileName, mimeType });
       setPendingAttachmentName(fileName);
     } catch {
       Alert.alert('Upload failed', 'Could not upload the attachment. Please try again.');

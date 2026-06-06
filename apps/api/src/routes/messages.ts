@@ -1,7 +1,7 @@
 import { Router, Request, Response, NextFunction } from 'express';
 import * as messageService from '../services/message.service';
 import { requireRoles } from '../middleware/auth';
-import { generateUploadPresignedUrl, buildS3Key } from '../services/s3.service';
+import { generateUploadPresignedUrl, buildStorageKey } from '../services/storage.service';
 
 const router = Router({ mergeParams: true });
 
@@ -35,8 +35,8 @@ router.post('/attachment-upload-url', requireManagerAccess, async (req: Request,
       res.status(400).json({ error: { code: 'MISSING_FIELDS', message: 'fileName and contentType are required.' } });
       return;
     }
-    const s3Key = buildS3Key(req.params.orgId as string, 'messages', 'attachments', fileName);
-    const result = await generateUploadPresignedUrl(s3Key, contentType);
+    const storageKey = buildStorageKey(req.params.orgId as string, 'messages', 'attachments', fileName);
+    const result = await generateUploadPresignedUrl(storageKey, contentType);
     res.json({ data: result });
   } catch (err) {
     next(err);
@@ -48,7 +48,7 @@ router.post('/', requireManagerAccess, async (req: Request, res: Response, next:
   try {
     const {
       senderUserId, recipientTenantId, body, threadId, subject, unitId, workOrderId,
-      attachmentS3Key, attachmentName, attachmentMimeType,
+      attachmentStorageKey, attachmentName, attachmentMimeType,
     } = req.body;
 
     if (!recipientTenantId || !body || !senderUserId) {
@@ -64,7 +64,7 @@ router.post('/', requireManagerAccess, async (req: Request, res: Response, next:
       subject: subject ?? null,
       unitId: unitId ?? null,
       workOrderId: workOrderId ?? null,
-      attachmentS3Key: attachmentS3Key ?? null,
+      attachmentStorageKey: attachmentStorageKey ?? null,
       attachmentName: attachmentName ?? null,
       attachmentMimeType: attachmentMimeType ?? null,
     });
