@@ -161,6 +161,12 @@ router.post(
         return;
       }
 
+      if (!properties?.action_link) {
+        await prisma.user.delete({ where: { id: invitedUser.id } });
+        res.status(400).json({ error: { code: 'INVITE_FAILED', message: 'Failed to generate invite link.' } });
+        return;
+      }
+
       // Send branded invite email via Resend — awaited so a delivery failure is caught.
       // Without email the user can't activate their account and a retry is blocked by
       // ALREADY_EXISTS, so roll back both the DB record and the Supabase auth user.
