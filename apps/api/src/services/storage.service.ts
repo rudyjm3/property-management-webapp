@@ -2,7 +2,6 @@ import { supabaseAdmin } from '../lib/supabase';
 
 const BUCKET = process.env.SUPABASE_STORAGE_BUCKET || '';
 
-const UPLOAD_EXPIRY_SECONDS = 900;
 const DOWNLOAD_EXPIRY_SECONDS = 3600;
 
 export async function generateUploadPresignedUrl(
