@@ -19,9 +19,8 @@ export interface SubmitWorkOrderArgs {
 }
 
 async function uploadPhoto(photo: PhotoToUpload): Promise<string> {
-  const { uploadUrl, s3Key } = await tenantApi.requestUploadUrl(photo.fileName, photo.mimeType);
+  const { uploadUrl, storageKey } = await tenantApi.requestUploadUrl(photo.fileName, photo.mimeType);
 
-  // Fetch the local file URI as a blob and PUT it directly to S3
   const fileResponse = await fetch(photo.uri);
   const blob = await fileResponse.blob();
 
@@ -35,7 +34,7 @@ async function uploadPhoto(photo: PhotoToUpload): Promise<string> {
     throw new Error(`Photo upload failed: ${uploadResponse.statusText}`);
   }
 
-  return s3Key;
+  return storageKey;
 }
 
 export function useSubmitWorkOrder() {

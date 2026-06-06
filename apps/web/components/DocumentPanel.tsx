@@ -101,8 +101,8 @@ export default function DocumentPanel({ entityType, entityId }: Props) {
       // Resolve once so step 1 and step 2 both use the identical value
       const resolvedMimeType = selectedFile.type || 'application/octet-stream';
 
-      // Step 1: Get presigned URL
-      const { uploadUrl, s3Key } = await api.documents.requestUploadUrl({
+      // Step 1: Get signed upload URL
+      const { uploadUrl, storageKey } = await api.documents.requestUploadUrl({
         entityType,
         entityId,
         fileName: selectedFile.name,
@@ -113,12 +113,12 @@ export default function DocumentPanel({ entityType, entityId }: Props) {
         visibleToTenant,
       });
 
-      // Step 2: Upload directly to S3 — Content-Type must match the signed value
-      await api.documents.uploadToS3(uploadUrl, selectedFile, resolvedMimeType);
+      // Step 2: Upload directly to Supabase Storage
+      await api.documents.uploadToStorage(uploadUrl, selectedFile, resolvedMimeType);
 
       // Step 3: Confirm upload and persist metadata
       await api.documents.confirmUpload({
-        s3Key,
+        storageKey,
         entityType,
         entityId,
         fileName: selectedFile.name,

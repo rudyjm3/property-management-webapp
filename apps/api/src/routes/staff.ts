@@ -3,6 +3,7 @@ import { prisma, UserRole, UserStatus } from '@propflow/db';
 import { z } from 'zod';
 import { requireAuth, requireOrg, requireRoles } from '../middleware/auth';
 import { supabaseAdmin } from '../lib/supabase';
+import { sendStaffInviteEmail } from '../services/email.service';
 
 const router = Router({ mergeParams: true });
 const requireSettingsAccess = requireRoles(['owner', 'manager']);
@@ -131,27 +132,54 @@ router.post(
         select: { id: true, email: true, name: true, role: true, status: true, invitedAt: true },
       });
 
-      // Send Supabase invite email so they can set a password
+      // Generate a Supabase invite link (creates auth user, returns magic URL, does NOT send email)
       const onboardingNext = encodeURIComponent('/onboarding?invited=true');
       const {
-        data: { user: supabaseUser },
+        data: { user: supabaseUser, properties },
         error,
-      } = await supabaseAdmin.auth.admin.inviteUserByEmail(email, {
-        redirectTo: `${process.env.APP_URL}/auth/callback?next=${onboardingNext}`,
-        data: { organizationId: orgId, role, name },
+      } = await supabaseAdmin.auth.admin.generateLink({
+        type: 'invite',
+        email,
+        options: {
+          redirectTo: `${process.env.APP_URL}/auth/callback?next=${onboardingNext}`,
+          data: { organizationId: orgId, role, name },
+        },
       });
 
       if (error) {
         // Clean up the DB record if invite failed
         await prisma.user.delete({ where: { id: invitedUser.id } });
-        console.error('Supabase invite error:', error);
+        console.error('Supabase generateLink error:', error);
         res.status(400).json({
           error: {
             code: 'INVITE_FAILED',
             message:
               error.message ||
-              'Failed to send invite email. The address may already be registered.',
+              'Failed to generate invite link. The address may already be registered.',
           },
+        });
+        return;
+      }
+
+      if (!properties?.action_link) {
+        await prisma.user.delete({ where: { id: invitedUser.id } });
+        res.status(400).json({ error: { code: 'INVITE_FAILED', message: 'Failed to generate invite link.' } });
+        return;
+      }
+
+      // Send branded invite email via Resend — awaited so a delivery failure is caught.
+      // Without email the user can't activate their account and a retry is blocked by
+      // ALREADY_EXISTS, so roll back both the DB record and the Supabase auth user.
+      try {
+        await sendStaffInviteEmail(email, name, properties.action_link);
+      } catch (emailErr) {
+        console.error('Staff invite email failed:', emailErr);
+        await prisma.user.delete({ where: { id: invitedUser.id } }).catch(() => {});
+        if (supabaseUser) {
+          await supabaseAdmin.auth.admin.deleteUser(supabaseUser.id).catch(() => {});
+        }
+        res.status(500).json({
+          error: { code: 'INVITE_EMAIL_FAILED', message: 'Failed to send invite email. Please try again.' },
         });
         return;
       }

@@ -255,17 +255,19 @@ router.post(
       }
 
       {
-        // First invite — create the Supabase auth account
-        const {
-          data: { user },
-          error,
-        } = await supabaseAdmin.auth.admin.inviteUserByEmail(normalizedEmail, {
-          redirectTo,
-          data: { tenantId: currentTenant.id, name: currentTenant.name },
+        // First invite — create the Supabase auth account and get the invite link in one step.
+        // generateLink creates the user without sending a Supabase email; Resend handles delivery.
+        const inviteResult = await supabaseAdmin.auth.admin.generateLink({
+          type: 'invite',
+          email: normalizedEmail,
+          options: {
+            redirectTo,
+            data: { tenantId: currentTenant.id, name: currentTenant.name },
+          },
         });
-        if (error) {
-          if (!isAlreadyRegisteredError(error.message)) {
-            res.status(400).json({ error: { code: 'INVITE_FAILED', message: error.message } });
+        if (inviteResult.error) {
+          if (!isAlreadyRegisteredError(inviteResult.error.message)) {
+            res.status(400).json({ error: { code: 'INVITE_FAILED', message: inviteResult.error.message } });
             return;
           }
 
@@ -308,15 +310,9 @@ router.post(
           res.json({ data: { message: 'Invite sent', email: normalizedEmail } });
           return;
         }
-        if (user) {
+        if (inviteResult.data?.user) {
           const inviteCode3 = await stampInviteCode(currentTenant.id);
-          // Generate the action link for the email (invite type, no PKCE needed server-side)
-          const inviteLinkResult = await supabaseAdmin.auth.admin.generateLink({
-            type: 'invite',
-            email: normalizedEmail,
-            options: { redirectTo },
-          });
-          const actionLink = inviteLinkResult.data?.properties?.action_link ?? redirectTo;
+          const actionLink = inviteResult.data.properties?.action_link ?? redirectTo;
           await sendInviteEmailOrFail({
             tenantName: currentTenant.name,
             tenantEmail: normalizedEmail,
@@ -326,7 +322,7 @@ router.post(
           });
           await prisma.tenant.update({
             where: { id: currentTenant.id },
-            data: { supabaseUserId: user.id, portalStatus: 'invited' },
+            data: { supabaseUserId: inviteResult.data.user.id, portalStatus: 'invited' },
           });
         }
       }

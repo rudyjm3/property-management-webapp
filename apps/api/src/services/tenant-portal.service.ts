@@ -1,7 +1,7 @@
 import { prisma } from '@propflow/db';
 import { AppError } from '../middleware/error-handler';
 import * as stripeService from './stripe.service';
-import * as s3Service from './s3.service';
+import * as storageService from './storage.service';
 import type { SubmitWorkOrderInput, UpdateTenantProfileInput } from '@propflow/shared';
 
 const SLA_HOURS: Record<string, number> = {
@@ -325,14 +325,14 @@ export async function getTenantDocumentDownloadUrl(tenantId: string, documentId:
           : []),
       ],
     },
-    select: { s3Key: true },
+    select: { storageKey: true },
   });
 
   if (!document) {
     throw new AppError(404, 'DOCUMENT_NOT_FOUND', 'Document not found.');
   }
 
-  const downloadUrl = await s3Service.generateDownloadPresignedUrl(document.s3Key);
+  const downloadUrl = await storageService.generateDownloadPresignedUrl(document.storageKey);
   return { downloadUrl };
 }
 
@@ -613,9 +613,9 @@ export async function requestTenantUploadUrl(
   fileName: string,
   contentType: string
 ) {
-  const s3Key = s3Service.buildS3Key(orgId, 'work_order', 'pending', fileName);
-  const { uploadUrl } = await s3Service.generateUploadPresignedUrl(s3Key, contentType);
-  return { uploadUrl, s3Key };
+  const storageKey = storageService.buildStorageKey(orgId, 'work_order', 'pending', fileName);
+  const { uploadUrl } = await storageService.generateUploadPresignedUrl(storageKey, contentType);
+  return { uploadUrl, storageKey };
 }
 
 // ─── Autopay ─────────────────────────────────────────────────────────────────

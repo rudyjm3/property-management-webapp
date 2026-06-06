@@ -396,3 +396,64 @@ export async function sendPropertyDeletionNotification(params: PropertyDeletionP
     html: baseLayout('Property Deleted', body),
   });
 }
+
+// ─── Password Reset ───────────────────────────────────────────────────────────
+
+export async function sendPasswordResetEmail(to: string, resetUrl: string) {
+  const body = `
+    <h1>Reset your password</h1>
+    <p>We received a request to reset the password for your PropFlow account.</p>
+    <p><a href="${resetUrl}" class="btn">Reset Password</a></p>
+    <div class="warning-box">
+      <p>This link expires in 1 hour. If you did not request a password reset, you can safely ignore this email.</p>
+    </div>
+  `;
+
+  return resend.emails.send({
+    from: FROM,
+    to,
+    subject: 'Reset your PropFlow password',
+    html: baseLayout('Password Reset', body),
+  });
+}
+
+// ─── Signup Confirmation ──────────────────────────────────────────────────────
+
+export async function sendSignupConfirmationEmail(to: string, confirmUrl: string) {
+  const body = `
+    <h1>Confirm your email address</h1>
+    <p>Thanks for signing up for PropFlow! Click the button below to confirm your email and activate your account.</p>
+    <p><a href="${confirmUrl}" class="btn">Confirm Email</a></p>
+    <div class="warning-box">
+      <p>This link expires in 24 hours. If you did not create a PropFlow account, you can safely ignore this email.</p>
+    </div>
+  `;
+
+  return resend.emails.send({
+    from: FROM,
+    to,
+    subject: 'Confirm your PropFlow account',
+    html: baseLayout('Email Confirmation', body),
+  });
+}
+
+// ─── Staff Invite ─────────────────────────────────────────────────────────────
+
+export async function sendStaffInviteEmail(to: string, name: string, inviteUrl: string) {
+  const body = `
+    <h1>You've been invited to PropFlow</h1>
+    <p>Hi ${name},</p>
+    <p>You've been invited to join your team's PropFlow account. Click the button below to set up your password and get started.</p>
+    <p><a href="${inviteUrl}" class="btn">Accept Invitation</a></p>
+    <div class="warning-box">
+      <p>This invitation link expires in 24 hours. If you did not expect this invitation, you can safely ignore this email.</p>
+    </div>
+  `;
+
+  return resend.emails.send({
+    from: FROM,
+    to,
+    subject: 'You\'ve been invited to PropFlow',
+    html: baseLayout('Staff Invitation', body),
+  });
+}

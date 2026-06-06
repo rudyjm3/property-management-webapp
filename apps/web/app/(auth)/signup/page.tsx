@@ -1,12 +1,11 @@
 'use client';
 
 import { useState } from 'react';
-import { useRouter } from 'next/navigation';
 import Link from 'next/link';
-import { createClient } from '@/lib/supabase';
+
+const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
 
 export default function SignupPage() {
-  const router = useRouter();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
@@ -24,17 +23,24 @@ export default function SignupPage() {
       return;
     }
 
-    const supabase = createClient();
-    const { error } = await supabase.auth.signUp({
-      email,
-      password,
-      options: {
-        emailRedirectTo: `${window.location.origin}/auth/callback?next=/onboarding`,
-      },
-    });
-
-    if (error) {
-      setError(error.message);
+    try {
+      const res = await fetch(`${API_URL}/api/v1/auth/signup-initiate`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          email,
+          password,
+          redirectTo: `${window.location.origin}/auth/callback?next=/onboarding`,
+        }),
+      });
+      const json = await res.json();
+      if (!res.ok) {
+        setError(json.error?.message || 'Failed to create account.');
+        setLoading(false);
+        return;
+      }
+    } catch {
+      setError('Failed to create account. Please try again.');
       setLoading(false);
       return;
     }

@@ -697,7 +697,7 @@ model Message {
   recipientTenantId String?   @map("recipient_tenant_id")
   body              String
   attachmentUrl     String?   @map("attachment_url")
-  attachmentS3Key   String?   @map("attachment_s3_key") @db.VarChar(1000)
+  attachmentStorageKey String? @map("attachment_storage_key") @db.VarChar(1000)
   attachmentName    String?   @map("attachment_name") @db.VarChar(500)
   attachmentMimeType String?  @map("attachment_mime_type") @db.VarChar(100)
   readAt            DateTime? @map("read_at")
@@ -723,7 +723,7 @@ model Document {
   entityType       DocumentEntityType  @map("entity_type")
   entityId         String              @map("entity_id")
   name             String              @db.VarChar(500)
-  s3Key            String              @map("s3_key")
+  storageKey       String              @map("storage_key")
   mimeType         String              @map("mime_type") @db.VarChar(100)
   sizeBytes        Int                 @map("size_bytes")
   uploadedByUserId String              @map("uploaded_by_user_id")

@@ -4,7 +4,7 @@ import * as tenantPortalService from '../services/tenant-portal.service';
 import { validate } from '../middleware/validate';
 
 import * as messageService from '../services/message.service';
-import { generateUploadPresignedUrl, buildS3Key } from '../services/s3.service';
+import { generateUploadPresignedUrl, buildStorageKey } from '../services/storage.service';
 import type { SubmitWorkOrderInput, UpdateTenantProfileInput } from '@propflow/shared';
 import { updateTenantProfileSchema } from '@propflow/shared';
 
@@ -179,8 +179,8 @@ router.post('/messages/attachment-upload-url', async (req: Request, res: Respons
       res.status(400).json({ error: { code: 'MISSING_FIELDS', message: 'fileName and contentType are required.' } });
       return;
     }
-    const s3Key = buildS3Key(orgId, 'messages', 'attachments', fileName);
-    const result = await generateUploadPresignedUrl(s3Key, contentType);
+    const storageKey = buildStorageKey(orgId, 'messages', 'attachments', fileName);
+    const result = await generateUploadPresignedUrl(storageKey, contentType);
     res.json({ data: result });
   } catch (err) {
     next(err);
@@ -191,15 +191,15 @@ router.post('/messages/attachment-upload-url', async (req: Request, res: Respons
 router.post('/messages/:threadId/reply', async (req: Request, res: Response, next: NextFunction) => {
   try {
     const { tenantId, orgId } = req.tenant!;
-    const { body, attachmentS3Key, attachmentName, attachmentMimeType } = req.body as {
+    const { body, attachmentStorageKey, attachmentName, attachmentMimeType } = req.body as {
       body?: string;
-      attachmentS3Key?: string;
+      attachmentStorageKey?: string;
       attachmentName?: string;
       attachmentMimeType?: string;
     };
     const attachment =
-      attachmentS3Key && attachmentName && attachmentMimeType
-        ? { s3Key: attachmentS3Key, name: attachmentName, mimeType: attachmentMimeType }
+      attachmentStorageKey && attachmentName && attachmentMimeType
+        ? { storageKey: attachmentStorageKey, name: attachmentName, mimeType: attachmentMimeType }
         : null;
     if (!body?.trim() && !attachment) {
       res.status(400).json({ error: { code: 'MISSING_BODY', message: 'body or an attachment is required.' } });
