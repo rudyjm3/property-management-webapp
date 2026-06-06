@@ -2,8 +2,9 @@ import { useState } from 'react';
 import { View, Text, TextInput, TouchableOpacity, KeyboardAvoidingView, Platform, StyleSheet } from 'react-native';
 import { useRouter } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { supabase } from '@/lib/supabase';
 import { Button } from '@/components/ui/Button';
+
+const API_URL = process.env.EXPO_PUBLIC_API_URL ?? 'http://localhost:3001';
 
 export default function ForgotPasswordScreen() {
   const router = useRouter();
@@ -15,9 +16,22 @@ export default function ForgotPasswordScreen() {
   async function handleReset() {
     if (!email.trim()) { setError('Please enter your email address.'); return; }
     setLoading(true); setError(null);
-    const { error: e } = await supabase.auth.resetPasswordForEmail(email.trim().toLowerCase(), { redirectTo: 'propflow://reset-password' });
+    try {
+      const res = await fetch(`${API_URL}/api/v1/auth/forgot-password`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: email.trim().toLowerCase(), redirectTo: 'propflow://reset-password' }),
+      });
+      const json = await res.json();
+      if (!res.ok) {
+        setError(json.error?.message || 'Failed to send reset link.');
+      } else {
+        setSent(true);
+      }
+    } catch {
+      setError('Failed to send reset link. Please try again.');
+    }
     setLoading(false);
-    if (e) setError(e.message); else setSent(true);
   }
 
   return (

@@ -2,6 +2,7 @@ import { Router, Request, Response, NextFunction } from 'express';
 import { prisma } from '@propflow/db';
 import { supabaseAdmin } from '../lib/supabase';
 import { requireAuth, requireSupabaseAuth } from '../middleware/auth';
+import { sendPasswordResetEmail, sendSignupConfirmationEmail } from '../services/email.service';
 
 const router = Router();
 
@@ -124,6 +125,69 @@ router.post('/register', requireSupabaseAuth, async (req: Request, res: Response
         role: result.user.role,
       },
     });
+  } catch (err) {
+    next(err);
+  }
+});
+
+/**
+ * POST /api/v1/auth/forgot-password
+ * Generates a password-reset link via Supabase Admin and sends it through Resend.
+ * Public endpoint — always returns success to avoid email enumeration.
+ */
+router.post('/forgot-password', async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const { email, redirectTo } = req.body as { email?: string; redirectTo?: string };
+    if (!email) {
+      res.status(400).json({ error: { code: 'MISSING_FIELDS', message: 'email is required.' } });
+      return;
+    }
+    const resolvedRedirectTo = redirectTo ?? `${process.env.APP_URL}/auth/callback?next=/reset-password`;
+    const { data, error } = await supabaseAdmin.auth.admin.generateLink({
+      type: 'recovery',
+      email: email.trim().toLowerCase(),
+      options: { redirectTo: resolvedRedirectTo },
+    });
+    if (!error && data.properties?.action_link) {
+      sendPasswordResetEmail(email.trim().toLowerCase(), data.properties.action_link).catch((err) =>
+        console.error('Password reset email failed:', err)
+      );
+    }
+    res.json({ data: { message: 'If an account exists for that email, a reset link has been sent.' } });
+  } catch (err) {
+    next(err);
+  }
+});
+
+/**
+ * POST /api/v1/auth/signup-initiate
+ * Creates a Supabase user and sends a confirmation email via Resend instead of Supabase.
+ * Body: { email, password, redirectTo? }
+ */
+router.post('/signup-initiate', async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const { email, password, redirectTo } = req.body as { email?: string; password?: string; redirectTo?: string };
+    if (!email || !password) {
+      res.status(400).json({ error: { code: 'MISSING_FIELDS', message: 'email and password are required.' } });
+      return;
+    }
+    const resolvedRedirectTo = redirectTo ?? `${process.env.APP_URL}/auth/callback?next=/onboarding`;
+    const { data, error } = await supabaseAdmin.auth.admin.generateLink({
+      type: 'signup',
+      email: email.trim().toLowerCase(),
+      password,
+      options: { redirectTo: resolvedRedirectTo },
+    });
+    if (error) {
+      res.status(400).json({ error: { code: 'SIGNUP_FAILED', message: error.message } });
+      return;
+    }
+    if (data.properties?.action_link) {
+      sendSignupConfirmationEmail(email.trim().toLowerCase(), data.properties.action_link).catch((err) =>
+        console.error('Signup confirmation email failed:', err)
+      );
+    }
+    res.json({ data: { message: 'Confirmation email sent.' } });
   } catch (err) {
     next(err);
   }
