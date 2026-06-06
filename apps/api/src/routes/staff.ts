@@ -161,10 +161,22 @@ router.post(
         return;
       }
 
-      // Send branded invite email via Resend
-      sendStaffInviteEmail(email, name, properties.action_link).catch((err) =>
-        console.error('Staff invite email failed:', err)
-      );
+      // Send branded invite email via Resend — awaited so a delivery failure is caught.
+      // Without email the user can't activate their account and a retry is blocked by
+      // ALREADY_EXISTS, so roll back both the DB record and the Supabase auth user.
+      try {
+        await sendStaffInviteEmail(email, name, properties.action_link);
+      } catch (emailErr) {
+        console.error('Staff invite email failed:', emailErr);
+        await prisma.user.delete({ where: { id: invitedUser.id } }).catch(() => {});
+        if (supabaseUser) {
+          await supabaseAdmin.auth.admin.deleteUser(supabaseUser.id).catch(() => {});
+        }
+        res.status(500).json({
+          error: { code: 'INVITE_EMAIL_FAILED', message: 'Failed to send invite email. Please try again.' },
+        });
+        return;
+      }
 
       // Link the Supabase user ID to our record
       if (supabaseUser) {
