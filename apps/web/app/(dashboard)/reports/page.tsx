@@ -7,6 +7,7 @@ import { RevenueTrendChart } from '@/components/reports/RevenueTrendChart';
 import { RentRollTable } from '@/components/reports/RentRollTable';
 import { VacancyReport } from '@/components/reports/VacancyReport';
 import { OwnerStatements } from '@/components/reports/OwnerStatements';
+import { SpendByLocationReport } from '@/components/reports/SpendByLocationReport';
 
 interface OwnerShare {
   ownerId: string;
@@ -49,11 +50,12 @@ interface PropertyOption {
   name: string;
 }
 
-type Tab = 'financial' | 'trend' | 'rentroll' | 'vacancy' | 'statements';
+type Tab = 'financial' | 'trend' | 'spend' | 'rentroll' | 'vacancy' | 'statements';
 
 const TABS: { id: Tab; label: string }[] = [
   { id: 'financial', label: 'Financial Summary' },
   { id: 'trend', label: 'Revenue Trend' },
+  { id: 'spend', label: 'Spend by Location' },
   { id: 'rentroll', label: 'Rent Roll' },
   { id: 'vacancy', label: 'Vacancy' },
   { id: 'statements', label: 'Owner Statements' },
@@ -131,7 +133,7 @@ export default function ReportsPage() {
     noi >= 0 ? 'var(--color-success, #16a34a)' : 'var(--color-danger, #dc2626)';
 
   // Tabs that use the date-range filter vs those that are always fresh
-  const showDateFilter = activeTab === 'financial' || activeTab === 'trend';
+  const showDateFilter = activeTab === 'financial' || activeTab === 'trend' || activeTab === 'spend';
 
   return (
     <div className="page-container">
@@ -472,6 +474,17 @@ export default function ReportsPage() {
               Monthly Revenue Trend
             </h2>
             <RevenueTrendChart
+              periodStart={periodStart}
+              periodEnd={periodEnd}
+              propertyId={selectedPropertyId || undefined}
+            />
+          </div>
+        )}
+
+        {/* ─── Spend by Location ─────────────────────────────────── */}
+        {activeTab === 'spend' && (
+          <div className="card" style={{ padding: '1.5rem' }}>
+            <SpendByLocationReport
               periodStart={periodStart}
               periodEnd={periodEnd}
               propertyId={selectedPropertyId || undefined}

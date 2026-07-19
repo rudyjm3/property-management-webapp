@@ -1,6 +1,5 @@
 import { z } from 'zod';
 import {
-  USER_ROLES,
   UNIT_STATUSES,
   UNIT_TYPES,
   LEASE_STATUSES,
@@ -494,6 +493,12 @@ export const revenueTrendFiltersSchema = z.object({
 export const rentRollFiltersSchema = z.object({
   propertyId: z.string().uuid().optional(),
   status: z.enum(UNIT_STATUSES).optional(),
+});
+
+export const spendByLocationFiltersSchema = z.object({
+  periodStart: z.string().date(),
+  periodEnd: z.string().date(),
+  propertyId: z.string().uuid().optional(),
 });
 
 // --- Tenant Portal ---
