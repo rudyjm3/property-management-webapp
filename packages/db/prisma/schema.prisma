@@ -572,7 +572,7 @@ model LedgerEntry {
 
 model WorkOrder {
   id                     String            @id @default(uuid())
-  unitId                 String            @map("unit_id")
+  unitId                 String?           @map("unit_id")
   propertyId             String?           @map("property_id")
   tenantId               String?           @map("tenant_id")
   assignedToUserId       String?           @map("assigned_to_user_id")
@@ -582,6 +582,8 @@ model WorkOrder {
   category               WorkOrderCategory @default(general)
   priority               WorkOrderPriority @default(routine)
   status                 WorkOrderStatus   @default(new_order)
+  locationType           WorkOrderLocationType? @map("location_type")
+  isCapitalProject       Boolean           @default(false) @map("is_capital_project")
   description            String
   slaDeadlineAt          DateTime?         @map("sla_deadline_at")
   slaBreached            Boolean           @default(false) @map("sla_breached")
@@ -601,7 +603,7 @@ model WorkOrder {
   createdAt              DateTime          @default(now()) @map("created_at")
   updatedAt              DateTime          @updatedAt @map("updated_at")
 
-  unit            Unit      @relation(fields: [unitId], references: [id])
+  unit            Unit?     @relation(fields: [unitId], references: [id])
   property        Property? @relation(fields: [propertyId], references: [id])
   tenant          Tenant?   @relation(fields: [tenantId], references: [id])
   assignedTo      User?     @relation("AssignedWorkOrders", fields: [assignedToUserId], references: [id])
@@ -614,6 +616,7 @@ model WorkOrder {
   @@index([status])
   @@index([priority])
   @@index([createdAt])
+  @@index([locationType])
   @@map("work_orders")
 }
 
@@ -647,6 +650,16 @@ enum WorkOrderStatus {
   completed
   closed
   cancelled
+}
+
+enum WorkOrderLocationType {
+  exterior
+  parking
+  roof
+  landscaping
+  common_interior
+  amenity
+  unit_interior
 }
 
 // ─── Vendor ───────────────────────────────────────────────────────────────────
