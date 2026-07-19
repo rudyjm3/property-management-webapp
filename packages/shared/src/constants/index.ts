@@ -96,6 +96,16 @@ export const WORK_ORDER_STATUSES = [
   'cancelled',
 ] as const;
 
+export const WORK_ORDER_LOCATION_TYPES = [
+  'exterior',
+  'parking',
+  'roof',
+  'landscaping',
+  'common_interior',
+  'amenity',
+  'unit_interior',
+] as const;
+
 // ─── Vendor ───────────────────────────────────────────────────────────────────
 
 export const VENDOR_STATUSES = ['active', 'inactive'] as const;

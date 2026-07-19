@@ -12,6 +12,7 @@ import {
   WORK_ORDER_CATEGORIES,
   WORK_ORDER_PRIORITIES,
   WORK_ORDER_STATUSES,
+  WORK_ORDER_LOCATION_TYPES,
   PREFERRED_CONTACTS,
   GOVERNMENT_ID_TYPES,
   INCOME_SOURCES,
@@ -261,23 +262,36 @@ export const listPaymentsFiltersSchema = z.object({
 
 // ─── Work Order ───────────────────────────────────────────────────────────────
 
-export const createWorkOrderSchema = z.object({
-  unitId: z.string().uuid(),
-  propertyId: z.string().uuid().nullable().optional(),
-  title: z.string().max(200).nullable().optional(),
-  category: z.enum(WORK_ORDER_CATEGORIES),
-  priority: z.enum(WORK_ORDER_PRIORITIES).default('routine'),
-  description: z.string().min(1).max(5000),
-  entryPermissionGranted: z.boolean().default(false),
-  preferredContactWindow: z.string().max(200).nullable().optional(),
-  tenantId: z.string().uuid().nullable().optional(),
-});
+export const createWorkOrderSchema = z
+  .object({
+    unitId: z.string().uuid().nullable().optional(),
+    propertyId: z.string().uuid().nullable().optional(),
+    title: z.string().max(200).nullable().optional(),
+    category: z.enum(WORK_ORDER_CATEGORIES),
+    priority: z.enum(WORK_ORDER_PRIORITIES).default('routine'),
+    locationType: z.enum(WORK_ORDER_LOCATION_TYPES).nullable().optional(),
+    isCapitalProject: z.boolean().default(false),
+    description: z.string().min(1).max(5000),
+    entryPermissionGranted: z.boolean().default(false),
+    preferredContactWindow: z.string().max(200).nullable().optional(),
+    tenantId: z.string().uuid().nullable().optional(),
+  })
+  .refine((data) => data.unitId || data.propertyId, {
+    message: 'Either unitId or propertyId is required',
+    path: ['unitId'],
+  })
+  .refine((data) => data.unitId || !data.tenantId, {
+    message: 'Property-level work orders cannot be associated with a tenant',
+    path: ['tenantId'],
+  });
 
 export const updateWorkOrderSchema = z.object({
   assignedToUserId: z.string().uuid().nullable().optional(),
   vendorId: z.string().uuid().nullable().optional(),
   priority: z.enum(WORK_ORDER_PRIORITIES).optional(),
   status: z.enum(WORK_ORDER_STATUSES).optional(),
+  locationType: z.enum(WORK_ORDER_LOCATION_TYPES).nullable().optional(),
+  isCapitalProject: z.boolean().optional(),
   scheduledAt: z.string().datetime().nullable().optional(),
   resolutionNotes: z.string().max(5000).nullable().optional(),
   laborCost: z.number().min(0).nullable().optional(),
