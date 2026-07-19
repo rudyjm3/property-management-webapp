@@ -15,6 +15,13 @@ UPDATE "work_orders" wo SET "property_id" = u."property_id"
 FROM "units" u
 WHERE wo."unit_id" = u."id" AND wo."property_id" IS NULL;
 
+-- Repair: any unit-scoped order whose property_id doesn't match its unit's
+-- actual property (possible from older code paths that accepted a
+-- caller-supplied propertyId without validating it against the unit).
+UPDATE "work_orders" wo SET "property_id" = u."property_id"
+FROM "units" u
+WHERE wo."unit_id" = u."id" AND wo."property_id" IS DISTINCT FROM u."property_id";
+
 -- Every work order must be anchored to a unit or a property
 ALTER TABLE "work_orders"
   ADD CONSTRAINT "work_orders_scope_check"

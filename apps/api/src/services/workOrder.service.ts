@@ -44,12 +44,14 @@ const workOrderInclude = {
 };
 
 // Org scoping: unit-scoped orders resolve via unit → property; property-level
-// orders (unitId null) resolve via their direct property relation.
+// orders (unitId null) resolve via their direct property relation. The second
+// branch is restricted to unitId: null so a unit-scoped order with a stale or
+// mismatched property_id can never be matched via the wrong org's property.
 function orgScope(organizationId: string) {
   return {
     OR: [
       { unit: { property: { organizationId } } },
-      { property: { organizationId } },
+      { unitId: null, property: { organizationId } },
     ],
   };
 }
