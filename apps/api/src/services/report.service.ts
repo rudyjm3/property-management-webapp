@@ -91,6 +91,19 @@ export async function getFinancialSummary(
           },
         },
       },
+      // Property-level (common area) work orders — unitId null so unit-scoped
+      // orders, which also carry propertyId, are not double-counted.
+      workOrders: {
+        where: {
+          unitId: null,
+          status: { in: ['completed', 'closed'] },
+          completedAt: { gte: start, lte: end },
+          totalCost: { not: null },
+        },
+        select: {
+          totalCost: true,
+        },
+      },
       propertyOwners: {
         include: {
           owner: { select: { id: true, name: true } },
@@ -121,6 +134,10 @@ export async function getFinancialSummary(
       for (const wo of unit.workOrders) {
         totalExpenses += Number(wo.totalCost ?? 0);
       }
+    }
+
+    for (const wo of property.workOrders) {
+      totalExpenses += Number(wo.totalCost ?? 0);
     }
 
     const totalIncome = rent + lateFees + deposits + other;
@@ -192,12 +209,23 @@ export async function getRevenueTrend(
       status: { in: ['completed', 'closed'] },
       completedAt: { gte: start, lte: end },
       totalCost: { not: null },
-      unit: {
-        property: {
-          organizationId,
-          ...(filters.propertyId ? { id: filters.propertyId } : {}),
+      OR: [
+        {
+          unit: {
+            property: {
+              organizationId,
+              ...(filters.propertyId ? { id: filters.propertyId } : {}),
+            },
+          },
         },
-      },
+        {
+          unitId: null,
+          property: {
+            organizationId,
+            ...(filters.propertyId ? { id: filters.propertyId } : {}),
+          },
+        },
+      ],
     },
     select: { totalCost: true, completedAt: true },
   });
