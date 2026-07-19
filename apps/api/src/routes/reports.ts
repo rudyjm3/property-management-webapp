@@ -1,6 +1,11 @@
 import { Router, Request, Response, NextFunction } from 'express';
 import { requireRoles } from '../middleware/auth';
-import { financialSummaryFiltersSchema, revenueTrendFiltersSchema, rentRollFiltersSchema } from '@propflow/shared';
+import {
+  financialSummaryFiltersSchema,
+  revenueTrendFiltersSchema,
+  rentRollFiltersSchema,
+  spendByLocationFiltersSchema,
+} from '@propflow/shared';
 import * as reportService from '../services/report.service';
 
 const router = Router({ mergeParams: true });
@@ -33,6 +38,17 @@ router.get('/rent-roll', requireManagerAccess, async (req: Request, res: Respons
   try {
     const filters = rentRollFiltersSchema.parse(req.query);
     const data = await reportService.getRentRoll(req.params.orgId as string, filters);
+    res.json({ data });
+  } catch (err) {
+    next(err);
+  }
+});
+
+// GET /api/v1/organizations/:orgId/reports/spend-by-location
+router.get('/spend-by-location', requireManagerAccess, async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const filters = spendByLocationFiltersSchema.parse(req.query);
+    const data = await reportService.getSpendByLocation(req.params.orgId as string, filters);
     res.json({ data });
   } catch (err) {
     next(err);

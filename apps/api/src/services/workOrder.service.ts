@@ -1,4 +1,10 @@
-import { prisma, WorkOrderStatus, WorkOrderPriority, WorkOrderCategory } from '@propflow/db';
+import {
+  prisma,
+  WorkOrderStatus,
+  WorkOrderPriority,
+  WorkOrderCategory,
+  WorkOrderLocationType,
+} from '@propflow/db';
 import { AppError } from '../middleware/error-handler';
 
 // ─── SLA deadline helpers ──────────────────────────────────────────────────────
@@ -30,11 +36,25 @@ const workOrderInclude = {
       property: { select: { id: true, name: true, organizationId: true } },
     },
   },
+  property: { select: { id: true, name: true, organizationId: true } },
   tenant: { select: { id: true, name: true, email: true, phone: true } },
   assignedTo: { select: { id: true, name: true, email: true } },
   submittedByUser: { select: { id: true, name: true, role: true } },
   vendor: { select: { id: true, companyName: true, contactName: true, phonePrimary: true } },
 };
+
+// Org scoping: unit-scoped orders resolve via unit → property; property-level
+// orders (unitId null) resolve via their direct property relation. The second
+// branch is restricted to unitId: null so a unit-scoped order with a stale or
+// mismatched property_id can never be matched via the wrong org's property.
+function orgScope(organizationId: string) {
+  return {
+    OR: [
+      { unit: { property: { organizationId } } },
+      { unitId: null, property: { organizationId } },
+    ],
+  };
+}
 
 // ─── List ─────────────────────────────────────────────────────────────────────
 
@@ -54,7 +74,7 @@ export async function listWorkOrders(organizationId: string, opts: ListWorkOrder
 
   return prisma.workOrder.findMany({
     where: {
-      unit: { property: { organizationId } },
+      ...orgScope(organizationId),
       ...(status ? { status: status as WorkOrderStatus } : {}),
       ...(dbPriority ? { priority: dbPriority } : {}),
       ...(category ? { category: category as WorkOrderCategory } : {}),
@@ -74,7 +94,7 @@ export async function getWorkOrder(organizationId: string, workOrderId: string) 
   const workOrder = await prisma.workOrder.findFirst({
     where: {
       id: workOrderId,
-      unit: { property: { organizationId } },
+      ...orgScope(organizationId),
     },
     include: workOrderInclude,
   });
@@ -89,11 +109,13 @@ export async function getWorkOrder(organizationId: string, workOrderId: string) 
 // ─── Create ───────────────────────────────────────────────────────────────────
 
 interface CreateWorkOrderData {
-  unitId: string;
+  unitId?: string | null;
   propertyId?: string | null;
   title?: string | null;
   category: string;
   priority?: string;
+  locationType?: string | null;
+  isCapitalProject?: boolean;
   description: string;
   entryPermissionGranted?: boolean;
   preferredContactWindow?: string | null;
@@ -102,14 +124,41 @@ interface CreateWorkOrderData {
 }
 
 export async function createWorkOrder(organizationId: string, data: CreateWorkOrderData) {
-  // Verify unit belongs to org and get propertyId if not supplied
-  const unit = await prisma.unit.findFirst({
-    where: { id: data.unitId, property: { organizationId } },
-    select: { id: true, propertyId: true },
-  });
+  let unitId: string | null = null;
+  let propertyId: string | null = null;
+  let tenantId: string | null = data.tenantId ?? null;
 
-  if (!unit) {
-    throw new AppError(404, 'UNIT_NOT_FOUND', 'Unit not found in your organization.');
+  if (data.unitId) {
+    // Unit-scoped: verify unit belongs to org; property always derived from the
+    // unit so the pair can never mismatch.
+    const unit = await prisma.unit.findFirst({
+      where: { id: data.unitId, property: { organizationId } },
+      select: { id: true, propertyId: true },
+    });
+
+    if (!unit) {
+      throw new AppError(404, 'UNIT_NOT_FOUND', 'Unit not found in your organization.');
+    }
+
+    unitId = unit.id;
+    propertyId = unit.propertyId;
+  } else {
+    // Property-level (common area): no unit, no tenant.
+    if (!data.propertyId) {
+      throw new AppError(400, 'VALIDATION_ERROR', 'Either unitId or propertyId is required.');
+    }
+
+    const property = await prisma.property.findFirst({
+      where: { id: data.propertyId, organizationId },
+      select: { id: true },
+    });
+
+    if (!property) {
+      throw new AppError(404, 'PROPERTY_NOT_FOUND', 'Property not found in your organization.');
+    }
+
+    propertyId = property.id;
+    tenantId = null;
   }
 
   const requestedPriority = data.priority ?? 'routine';
@@ -117,17 +166,19 @@ export async function createWorkOrder(organizationId: string, data: CreateWorkOr
 
   const workOrder = await prisma.workOrder.create({
     data: {
-      unitId: data.unitId,
-      propertyId: data.propertyId ?? unit.propertyId,
+      unitId,
+      propertyId,
       title: data.title ?? null,
       category: data.category as WorkOrderCategory,
       priority: dbPriority,
       status: WorkOrderStatus.new_order,
+      locationType: (data.locationType ?? null) as WorkOrderLocationType | null,
+      isCapitalProject: data.isCapitalProject ?? false,
       description: data.description,
       entryPermissionGranted: data.entryPermissionGranted ?? false,
       preferredContactWindow: data.preferredContactWindow ?? null,
       slaDeadlineAt: computeSlaDeadline(requestedPriority),
-      tenantId: data.tenantId ?? null,
+      tenantId,
       submittedByUserId: data.submittedByUserId ?? null,
       // Some local DB states have NOT NULL without default on these columns.
       photosBefore: [],
@@ -144,6 +195,8 @@ export async function createWorkOrder(organizationId: string, data: CreateWorkOr
 interface UpdateWorkOrderData {
   status?: string;
   priority?: string;
+  locationType?: string | null;
+  isCapitalProject?: boolean;
   assignedToUserId?: string | null;
   vendorId?: string | null;
   scheduledAt?: string | null;
@@ -164,6 +217,14 @@ export async function updateWorkOrder(
   data: UpdateWorkOrderData
 ) {
   const existing = await getWorkOrder(organizationId, workOrderId); // throws if not found
+
+  if (data.chargedToTenant === true && !existing.tenantId) {
+    throw new AppError(
+      400,
+      'NO_TENANT_TO_CHARGE',
+      'This work order has no associated tenant to charge.'
+    );
+  }
 
   const updateData: Record<string, unknown> = { ...data };
 

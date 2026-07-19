@@ -72,6 +72,15 @@ export type WorkOrderStatus =
   | 'closed'
   | 'cancelled';
 
+export type WorkOrderLocationType =
+  | 'exterior'
+  | 'parking'
+  | 'roof'
+  | 'landscaping'
+  | 'common_interior'
+  | 'amenity'
+  | 'unit_interior';
+
 export type VendorStatus = 'active' | 'inactive';
 
 export type DocumentEntityType =
@@ -370,7 +379,7 @@ export interface Payment {
 
 export interface WorkOrder {
   id: string;
-  unitId: string;
+  unitId: string | null;
   propertyId: string | null;
   tenantId: string | null;
   assignedToUserId: string | null;
@@ -380,6 +389,8 @@ export interface WorkOrder {
   category: WorkOrderCategory;
   priority: WorkOrderPriority;
   status: WorkOrderStatus;
+  locationType: WorkOrderLocationType | null;
+  isCapitalProject: boolean;
   description: string;
   slaDeadlineAt: Date | null;
   slaBreached: boolean;

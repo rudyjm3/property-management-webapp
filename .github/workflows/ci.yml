@@ -31,6 +31,9 @@ jobs:
       - name: Lint (web)
         run: npm run lint --workspace=apps/web
 
+      - name: Lint (shared)
+        run: npm run lint --workspace=packages/shared
+
       - name: Type-check (API)
         run: npx tsc --noEmit
         working-directory: apps/api

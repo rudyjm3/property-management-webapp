@@ -671,5 +671,12 @@ export const api = {
       const qs = query.toString();
       return apiFetch<any>(`/api/v1/organizations/${_orgId}/reports/vacancy-snapshot${qs ? `?${qs}` : ''}`);
     },
+    spendByLocation: (params: { periodStart: string; periodEnd: string; propertyId?: string }) => {
+      const query = new URLSearchParams();
+      query.set('periodStart', params.periodStart);
+      query.set('periodEnd', params.periodEnd);
+      if (params.propertyId) query.set('propertyId', params.propertyId);
+      return apiFetch<any>(`/api/v1/organizations/${_orgId}/reports/spend-by-location?${query.toString()}`);
+    },
   },
 };

@@ -1,4 +1,5 @@
 import { prisma, UnitStatus } from '@propflow/db';
+import { WORK_ORDER_LOCATION_TYPES } from '@propflow/shared';
 
 function monthsBetween(start: Date, end: Date): string[] {
   const months: string[] = [];
@@ -91,6 +92,19 @@ export async function getFinancialSummary(
           },
         },
       },
+      // Property-level (common area) work orders — unitId null so unit-scoped
+      // orders, which also carry propertyId, are not double-counted.
+      workOrders: {
+        where: {
+          unitId: null,
+          status: { in: ['completed', 'closed'] },
+          completedAt: { gte: start, lte: end },
+          totalCost: { not: null },
+        },
+        select: {
+          totalCost: true,
+        },
+      },
       propertyOwners: {
         include: {
           owner: { select: { id: true, name: true } },
@@ -121,6 +135,10 @@ export async function getFinancialSummary(
       for (const wo of unit.workOrders) {
         totalExpenses += Number(wo.totalCost ?? 0);
       }
+    }
+
+    for (const wo of property.workOrders) {
+      totalExpenses += Number(wo.totalCost ?? 0);
     }
 
     const totalIncome = rent + lateFees + deposits + other;
@@ -192,12 +210,23 @@ export async function getRevenueTrend(
       status: { in: ['completed', 'closed'] },
       completedAt: { gte: start, lte: end },
       totalCost: { not: null },
-      unit: {
-        property: {
-          organizationId,
-          ...(filters.propertyId ? { id: filters.propertyId } : {}),
+      OR: [
+        {
+          unit: {
+            property: {
+              organizationId,
+              ...(filters.propertyId ? { id: filters.propertyId } : {}),
+            },
+          },
         },
-      },
+        {
+          unitId: null,
+          property: {
+            organizationId,
+            ...(filters.propertyId ? { id: filters.propertyId } : {}),
+          },
+        },
+      ],
     },
     select: { totalCost: true, completedAt: true },
   });
@@ -382,5 +411,103 @@ export async function getVacancySnapshot(
     byStatus,
     occupancyRate: totalUnits > 0 ? Math.round((byStatus.occupied / totalUnits) * 100) : 0,
     properties: propertySummaries,
+  };
+}
+
+// ─── Spend by Location ────────────────────────────────────────────────────────
+
+export interface LocationSpend {
+  locationType: string; // WorkOrderLocationType value, or 'unspecified' for null
+  workOrderCount: number;
+  laborCost: number;
+  partsCost: number;
+  capitalSpend: number;
+  routineSpend: number;
+  totalSpend: number;
+}
+
+export async function getSpendByLocation(
+  organizationId: string,
+  filters: { periodStart: string; periodEnd: string; propertyId?: string }
+): Promise<{
+  periodStart: string;
+  periodEnd: string;
+  locations: LocationSpend[];
+  totals: {
+    workOrderCount: number;
+    laborCost: number;
+    partsCost: number;
+    capitalSpend: number;
+    routineSpend: number;
+    totalSpend: number;
+  };
+}> {
+  const start = new Date(filters.periodStart);
+  const end = new Date(filters.periodEnd);
+  end.setHours(23, 59, 59, 999);
+
+  const propertyFilter = filters.propertyId ? { id: filters.propertyId } : {};
+
+  const workOrders = await prisma.workOrder.findMany({
+    where: {
+      status: { in: ['completed', 'closed'] },
+      completedAt: { gte: start, lte: end },
+      totalCost: { not: null },
+      OR: [
+        { unit: { property: { organizationId, ...propertyFilter } } },
+        { unitId: null, property: { organizationId, ...propertyFilter } },
+      ],
+    },
+    select: {
+      totalCost: true,
+      laborCost: true,
+      partsCost: true,
+      locationType: true,
+      isCapitalProject: true,
+    },
+  });
+
+  const buckets = new Map<string, LocationSpend>();
+  for (const loc of [...WORK_ORDER_LOCATION_TYPES, 'unspecified']) {
+    buckets.set(loc, {
+      locationType: loc,
+      workOrderCount: 0,
+      laborCost: 0,
+      partsCost: 0,
+      capitalSpend: 0,
+      routineSpend: 0,
+      totalSpend: 0,
+    });
+  }
+
+  for (const wo of workOrders) {
+    const bucket = buckets.get(wo.locationType ?? 'unspecified')!;
+    const total = Number(wo.totalCost ?? 0);
+    bucket.workOrderCount += 1;
+    bucket.laborCost += Number(wo.laborCost ?? 0);
+    bucket.partsCost += Number(wo.partsCost ?? 0);
+    if (wo.isCapitalProject) bucket.capitalSpend += total;
+    else bucket.routineSpend += total;
+    bucket.totalSpend += total;
+  }
+
+  const locations = [...buckets.values()];
+  const totals = locations.reduce(
+    (acc, loc) => ({
+      workOrderCount: acc.workOrderCount + loc.workOrderCount,
+      laborCost: acc.laborCost + loc.laborCost,
+      partsCost: acc.partsCost + loc.partsCost,
+      capitalSpend: acc.capitalSpend + loc.capitalSpend,
+      routineSpend: acc.routineSpend + loc.routineSpend,
+      totalSpend: acc.totalSpend + loc.totalSpend,
+    }),
+    { workOrderCount: 0, laborCost: 0, partsCost: 0, capitalSpend: 0, routineSpend: 0, totalSpend: 0 }
+  );
+
+  return {
+    periodStart: filters.periodStart,
+    periodEnd: filters.periodEnd,
+    locations,
+    totals,
   };
 }
