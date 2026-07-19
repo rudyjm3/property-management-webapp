@@ -27,11 +27,14 @@ interface WorkOrder {
   tenantChargeAmount: string | null;
   createdAt: string;
   updatedAt: string;
+  locationType: string | null;
+  isCapitalProject: boolean;
   unit: {
     id: string;
     unitNumber: string;
     property: { id: string; name: string };
-  };
+  } | null;
+  property: { id: string; name: string } | null;
   tenant: { id: string; name: string; email: string; phone: string | null } | null;
   assignedTo: { id: string; name: string; email: string } | null;
   submittedByUser: { id: string; name: string; role: string } | null;
@@ -100,6 +103,16 @@ const CATEGORY_LABELS: Record<string, string> = {
   other: 'Other',
 };
 
+const LOCATION_TYPE_LABELS: Record<string, string> = {
+  exterior: 'Exterior',
+  parking: 'Parking lot',
+  roof: 'Roof',
+  landscaping: 'Landscaping',
+  common_interior: 'Common interior',
+  amenity: 'Amenity',
+  unit_interior: 'Unit interior',
+};
+
 const NEXT_STATUSES: Record<string, string[]> = {
   new_order: ['assigned', 'in_progress', 'cancelled'],
   assigned: ['in_progress', 'cancelled'],
@@ -125,6 +138,8 @@ export default function WorkOrderDetailPage() {
   const [editLaborCost, setEditLaborCost] = useState('');
   const [editPartsCost, setEditPartsCost] = useState('');
   const [editScheduledAt, setEditScheduledAt] = useState('');
+  const [editLocationType, setEditLocationType] = useState('');
+  const [editIsCapitalProject, setEditIsCapitalProject] = useState(false);
   const [editError, setEditError] = useState('');
   const [editSubmitting, setEditSubmitting] = useState(false);
 
@@ -191,6 +206,8 @@ export default function WorkOrderDetailPage() {
     setEditLaborCost(workOrder.laborCost ? String(Number(workOrder.laborCost)) : '');
     setEditPartsCost(workOrder.partsCost ? String(Number(workOrder.partsCost)) : '');
     setEditScheduledAt(workOrder.scheduledAt ? workOrder.scheduledAt.slice(0, 16) : '');
+    setEditLocationType(workOrder.locationType ?? '');
+    setEditIsCapitalProject(workOrder.isCapitalProject);
     setEditError('');
     setShowEdit(true);
   }
@@ -208,6 +225,8 @@ export default function WorkOrderDetailPage() {
         partsCost,
         totalCost: laborCost != null || partsCost != null ? (laborCost ?? 0) + (partsCost ?? 0) : null,
         scheduledAt: editScheduledAt ? new Date(editScheduledAt).toISOString() : null,
+        locationType: editLocationType || null,
+        isCapitalProject: editIsCapitalProject,
       });
       setWorkOrder(updated);
       setShowEdit(false);
@@ -275,12 +294,23 @@ export default function WorkOrderDetailPage() {
             <Link href="/work-orders">Work Orders</Link> /
           </div>
           <h1 className="page-title">
-            {workOrder.title || `Work Order — Unit ${workOrder.unit.unitNumber}`}
+            {workOrder.title ||
+              (workOrder.unit
+                ? `Work Order — Unit ${workOrder.unit.unitNumber}`
+                : `Work Order — ${workOrder.property?.name ?? 'Property'}`)}
           </h1>
           <p className="page-subtitle">
-            <Link href={`/properties/${workOrder.unit.property.id}/units/${workOrder.unit.id}`}>
-              Unit {workOrder.unit.unitNumber} — {workOrder.unit.property.name}
-            </Link>
+            {workOrder.unit ? (
+              <Link href={`/properties/${workOrder.unit.property.id}/units/${workOrder.unit.id}`}>
+                Unit {workOrder.unit.unitNumber} — {workOrder.unit.property.name}
+              </Link>
+            ) : workOrder.property ? (
+              <Link href={`/properties/${workOrder.property.id}`}>
+                {workOrder.property.name} — Property / common area
+              </Link>
+            ) : (
+              'Property / common area'
+            )}
           </p>
         </div>
         <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
@@ -328,6 +358,14 @@ export default function WorkOrderDetailPage() {
                     {PRIORITY_LABELS[workOrder.priority] ?? workOrder.priority}
                   </span>
                   <span className="badge badge-vacant">{CATEGORY_LABELS[workOrder.category] ?? workOrder.category}</span>
+                  {workOrder.locationType && (
+                    <span className="badge badge-vacant">
+                      {LOCATION_TYPE_LABELS[workOrder.locationType] ?? workOrder.locationType}
+                    </span>
+                  )}
+                  {workOrder.isCapitalProject && (
+                    <span className="badge badge-notice">Capital project</span>
+                  )}
                 </div>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                   <label style={{ fontSize: '12px', color: 'var(--color-text-muted)', fontWeight: 500 }}>Priority:</label>
@@ -615,6 +653,37 @@ export default function WorkOrderDetailPage() {
                       value={editPartsCost}
                       onChange={(e) => setEditPartsCost(e.target.value)}
                     />
+                  </div>
+                </div>
+                <div className="form-row">
+                  <div className="form-group">
+                    <label>Location</label>
+                    <select
+                      value={editLocationType}
+                      onChange={(e) => setEditLocationType(e.target.value)}
+                    >
+                      <option value="">— Not specified —</option>
+                      {Object.entries(LOCATION_TYPE_LABELS).map(([value, label]) => (
+                        <option key={value} value={value}>
+                          {label}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                  <div
+                    className="form-group"
+                    style={{ display: 'flex', alignItems: 'center', gap: '8px' }}
+                  >
+                    <input
+                      type="checkbox"
+                      id="editIsCapitalProject"
+                      checked={editIsCapitalProject}
+                      onChange={(e) => setEditIsCapitalProject(e.target.checked)}
+                      style={{ width: 'auto' }}
+                    />
+                    <label htmlFor="editIsCapitalProject" style={{ marginBottom: 0 }}>
+                      Capital project
+                    </label>
                   </div>
                 </div>
                 <div className="form-group">

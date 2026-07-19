@@ -15,14 +15,22 @@ interface WorkOrder {
   slaDeadlineAt: string | null;
   slaBreached: boolean;
   createdAt: string;
+  locationType: string | null;
+  isCapitalProject: boolean;
   unit: {
     id: string;
     unitNumber: string;
     property: { id: string; name: string };
-  };
+  } | null;
+  property: { id: string; name: string } | null;
   tenant: { id: string; name: string } | null;
   assignedTo: { id: string; name: string } | null;
   submittedByUser: { id: string; name: string } | null;
+}
+
+interface PropertyOption {
+  id: string;
+  name: string;
 }
 
 interface UnitOption {
@@ -65,6 +73,16 @@ const STATUS_LABELS: Record<string, string> = {
   completed: 'Completed',
   closed: 'Closed',
   cancelled: 'Cancelled',
+};
+
+const LOCATION_TYPE_LABELS: Record<string, string> = {
+  exterior: 'Exterior',
+  parking: 'Parking lot',
+  roof: 'Roof',
+  landscaping: 'Landscaping',
+  common_interior: 'Common interior',
+  amenity: 'Amenity',
+  unit_interior: 'Unit interior',
 };
 
 const CATEGORY_LABELS: Record<string, string> = {
@@ -120,10 +138,15 @@ export default function WorkOrdersPage() {
   const [formError, setFormError] = useState('');
   const [submitting, setSubmitting] = useState(false);
   const [unitOptions, setUnitOptions] = useState<UnitOption[]>([]);
+  const [propertyOptions, setPropertyOptions] = useState<PropertyOption[]>([]);
   const [leaseTenantOptions, setLeaseTenantOptions] = useState<{ id: string; name: string }[]>([]);
   const [formLoading, setFormLoading] = useState(false);
 
+  const [scope, setScope] = useState<'unit' | 'property'>('unit');
   const [unitId, setUnitId] = useState('');
+  const [formPropertyId, setFormPropertyId] = useState('');
+  const [locationType, setLocationType] = useState('');
+  const [isCapitalProject, setIsCapitalProject] = useState(false);
   const [formTenantId, setFormTenantId] = useState<string | null>(null);
   const [title, setTitle] = useState('');
   const [category, setCategory] = useState('general');
@@ -157,6 +180,7 @@ export default function WorkOrdersPage() {
     setFormLoading(true);
     try {
       const properties = await api.properties.list();
+      setPropertyOptions(properties.map((p: any) => ({ id: p.id, name: p.name })));
       const unitLists = await Promise.all(
         properties.map((p: any) =>
           api.units.list(p.id).then((units: any[]) =>
@@ -188,7 +212,11 @@ export default function WorkOrdersPage() {
   function closeForm() {
     setShowForm(false);
     setFormError('');
+    setScope('unit');
     setUnitId('');
+    setFormPropertyId('');
+    setLocationType('');
+    setIsCapitalProject(false);
     setFormTenantId(null);
     setLeaseTenantOptions([]);
     setTitle('');
@@ -205,14 +233,22 @@ export default function WorkOrdersPage() {
     setSubmitting(true);
     try {
       await api.workOrders.create({
-        unitId,
+        ...(scope === 'unit'
+          ? {
+              unitId,
+              tenantId: formTenantId,
+              entryPermissionGranted: entryPermission,
+            }
+          : {
+              propertyId: formPropertyId,
+            }),
         title: title || null,
         category,
         priority,
+        locationType: locationType || null,
+        isCapitalProject,
         description,
-        entryPermissionGranted: entryPermission,
         preferredContactWindow: contactWindow || null,
-        tenantId: formTenantId,
       });
       closeForm();
       loadWorkOrders();
@@ -244,8 +280,9 @@ export default function WorkOrdersPage() {
     return (
       (workOrder.title ?? '').toLowerCase().includes(query) ||
       workOrder.description.toLowerCase().includes(query) ||
-      workOrder.unit.unitNumber.toLowerCase().includes(query) ||
-      workOrder.unit.property.name.toLowerCase().includes(query) ||
+      (workOrder.unit?.unitNumber ?? '').toLowerCase().includes(query) ||
+      (workOrder.unit?.property.name ?? '').toLowerCase().includes(query) ||
+      (workOrder.property?.name ?? '').toLowerCase().includes(query) ||
       (workOrder.tenant?.name ?? '').toLowerCase().includes(query) ||
       (workOrder.assignedTo?.name ?? '').toLowerCase().includes(query)
     );
@@ -454,12 +491,35 @@ export default function WorkOrdersPage() {
                       )}
                     </td>
                     <td>
-                      <Link href={`/properties/${wo.unit.property.id}/units/${wo.unit.id}`}>
-                        Unit {wo.unit.unitNumber}
-                      </Link>
-                      <div style={{ fontSize: '12px', color: 'var(--color-text-muted)' }}>
-                        {wo.unit.property.name}
-                      </div>
+                      {wo.unit ? (
+                        <>
+                          <Link href={`/properties/${wo.unit.property.id}/units/${wo.unit.id}`}>
+                            Unit {wo.unit.unitNumber}
+                          </Link>
+                          <div style={{ fontSize: '12px', color: 'var(--color-text-muted)' }}>
+                            {wo.unit.property.name}
+                          </div>
+                        </>
+                      ) : (
+                        <>
+                          {wo.property ? (
+                            <Link href={`/properties/${wo.property.id}`}>{wo.property.name}</Link>
+                          ) : (
+                            <span style={{ color: 'var(--color-text-muted)' }}>—</span>
+                          )}
+                          <div style={{ fontSize: '12px', color: 'var(--color-text-muted)' }}>
+                            Property — {LOCATION_TYPE_LABELS[wo.locationType ?? ''] ?? 'Common area'}
+                            {wo.isCapitalProject && (
+                              <span
+                                className="badge badge-notice"
+                                style={{ marginLeft: '6px', fontSize: '10px' }}
+                              >
+                                CapEx
+                              </span>
+                            )}
+                          </div>
+                        </>
+                      )}
                     </td>
                     <td>
                       {wo.submittedByUser ? (
@@ -554,27 +614,75 @@ export default function WorkOrdersPage() {
                 ) : (
                   <>
                     <div className="form-group">
-                      <label>Unit *</label>
-                      <select
-                        required
-                        value={unitId}
-                        onChange={(e) => {
-                          setUnitId(e.target.value);
-                          const opt = unitOptions.find((u) => u.id === e.target.value);
-                          setFormTenantId(opt?.tenantId ?? null);
-                          setLeaseTenantOptions(opt?.leaseTenants ?? []);
-                        }}
-                      >
-                        <option value="">— Select a unit —</option>
-                        {unitOptions.map((u) => (
-                          <option key={u.id} value={u.id}>
-                            {u.label}
-                          </option>
-                        ))}
-                      </select>
+                      <label>Scope *</label>
+                      <div style={{ display: 'flex', gap: '16px' }}>
+                        <label
+                          style={{ display: 'flex', alignItems: 'center', gap: '6px', marginBottom: 0 }}
+                        >
+                          <input
+                            type="radio"
+                            name="woScope"
+                            checked={scope === 'unit'}
+                            onChange={() => setScope('unit')}
+                            style={{ width: 'auto' }}
+                          />
+                          Unit
+                        </label>
+                        <label
+                          style={{ display: 'flex', alignItems: 'center', gap: '6px', marginBottom: 0 }}
+                        >
+                          <input
+                            type="radio"
+                            name="woScope"
+                            checked={scope === 'property'}
+                            onChange={() => setScope('property')}
+                            style={{ width: 'auto' }}
+                          />
+                          Property / common area
+                        </label>
+                      </div>
                     </div>
 
-                    {leaseTenantOptions.length > 1 && (
+                    {scope === 'unit' ? (
+                      <div className="form-group">
+                        <label>Unit *</label>
+                        <select
+                          required
+                          value={unitId}
+                          onChange={(e) => {
+                            setUnitId(e.target.value);
+                            const opt = unitOptions.find((u) => u.id === e.target.value);
+                            setFormTenantId(opt?.tenantId ?? null);
+                            setLeaseTenantOptions(opt?.leaseTenants ?? []);
+                          }}
+                        >
+                          <option value="">— Select a unit —</option>
+                          {unitOptions.map((u) => (
+                            <option key={u.id} value={u.id}>
+                              {u.label}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+                    ) : (
+                      <div className="form-group">
+                        <label>Property *</label>
+                        <select
+                          required
+                          value={formPropertyId}
+                          onChange={(e) => setFormPropertyId(e.target.value)}
+                        >
+                          <option value="">— Select a property —</option>
+                          {propertyOptions.map((p) => (
+                            <option key={p.id} value={p.id}>
+                              {p.name}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+                    )}
+
+                    {scope === 'unit' && leaseTenantOptions.length > 1 && (
                       <div className="form-group">
                         <label>Tenant</label>
                         <select
@@ -630,6 +738,42 @@ export default function WorkOrdersPage() {
                       </div>
                     </div>
 
+                    {scope === 'property' && (
+                      <div className="form-row">
+                        <div className="form-group">
+                          <label>Location</label>
+                          <select
+                            value={locationType}
+                            onChange={(e) => setLocationType(e.target.value)}
+                          >
+                            <option value="">— Not specified —</option>
+                            {Object.entries(LOCATION_TYPE_LABELS)
+                              .filter(([value]) => value !== 'unit_interior')
+                              .map(([value, label]) => (
+                                <option key={value} value={value}>
+                                  {label}
+                                </option>
+                              ))}
+                          </select>
+                        </div>
+                        <div
+                          className="form-group"
+                          style={{ display: 'flex', alignItems: 'center', gap: '8px' }}
+                        >
+                          <input
+                            type="checkbox"
+                            id="isCapitalProject"
+                            checked={isCapitalProject}
+                            onChange={(e) => setIsCapitalProject(e.target.checked)}
+                            style={{ width: 'auto' }}
+                          />
+                          <label htmlFor="isCapitalProject" style={{ marginBottom: 0 }}>
+                            Capital project
+                          </label>
+                        </div>
+                      </div>
+                    )}
+
                     <div className="form-group">
                       <label>Description *</label>
                       <textarea
@@ -651,21 +795,23 @@ export default function WorkOrdersPage() {
                       />
                     </div>
 
-                    <div
-                      className="form-group"
-                      style={{ display: 'flex', alignItems: 'center', gap: '8px' }}
-                    >
-                      <input
-                        type="checkbox"
-                        id="entryPermission"
-                        checked={entryPermission}
-                        onChange={(e) => setEntryPermission(e.target.checked)}
-                        style={{ width: 'auto' }}
-                      />
-                      <label htmlFor="entryPermission" style={{ marginBottom: 0 }}>
-                        Entry permitted without tenant present
-                      </label>
-                    </div>
+                    {scope === 'unit' && (
+                      <div
+                        className="form-group"
+                        style={{ display: 'flex', alignItems: 'center', gap: '8px' }}
+                      >
+                        <input
+                          type="checkbox"
+                          id="entryPermission"
+                          checked={entryPermission}
+                          onChange={(e) => setEntryPermission(e.target.checked)}
+                          style={{ width: 'auto' }}
+                        />
+                        <label htmlFor="entryPermission" style={{ marginBottom: 0 }}>
+                          Entry permitted without tenant present
+                        </label>
+                      </div>
+                    )}
                   </>
                 )}
               </div>

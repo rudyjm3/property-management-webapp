@@ -58,6 +58,37 @@ interface PropertyDetail {
   units: Unit[];
 }
 
+interface PropertyWorkOrder {
+  id: string;
+  title: string | null;
+  description: string;
+  status: string;
+  locationType: string | null;
+  isCapitalProject: boolean;
+  createdAt: string;
+  unit: { id: string } | null;
+}
+
+const WO_STATUS_LABELS: Record<string, string> = {
+  new_order: 'New',
+  assigned: 'Assigned',
+  in_progress: 'In Progress',
+  pending_parts: 'Pending Parts',
+  completed: 'Completed',
+  closed: 'Closed',
+  cancelled: 'Cancelled',
+};
+
+const WO_LOCATION_LABELS: Record<string, string> = {
+  exterior: 'Exterior',
+  parking: 'Parking lot',
+  roof: 'Roof',
+  landscaping: 'Landscaping',
+  common_interior: 'Common interior',
+  amenity: 'Amenity',
+  unit_interior: 'Unit interior',
+};
+
 export default function PropertyDetailPage() {
   const params = useParams();
   const router = useRouter();
@@ -90,9 +121,11 @@ export default function PropertyDetailPage() {
 
   // View toggle
   const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
+  const [propertyWorkOrders, setPropertyWorkOrders] = useState<PropertyWorkOrder[]>([]);
 
   useEffect(() => {
     loadProperty();
+    loadPropertyWorkOrders();
   }, [propertyId]);
 
   // Reset to page 1 whenever any filter or page size changes
@@ -109,6 +142,16 @@ export default function PropertyDetailPage() {
       console.error('Failed to load property:', err);
     } finally {
       setLoading(false);
+    }
+  }
+
+  async function loadPropertyWorkOrders() {
+    try {
+      const data = await api.workOrders.list({ propertyId });
+      // Only property-level (common area) orders — unit-scoped orders live on their unit pages
+      setPropertyWorkOrders((data as PropertyWorkOrder[]).filter((wo) => !wo.unit));
+    } catch (err) {
+      console.error('Failed to load property work orders:', err);
     }
   }
 
@@ -298,6 +341,49 @@ export default function PropertyDetailPage() {
           </div>
         </div>
       </div>
+
+      {/* Property-level (common area) work orders */}
+      {propertyWorkOrders.length > 0 && (
+        <div className="card" style={{ marginBottom: '20px' }}>
+          <div className="card-body">
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
+              <h2 style={{ fontSize: '16px', fontWeight: 600, margin: 0 }}>
+                Property Work Orders ({propertyWorkOrders.length})
+              </h2>
+              <Link href="/work-orders" className="btn btn-sm btn-secondary">
+                View All Work Orders
+              </Link>
+            </div>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+              {propertyWorkOrders.map((wo) => (
+                <div
+                  key={wo.id}
+                  style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '12px' }}
+                >
+                  <div style={{ minWidth: 0 }}>
+                    <Link href={`/work-orders/${wo.id}`} style={{ fontWeight: 500, fontSize: '14px' }}>
+                      {wo.title || wo.description.slice(0, 60)}
+                    </Link>
+                    <div style={{ fontSize: '12px', color: 'var(--color-text-muted)' }}>
+                      {WO_LOCATION_LABELS[wo.locationType ?? ''] ?? 'Common area'}
+                      {' · '}
+                      {new Date(wo.createdAt).toLocaleDateString()}
+                    </div>
+                  </div>
+                  <div style={{ display: 'flex', gap: '6px', flexShrink: 0 }}>
+                    {wo.isCapitalProject && (
+                      <span className="badge badge-notice">CapEx</span>
+                    )}
+                    <span className="badge badge-vacant">
+                      {WO_STATUS_LABELS[wo.status] ?? wo.status}
+                    </span>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Units section header */}
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px', marginTop: '8px' }}>
