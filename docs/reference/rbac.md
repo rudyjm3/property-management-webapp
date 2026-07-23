@@ -29,18 +29,33 @@ All five return `401 UNAUTHORIZED`/`INVALID_TOKEN`/`USER_NOT_FOUND` or
 
 ## Where role-gating is actually applied today
 
-Per `apps/api/src/routes/index.ts`, only **one** route group adds
-`requireRoles`: the org-scoped application-review + manager lease-signing
-routes (`applicationRoutes`), gated to `['owner', 'manager']` — i.e.
-`maintenance` users cannot review rental applications or countersign leases.
+`apps/api/src/routes/index.ts` itself only adds `requireRoles` once: on the
+org-scoped application-review + manager lease-signing routes
+(`applicationRoutes`), gated to `['owner', 'manager']`.
 
-Every other org-scoped router (properties, tenants, leases, payments,
-documents, notifications, work-orders, staff, vendors, messages, connect,
-ledger, billing, owners, reports) is gated only by `requireAuth` +
-`requireOrg` — any authenticated user in the org, regardless of role, can hit
-them. Finer-grained role checks inside those individual route handlers, if
-any, live in the route file itself, not in `index.ts` — check the file
-directly (see `routes.md`) before assuming a role is or isn't enforced.
+But most other route files add their **own** role gate internally — a
+locally-defined `requireManagerAccess` or `requireSettingsAccess` alias for
+`requireRoles(['owner', 'manager'])`, applied per-endpoint — which is
+invisible from `index.ts` alone. Do not assume a router is open to all roles
+just because `index.ts` doesn't gate it. As of this writing:
+
+- **Every endpoint gated to `owner`/`manager`**: `leases.ts`, `payments.ts`,
+  `owners.ts`, `reports.ts`, `ledger.ts`, `messages.ts`, `staff.ts`,
+  `billing.ts`, `connect.ts`, `documents.ts`
+- **Partially gated** (mutations require `owner`/`manager`, reads are open to
+  any org role): `properties.ts`, `tenants.ts`, `units.ts`; `organizations.ts`
+  gates only its settings-update and one settings-read endpoint (and is
+  mounted in `index.ts` with no `requireAuth`/`requireOrg` at all — see
+  `routes.md`)
+- **Not role-gated beyond `requireAuth` + `requireOrg`** — any authenticated
+  org member, including `maintenance`, can hit every endpoint:
+  `workOrders.ts` (except one manager-only `DELETE`), `vendors.ts`,
+  `notifications.ts`
+
+Net effect: `maintenance` users can freely reach work orders, vendors, and
+notifications; nearly everything else requires `owner` or `manager`. This
+list can drift — always check the specific route file (`routes.md` has the
+mount-point index) rather than assuming from this summary alone.
 
 ## Two distinct auth identities — don't confuse them
 

@@ -6,12 +6,16 @@ Documentation" plus the module-flagged comments in
 the roadmap changes — treat `BUILD_OUTLINE.md` as the narrative source of
 truth and this file as the compressed cross-reference.
 
-Modules are Phase 4+, feature-flagged via `organization.active_modules` at
-the API middleware layer, and gated in the UI via `<ModuleGate module="...">`.
-None are built yet as standalone module logic; what exists today is (a) base
-schema columns kept nullable so a module's launch doesn't require a breaking
-migration, and (b) in a few cases, base-product functionality that overlaps
-with what a module will later extend.
+Modules are Phase 4+. Per `BUILD_OUTLINE.md` §14, the *plan* is to
+feature-flag them via an `organization.active_modules` field at the API
+middleware layer and gate the UI via a `<ModuleGate module="...">` wrapper —
+but **none of that gating infrastructure exists in the repo yet**: there is
+no `active_modules` field on `Organization`, no module-gating middleware, and
+no `ModuleGate` component. Treat those as roadmap requirements, not
+implemented controls. What exists today is only (a) base schema columns kept
+nullable so a module's eventual launch doesn't require a breaking migration,
+and (b) in a few cases, base-product functionality that overlaps with what a
+module will later extend.
 
 ## Schema fields already present, dormant until their module ships
 
