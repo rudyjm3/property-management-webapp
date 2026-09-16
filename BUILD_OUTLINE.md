@@ -934,12 +934,21 @@ This appendix captures what is currently implemented in the repo beyond or diffe
 - Phase 1 and Phase 2 planned foundations/workflows are materially implemented in the current branch lineage, including properties/units/tenants/leases/payments/work-orders/messages/documents/notifications. (update 03-29-2026)
 - Phase 3 weeks 25-34 features are implemented across the mobile app and supporting API, including scaffold, maintenance submission, messaging/push, lease docs/payment history/profile, and settings/admin/renewal hardening. (update 04-04-2026)
 - Additional post-week-34 hardening landed for role enforcement and work-order attribution display. (update 04-05-2026)
+- File storage migrated from AWS S3 to Supabase Storage; all remaining Supabase-sent transactional emails switched to Resend. (update 06-06-2026)
+- Property-level (common-area/capital-project) work orders added to schema, API services, reports, and web UI, with a follow-up fix for a cross-org scoping leak. (update 07-19-2026)
+- Sentry error monitoring wired into web, API, and mobile (was console.error-only). (update 05-31-2026)
+- Rate limiting middleware added and applied to invite/apply/e-sign public routes (`apps/api/src/middleware/rate-limit.ts`). (update 05-31-2026)
+- SMS notifications via Twilio shipped, with automatic fallback to email when SMS is unconfigured; message file/photo attachments shipped on both web and mobile. (update 05-29-2026 / 05-30-2026)
+- Payment void status tracking added (`voidPayment()`, `voidedAt`/`voidReason` on Payment) — marks a completed/waived payment as voided with a reason, but does **not** create a counterpart ledger entry or restore the ledger balance; it's audit metadata, not an accounting reversal. First piece of the financial audit trail, not the full fix. (see `payment.service.ts`)
+- Mobile invite-code activation screen shipped (`apps/mobile/app/(auth)/activate.tsx`) and autopay toggle shipped in the mobile Payments tab (`AutopaySetupSheet.tsx`).
+- Online rental application form + e-signature flow shipped (`routes/apply.ts`, `routes/sign.ts`, `rental-application.service.ts`) — core of Module 1's leasing funnel. Background/credit check integration (TransUnion or similar) is not yet built; `screeningConsentAt`/`ssnFullEncrypted`/`govtIdNumber` remain dormant schema hooks.
+- Module 9 (Owner Portal / Financial Reporting & Owner Statements) and Module 11 (Reporting & Analytics) both landed a meaningful subset of functionality, well ahead of their "Low priority" roadmap position, but neither is fully built — see §7 note and `docs/reference/modules.md`. Module 9 ships `Owner`/`PropertyOwner`/`OwnerStatement` data and manager-facing routes, but no owner login or owner-facing portal UI. Module 11 ships a fixed set of report endpoints with CSV export, not the custom report builder or PDF export the module spec calls for. Neither is currently feature-flagged either: there is still no `active_modules` field on `Organization` and no `ModuleGate` component, so what is built ships as always-on rather than paid/gated.
 
 ---
 
 ## 12. Phase-by-Phase Implementation Status
 
-_Last updated: 2026-04-14. Status reflects the `main` branch._
+_Last updated: 2026-09-16. Status reflects the `main` branch._
 
 > **Legend:** ✅ Done — ⚠️ Partial — ❌ Not yet built — 🔴 Blocker (pilot) — 🟡 Required (production)
 
@@ -956,9 +965,9 @@ _Last updated: 2026-04-14. Status reflects the `main` branch._
 | Tenant / Lease CRUD — API + web                                     | ✅     |                                                                                                                         |
 | Manual payment logging                                              | ✅     |                                                                                                                         |
 | Dashboard with KPI cards (clickable)                                | ✅     |                                                                                                                         |
-| Email notifications via Resend                                      | ✅     |                                                                                                                         |
-| Document upload to S3                                               | ✅     |                                                                                                                         |
-| CI pipeline (GitHub Actions — web + API)                            | ✅     | Mobile not yet covered                                                                                                  |
+| Email notifications via Resend                                      | ✅     | All remaining Supabase-sent emails also switched to Resend (06-06-2026)                                                 |
+| Document upload — file storage                                      | ✅     | Migrated from AWS S3 to Supabase Storage (06-06-2026)                                                                   |
+| CI pipeline (GitHub Actions — web + API + mobile)                   | ✅     | Mobile lint step added to CI (09-16-2026); mobile build already covered via `turbo run build`                          |
 | Role-based access (owner / manager / maintenance)                   | ✅     |                                                                                                                         |
 | Onboarding wizard — org name + logo + billing + first property      | ✅     | Multi-step onboarding completed with auth callback/invite flow hardening and idempotent step-1 behavior.                |
 | Billing/settings — payment method, invoice history, plan management | ✅     | Billing settings now supports plan updates, Stripe portal handoff, payment-method display, and invoice history listing. |
@@ -966,7 +975,7 @@ _Last updated: 2026-04-14. Status reflects the `main` branch._
 | API TypeScript build passing                                        | ✅     | Fixed 2026-04-09                                                                                                        |
 
 **Pilot blockers:** Onboarding must complete without manual DB intervention. Build must be green.
-**Production gaps:** Auth + CRUD integration tests needed. Audit trail for lease changes and payment voids.
+**Production gaps:** Auth + CRUD integration tests needed. Payment void status-tracking now exists (`voidPayment()`), but it does not post a ledger reversal; true financial reversal plus an audit trail for lease changes are still needed.
 
 ---
 
@@ -989,12 +998,12 @@ _Last updated: 2026-04-14. Status reflects the `main` branch._
 | Tenant detail — payment history section                               | ✅     | Payment history rendered at `tenants/[id]/page.tsx:502`                                              |
 | Tenant detail — manager message thread                                | ✅     | Thread list + compose + send implemented at `tenants/[id]/page.tsx:547`                              |
 | Tenant detail — move-out workflow                                     | ✅     | Move-out modal: date, deposit deductions, live return calc, terminates lease + creates deposit Payment |
-| Message file/photo attachments (web)                                  | ❌     | Text-only currently                                                                                  |
-| ACH end-to-end flow validated (success + failure + refund)            | ⚠️     | Routes exist; webhook → ledger path not smoke-tested                                                 |
-| Financial controls (reconciliation, duplicate prevention, audit)      | ❌     |                                                                                                      |
+| Message file/photo attachments (web)                                  | ✅     | Shipped alongside mobile attachment support (05-30-2026)                                             |
+| ACH end-to-end flow validated (success + failure + refund)            | ⚠️     | Routes exist; webhook → ledger path still not smoke-tested in Stripe sandbox                          |
+| Financial controls (reconciliation, duplicate prevention, audit)      | ⚠️     | Payment void status-tracking (`voidPayment()`, `voidedAt`/`voidReason`) shipped, but it does not post a ledger reversal; reconciliation, duplicate-prevention, and true accounting reversal still not built |
 
 **Pilot blockers:** None — all pilot-blocking items are implemented.
-**Production gaps:** Move-out workflow. Message attachments (if in scope). ACH end-to-end smoke test. Financial reconciliation and audit trail.
+**Production gaps:** ACH end-to-end smoke test. Financial reconciliation, duplicate-payment prevention, and an actual ledger-reversal on void (status-only void support now exists).
 
 ---
 
@@ -1012,17 +1021,17 @@ _Last updated: 2026-04-14. Status reflects the `main` branch._
 | Push token registration (Expo push)                                        | ✅     |                                                                            |
 | Mobile build (`expo export`) passing                                       | ✅     | Fixed 2026-04-09 — added `platforms: ["ios","android"]` to app.json        |
 | Mobile lint (ESLint v9) passing                                            | ✅     | Fixed 2026-04-09 — created `eslint.config.mjs`                             |
-| Resident activation / invite-code entry screen                             | ❌     | Flow is welcome → login only; no invite-code path (`BUILD_OUTLINE.md:735`) |
-| Autopay / recurring payment toggle                                         | ❌     | Not in Payments tab UI (`BUILD_OUTLINE.md:747`)                            |
-| Message photo/file attachments (mobile)                                    | ❌     | Text-only in `conversation.tsx` (`BUILD_OUTLINE.md:757`)                   |
-| Notification preferences on Account tab                                    | ❌     | Not implemented (`BUILD_OUTLINE.md:766`)                                   |
-| Contact manager shortcut on Account/Home tab                               | ❌     | Not implemented (`BUILD_OUTLINE.md:766`)                                   |
+| Resident activation / invite-code entry screen                             | ✅     | Shipped: `apps/mobile/app/(auth)/activate.tsx`                             |
+| Autopay / recurring payment toggle                                         | ✅     | Shipped: `AutopaySetupSheet.tsx` in Payments tab                           |
+| Message photo/file attachments (mobile)                                    | ✅     | Document picker for message attachments shipped 05-30-2026                 |
+| Notification preferences on Account tab                                    | ❌     | Not implemented — no notif-related code in `account.tsx`                  |
+| Contact manager shortcut on Account/Home tab                               | ❌     | Not implemented                                                            |
 | iOS + Android device smoke test                                            | ❌     | Not evidenced                                                              |
-| App Store submission readiness (icons, splash, EAS config, privacy policy) | ❌     | `app.json` has bundle IDs; icons/splash assets are placeholders            |
-| Mobile CI coverage                                                         | ❌     | CI covers web + API only                                                   |
+| App Store submission readiness (icons, splash, EAS config, privacy policy) | ⚠️     | `app.json` has bundle IDs and icon/splash assets exist; not verified as final (vs. placeholder) or accompanied by a privacy policy |
+| Mobile CI coverage                                                         | ✅     | Mobile lint step added to `.github/workflows/ci.yml` (09-16-2026); mobile build already covered via `turbo run build` |
 
-**Pilot blockers:** Fix mobile build + lint (done). Add invite-code activation screen. Add notification preferences + contact-manager shortcut. Smoke test on real device.
-**Production gaps:** Autopay toggle. Message attachments. Full App Store submission prep. Mobile E2E tests. Mobile CI.
+**Pilot blockers:** None remaining from this list — activation screen, autopay, and mobile CI are now in place.
+**Production gaps:** Notification preferences + contact-manager shortcut on Account tab. Full App Store submission prep (verify icon/splash assets, add privacy policy). Mobile E2E tests / device smoke test.
 
 ---
 
@@ -1033,44 +1042,52 @@ _Last updated: 2026-04-14. Status reflects the `main` branch._
 | Web build (`tsc --noEmit`) green                                 | ✅     |
 | API build (`tsc --noEmit`) green                                 | ✅     |
 | Mobile build (`expo export`) green                               | ✅     |
-| Mobile lint green                                                | ✅     |
+| Mobile lint green (now covered in CI)                             | ✅     |
 | API automated tests runnable on clean install                    | ⚠️     |
 | Seed / demo environment end-to-end workflow                      | ⚠️     |
-| Real observability (logs, error monitoring, alerting)            | ❌     |
-| Security review (auth, file access, org isolation, webhook HMAC) | ❌     |
+| Real observability (logs, error monitoring, alerting)            | ✅     | Sentry wired into web, API, and mobile (05-31-2026) |
+| Rate limiting on public/auth/payment endpoints                   | ✅     | `middleware/rate-limit.ts` applied to invite/apply/sign routes |
+| Security review (auth, file access, org isolation, webhook HMAC) | ⚠️     | No formal audit yet; a cross-org work-order scoping leak was found and fixed reactively (07-19-2026), suggesting more may exist |
 | Financial accuracy tests (payments, refunds, late fees, ledger)  | ❌     |
 
 ---
 
 ## 13. Priority Roadmap Recommendation
 
-_Sourced from MVP review, 2026-05-26._
+_Sourced from MVP review, 2026-05-26. Re-verified against code 2026-09-16 — items 1–4 and 6–9 below have since shipped and are struck through; see §11/§12 for what landed and when._
 
 ### Now (before any paying customers)
 
-1. **Tenant invite-code activation screen (mobile)** — the mobile auth flow has no activation path; tenants land on welcome → login only. Must add an invite-code entry screen so first-time tenants can set a password from the app.
-2. **Stripe webhook security audit + rate limiting** — signature verification exists but there is no rate limiting anywhere in the API. Auth, payment, and webhook endpoints need protection before production traffic.
-3. **Error monitoring (Sentry)** — currently console.error only. Sentry must be wired into the API, mobile app, and web dashboard before any real-user data flows through the system.
-4. **Autopay UI toggle (mobile)** — the Payments tab has Pay Now but no autopay toggle. The BUILD_OUTLINE specifies autopay as a Payments tab feature.
-5. **End-to-end ACH smoke test in Stripe sandbox** — the webhook → ledger path exists but has never been smoke-tested. This is a financial system; untested money movement paths are a blocker.
+1. ~~Tenant invite-code activation screen (mobile)~~ — **Done.** `apps/mobile/app/(auth)/activate.tsx`.
+2. ~~Stripe webhook security audit + rate limiting~~ — **Rate limiting done** (`middleware/rate-limit.ts` on invite/apply/sign routes). A formal webhook/auth *security audit* has not been done — still open, see Cross-Cutting Status.
+3. ~~Error monitoring (Sentry)~~ — **Done.** Wired into API, mobile, and web.
+4. ~~Autopay UI toggle (mobile)~~ — **Done.** `AutopaySetupSheet.tsx`.
+5. **End-to-end ACH smoke test in Stripe sandbox** — still open. The webhook → ledger path exists but has never been smoke-tested. This is a financial system; untested money movement paths are a blocker.
 
 ### Next 60 days (MVP launch)
 
-6. **Online rental application form + e-signature (Module 1)** — this unlocks the full leasing funnel. Currently tenants are added manually by managers.
-7. **Message file attachments (Web + Mobile)** — messaging is text-only; attachment support is needed for lease notices and maintenance photos.
-8. **SMS via Twilio** — the scaffolding is there (Twilio env vars, service stub), just needs activation for rent reminders and maintenance alerts.
-9. **Financial audit trail** — void and correction on payments; currently a payment record can be deleted but not properly voided with a counterpart ledger entry.
-10. **Guided onboarding walkthrough with help text** — the onboarding wizard exists but has no tooltips or empty-state coaching for first-time property managers.
+6. ~~Online rental application form + e-signature (Module 1)~~ — **Done** (`routes/apply.ts`, `routes/sign.ts`). Note: this covers the application + e-sign steps only — background/credit check integration (TransUnion or similar) is still not built.
+7. ~~Message file attachments (Web + Mobile)~~ — **Done** on both platforms.
+8. ~~SMS via Twilio~~ — **Done**, with fallback to email when unconfigured.
+9. ~~Financial audit trail~~ — **Partially done.** Payment void status-tracking shipped (`voidPayment()`, `voidedAt`/`voidReason`), but it only flags the payment — it does not post a counterpart ledger entry or restore the ledger balance. Reconciliation, duplicate-prevention, and true accounting reversal still not built.
+10. **Guided onboarding walkthrough with help text** — still open. The onboarding wizard exists but has no tooltips or empty-state coaching for first-time property managers.
+
+### New since last pass (found in this review)
+
+16. **Module gating infrastructure** — Modules 9 (Owner Portal) and 11 (Reporting & Analytics) have partially shipped (see #12 and `docs/reference/modules.md`), but there is still no `active_modules` field on `Organization` and no `ModuleGate` component. What's built currently ships always-on rather than as paid/flagged add-ons — needed before selling modules as billed upsells.
+17. **Background/credit check integration for Module 1** — the application + e-signature flow is built; the screening/credit-check step (TransUnion SmartMove or equivalent) against the existing `screeningConsentAt`/`ssnFullEncrypted`/`govtIdNumber` fields is not.
+18. **Formal security review** — a cross-org work-order scoping leak was found and fixed reactively (07-19-2026); no audit pass has been done to look for others across auth, file access, org isolation, and webhook HMAC verification.
+19. **Notification preferences + contact-manager shortcut (mobile Account tab)** — spec'd in §8 but not implemented.
 
 ### Months 3–6 (growth phase)
 
-11. **Full accounting module (P&L, bank reconciliation, Schedule E)** — Module 2 in the roadmap. Required to compete with DoorLoop and Buildium at scale.
-12. **Owner portal** — Module 6. Unlocks the property management company segment (managers who report to property owners, not owner-operators).
+11. **Full accounting module (P&L, bank reconciliation, Schedule E)** — Module 4 in the roadmap (renumbered from the module table in §7). Required to compete with DoorLoop and Buildium at scale.
+12. ~~Owner portal~~ — **Partially done** (Module 9), ahead of schedule: `Owner`/`PropertyOwner`/`OwnerStatement` data model and manager-facing routes exist, but there is no owner login or owner-facing portal UI, and it still needs module-gating (see #16).
 13. **Tenant credit reporting** — free differentiator that drives mobile adoption; tenants who report rent to credit bureaus are stickier.
 14. **Vacancy listing syndication** — Module 8. Top-of-funnel capture from Zillow/Apartments.com.
 15. **AI maintenance triage** — differentiator; auto-categorizes and prioritizes work orders on submission.
 
-> **Bottom line:** This is a well-built, architecturally sound product that is close to MVP-ready. The biggest gaps before launch are security hardening (webhook auth, rate limiting), the tenant invite flow, and online leasing/e-signatures. The biggest gaps before competing with DoorLoop and Buildium at scale are full accounting and the owner portal. The data model is already designed for all of this — execution is the remaining work, not redesign.
+> **Bottom line (updated 2026-09-16):** The product has moved past most of its original MVP gap list — activation flow, autopay, Sentry, rate limiting, SMS, and attachments are all fully shipped, and two "Low priority" modules (Owner Portal, Reporting & Analytics) have landed meaningful partial implementations ahead of schedule. What's left before a confident launch is narrower and more operational: the ACH smoke test, a real security review, module billing/gating, finishing Module 1's screening step, an actual ledger-reversal on payment void (today's void is status-only), and completing Module 9's owner-facing portal and Module 11's report builder/export. The data model was already designed for all of this — execution continues to be the remaining work, not redesign.
 
 ---
 
