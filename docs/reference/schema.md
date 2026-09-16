@@ -1,6 +1,6 @@
 # Schema Reference
 
-Source of truth: `packages/db/prisma/schema.prisma` (18 models, PostgreSQL).
+Source of truth: `packages/db/prisma/schema.prisma` (20 models, PostgreSQL).
 Regenerate this doc by hand when the schema changes — it is a compressed
 index, not a replacement for the Prisma file.
 
@@ -133,8 +133,9 @@ Append-only balance ledger per org.
 - `visibleToTenant, docCategory?: DocumentCategory(lease|inspection|insurance|id|photo|other), label?`
 
 ## Owner
-Property owner-of-record (distinct from manager Users). Base schema exists ahead of the "Owner Portal" module shipping — see `modules.md`.
+Property owner-of-record (distinct from manager Users). Owner Portal module (see `modules.md`) is fully shipped, including owner-facing auth.
 - `id, organizationId(FK), name, email, phone?, address?, taxId?`
+- Portal auth (mirrors Tenant): `supabaseUserId?(unique)`, `portalStatus: PortalStatus(invited|active|never_logged_in)`, `portalInvitedAt?`
 - Has many: propertyOwners, statements — `@@unique([organizationId, email])`
 
 ## PropertyOwner
@@ -149,3 +150,14 @@ Join table: ownership share of a Property.
 ## Notification
 In-app notification feed per User.
 - `id, userId(FK), organizationId(FK), type, title, body, readAt?, actionUrl?`
+
+## VacancyHistory
+Point-in-time vacancy snapshot, recorded on demand via `POST /reports/vacancy-history/snapshot` (Reporting & Analytics module — vacancy-rate history + market comparison).
+- `id, organizationId(FK), propertyId?(FK)` — null `propertyId` is the org-wide aggregate row
+- `snapshotDate, totalUnits, vacantUnits, vacancyRatePct, marketVacancyRatePct?` (manually entered, for comparison)
+- `@@unique([organizationId, propertyId, snapshotDate])`
+
+## SavedReport
+A user-configured report-builder view (Reporting & Analytics module).
+- `id, organizationId(FK), createdByUserId(FK User), name`
+- `source` (one of: financial-summary|rent-roll|spend-by-location|vacancy-snapshot|vacancy-history), `columns: String[]`, `filters: Json`

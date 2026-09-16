@@ -1,5 +1,7 @@
 import { prisma } from '@propflow/db';
 import { AppError } from '../middleware/error-handler';
+import { supabaseAdmin } from '../lib/supabase';
+import { sendOwnerPortalInviteEmail } from './email.service';
 
 // ─── Owner CRUD ───────────────────────────────────────────────────────────────
 
@@ -88,6 +90,67 @@ export async function updateOwner(
 export async function deleteOwner(organizationId: string, ownerId: string) {
   await getOwner(organizationId, ownerId);
   await prisma.owner.delete({ where: { id: ownerId } });
+}
+
+// ─── Owner Portal Invite ───────────────────────────────────────────────────────
+
+/**
+ * Invites an owner to the read-only owner portal — generates a Supabase auth
+ * user (if one doesn't already exist for this email) and emails a set-password
+ * link. Mirrors the tenant invite-portal / staff invite flows.
+ */
+export async function inviteOwnerPortal(organizationId: string, ownerId: string) {
+  const owner = await getOwner(organizationId, ownerId);
+
+  if (owner.portalStatus === 'active') {
+    throw new AppError(409, 'ALREADY_ACTIVE', 'This owner has already activated their portal account.');
+  }
+
+  const onboardingNext = encodeURIComponent('/owner-portal/set-password?invited=true');
+  // First invite creates the Supabase auth user via type 'invite'; a resend for an
+  // owner who already has one (but hasn't activated yet) uses 'recovery' instead,
+  // since Supabase rejects a second 'invite' generateLink for an existing user.
+  const redirectTo = `${process.env.APP_URL}/auth/callback?next=${onboardingNext}`;
+  const {
+    data: { user: supabaseUser, properties },
+    error,
+  } = owner.supabaseUserId
+    ? await supabaseAdmin.auth.admin.generateLink({
+        type: 'recovery',
+        email: owner.email,
+        options: { redirectTo },
+      })
+    : await supabaseAdmin.auth.admin.generateLink({
+        type: 'invite',
+        email: owner.email,
+        options: {
+          redirectTo,
+          data: { ownerId: owner.id, organizationId },
+        },
+      });
+
+  if (error || !properties?.action_link) {
+    throw new AppError(400, 'INVITE_FAILED', error?.message || 'Failed to generate owner portal invite link.');
+  }
+
+  try {
+    await sendOwnerPortalInviteEmail(owner.email, owner.name, properties.action_link);
+  } catch (_emailErr) {
+    if (supabaseUser) {
+      await supabaseAdmin.auth.admin.deleteUser(supabaseUser.id).catch(() => {});
+    }
+    throw new AppError(500, 'INVITE_EMAIL_FAILED', 'Failed to send owner portal invite email. Please try again.');
+  }
+
+  return prisma.owner.update({
+    where: { id: ownerId },
+    data: {
+      supabaseUserId: supabaseUser?.id ?? owner.supabaseUserId ?? null,
+      portalStatus: 'invited',
+      portalInvitedAt: new Date(),
+    },
+    select: { id: true, email: true, portalStatus: true, portalInvitedAt: true },
+  });
 }
 
 // ─── Property Ownership ───────────────────────────────────────────────────────

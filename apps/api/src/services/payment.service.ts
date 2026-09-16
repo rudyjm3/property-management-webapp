@@ -1,6 +1,7 @@
 import { prisma } from '@propflow/db';
 import { PaymentType, PaymentStatus } from '@propflow/db';
 import { AppError } from '../middleware/error-handler';
+import * as ledgerService from './ledger.service';
 
 // ─── Shared include shape ─────────────────────────────────────────────────────
 
@@ -274,13 +275,25 @@ export async function voidPayment(
     throw new AppError(400, 'PAYMENT_NOT_VOIDABLE', 'Only completed or waived payments can be voided. Delete pending payments instead.');
   }
 
-  return prisma.payment.update({
-    where: { id: paymentId },
-    data: {
-      status: 'voided',
-      voidedAt: new Date(),
-      voidReason: reason.trim(),
-    },
-    include: paymentInclude,
+  return prisma.$transaction(async (tx) => {
+    // Reverse whatever this payment already posted to the ledger (e.g. an ACH
+    // credit from the Stripe webhook) so the balance reflects the void.
+    // No-ops for payments that never posted a ledger entry (cash/check/waived).
+    await ledgerService.reverseLedgerEntriesForPayment(
+      tx,
+      organizationId,
+      paymentId,
+      `Void reversal for payment ${paymentId} · ${reason.trim()}`
+    );
+
+    return tx.payment.update({
+      where: { id: paymentId },
+      data: {
+        status: 'voided',
+        voidedAt: new Date(),
+        voidReason: reason.trim(),
+      },
+      include: paymentInclude,
+    });
   });
 }

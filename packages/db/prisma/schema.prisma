@@ -43,6 +43,8 @@ model Organization {
   rentalApplications  RentalApplication[]
   owners              Owner[]
   ownerStatements     OwnerStatement[]
+  vacancyHistory      VacancyHistory[]
+  savedReports        SavedReport[]
 
   @@map("organizations")
 }
@@ -94,6 +96,7 @@ model User {
   sentMessages      Message[]      @relation("SentMessages")
   uploadedDocuments Document[]     @relation("UploadedDocuments")
   notifications     Notification[]
+  savedReports      SavedReport[]
 
   @@unique([organizationId, email])
   @@index([organizationId])
@@ -141,6 +144,7 @@ model Property {
   workOrders      WorkOrder[]
   propertyOwners  PropertyOwner[]
   ownerStatements OwnerStatement[]
+  vacancyHistory  VacancyHistory[]
 
   @@index([organizationId])
   @@map("properties")
@@ -786,6 +790,12 @@ model Owner {
   createdAt      DateTime @default(now()) @map("created_at")
   updatedAt      DateTime @updatedAt @map("updated_at")
 
+  // Owner portal auth — mirrors Tenant's portal fields. supabaseUserId is set
+  // once the owner accepts their portal invite and activates their account.
+  supabaseUserId String?       @unique @map("supabase_user_id")
+  portalStatus   PortalStatus  @default(never_logged_in) @map("portal_status")
+  portalInvitedAt DateTime?    @map("portal_invited_at")
+
   organization    Organization    @relation(fields: [organizationId], references: [id])
   propertyOwners  PropertyOwner[]
   statements      OwnerStatement[]
@@ -862,4 +872,51 @@ model Notification {
 
   @@index([userId, readAt])
   @@map("notifications")
+}
+
+// ─── VacancyHistory ───────────────────────────────────────────────────────────
+// Point-in-time vacancy snapshot, recorded periodically (e.g. monthly) so
+// Reporting & Analytics (Module 11) can chart vacancy-rate history and compare
+// it against a manually-entered market rate for the same period.
+
+model VacancyHistory {
+  id                  String    @id @default(uuid())
+  organizationId      String    @map("organization_id")
+  propertyId          String?   @map("property_id")
+  snapshotDate        DateTime  @map("snapshot_date") @db.Date
+  totalUnits          Int       @map("total_units")
+  vacantUnits         Int       @map("vacant_units")
+  vacancyRatePct      Decimal   @map("vacancy_rate_pct") @db.Decimal(5, 2)
+  marketVacancyRatePct Decimal? @map("market_vacancy_rate_pct") @db.Decimal(5, 2)
+  createdAt           DateTime  @default(now()) @map("created_at")
+
+  organization Organization @relation(fields: [organizationId], references: [id])
+  property     Property?    @relation(fields: [propertyId], references: [id])
+
+  @@unique([organizationId, propertyId, snapshotDate])
+  @@index([organizationId, snapshotDate])
+  @@map("vacancy_history")
+}
+
+// ─── SavedReport ──────────────────────────────────────────────────────────────
+// A user-configured report-builder view: which underlying report source to
+// pull from, which columns to project, and which filters to apply. Lets
+// managers save/reload a custom report instead of re-picking columns each time.
+
+model SavedReport {
+  id             String   @id @default(uuid())
+  organizationId String   @map("organization_id")
+  createdByUserId String  @map("created_by_user_id")
+  name           String   @db.VarChar(200)
+  source         String   @db.VarChar(50) // financial-summary | financial-trend | rent-roll | spend-by-location | vacancy-snapshot | vacancy-history
+  columns        String[]
+  filters        Json
+  createdAt      DateTime @default(now()) @map("created_at")
+  updatedAt      DateTime @updatedAt @map("updated_at")
+
+  organization Organization @relation(fields: [organizationId], references: [id])
+  createdBy    User         @relation(fields: [createdByUserId], references: [id])
+
+  @@index([organizationId])
+  @@map("saved_reports")
 }

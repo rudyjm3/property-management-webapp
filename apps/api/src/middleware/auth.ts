@@ -15,11 +15,18 @@ export interface AuthTenant {
   supabaseUserId: string;
 }
 
+export interface AuthOwner {
+  ownerId: string;
+  orgId: string;
+  supabaseUserId: string;
+}
+
 // Extend Express Request to carry auth context
 declare module 'express-serve-static-core' {
   interface Request {
     user?: AuthUser;
     tenant?: AuthTenant;
+    owner?: AuthOwner;
   }
 }
 
@@ -135,6 +142,53 @@ export async function requireTenantAuth(req: Request, res: Response, next: NextF
     tenantId: dbTenant.id,
     orgId: dbTenant.organizationId,
     supabaseUserId: dbTenant.supabaseUserId!,
+  };
+
+  next();
+}
+
+/**
+ * Owner portal auth middleware — verifies Supabase JWT and attaches
+ * the owner context. Only works for owners who have activated their portal
+ * (i.e. have a supabaseUserId set on their Owner record). Mirrors
+ * requireTenantAuth — a separate identity from both req.user and req.tenant.
+ */
+export async function requireOwnerAuth(req: Request, res: Response, next: NextFunction): Promise<void> {
+  const authHeader = req.headers.authorization;
+  if (!authHeader?.startsWith('Bearer ')) {
+    res.status(401).json({ error: { code: 'UNAUTHORIZED', message: 'Missing or invalid Authorization header.' } });
+    return;
+  }
+
+  const token = authHeader.slice(7);
+
+  const { data: { user: supabaseUser }, error } = await supabaseAdmin.auth.getUser(token);
+  if (error || !supabaseUser) {
+    res.status(401).json({ error: { code: 'INVALID_TOKEN', message: 'Invalid or expired token.' } });
+    return;
+  }
+
+  const dbOwner = await prisma.owner.findFirst({
+    where: { supabaseUserId: supabaseUser.id },
+    select: { id: true, organizationId: true, portalStatus: true, supabaseUserId: true },
+  });
+
+  if (!dbOwner) {
+    res.status(401).json({ error: { code: 'OWNER_NOT_FOUND', message: 'Owner account not found. Complete portal activation first.' } });
+    return;
+  }
+
+  if (dbOwner.portalStatus !== 'active') {
+    prisma.owner.update({
+      where: { id: dbOwner.id },
+      data: { portalStatus: 'active' },
+    }).catch(() => { /* non-critical */ });
+  }
+
+  req.owner = {
+    ownerId: dbOwner.id,
+    orgId: dbOwner.organizationId,
+    supabaseUserId: dbOwner.supabaseUserId!,
   };
 
   next();

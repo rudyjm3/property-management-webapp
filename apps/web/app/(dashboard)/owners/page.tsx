@@ -19,7 +19,14 @@ interface Owner {
   notes: string | null;
   propertyOwners: PropertyOwnership[];
   createdAt: string;
+  portalStatus?: 'invited' | 'active' | 'never_logged_in';
 }
+
+const PORTAL_STATUS_LABELS: Record<string, string> = {
+  active: 'Portal Active',
+  invited: 'Portal Invited',
+  never_logged_in: 'Not Invited',
+};
 
 interface PropertyOption {
   id: string;
@@ -36,6 +43,7 @@ export default function OwnersPage() {
   const [showAssignForm, setShowAssignForm] = useState(false);
   const [error, setError] = useState('');
   const [search, setSearch] = useState('');
+  const [inviting, setInviting] = useState(false);
 
   useEffect(() => {
     loadData();
@@ -106,6 +114,21 @@ export default function OwnersPage() {
       loadData();
     } catch (err: any) {
       alert(err.message || 'Failed to delete owner.');
+    }
+  }
+
+  async function handleInvitePortal(owner: Owner) {
+    if (!confirm(`Send an owner portal invite email to ${owner.email}?`)) return;
+    setInviting(true);
+    try {
+      const result = await api.owners.invitePortal(owner.id);
+      setOwners((prev) => prev.map((o) => (o.id === owner.id ? { ...o, portalStatus: result.portalStatus as Owner['portalStatus'] } : o)));
+      setSelectedOwner((prev) => (prev && prev.id === owner.id ? { ...prev, portalStatus: result.portalStatus as Owner['portalStatus'] } : prev));
+      alert('Invite sent! The owner will receive an email to set their password and access the owner portal.');
+    } catch (err: any) {
+      alert(err.message || 'Failed to send owner portal invite.');
+    } finally {
+      setInviting(false);
     }
   }
 
@@ -302,6 +325,25 @@ export default function OwnersPage() {
                 {selectedOwner.address && <div><span style={{ color: 'var(--color-text-muted)' }}>Address:</span> {selectedOwner.address}</div>}
                 {selectedOwner.taxId && <div><span style={{ color: 'var(--color-text-muted)' }}>Tax ID:</span> {selectedOwner.taxId}</div>}
                 {selectedOwner.notes && <div><span style={{ color: 'var(--color-text-muted)' }}>Notes:</span> {selectedOwner.notes}</div>}
+                <div>
+                  <span style={{ color: 'var(--color-text-muted)' }}>Owner Portal:</span>{' '}
+                  {PORTAL_STATUS_LABELS[selectedOwner.portalStatus ?? 'never_logged_in']}
+                </div>
+              </div>
+
+              <div style={{ marginBottom: '1rem' }}>
+                <button
+                  className="btn btn-sm btn-secondary"
+                  style={{ width: '100%' }}
+                  disabled={inviting || selectedOwner.portalStatus === 'active'}
+                  onClick={() => handleInvitePortal(selectedOwner)}
+                >
+                  {selectedOwner.portalStatus === 'active'
+                    ? 'Portal Active'
+                    : selectedOwner.portalStatus === 'invited'
+                      ? 'Resend Portal Invite'
+                      : 'Invite to Owner Portal'}
+                </button>
               </div>
 
               <div style={{ borderTop: '1px solid var(--color-border)', paddingTop: '1rem' }}>
