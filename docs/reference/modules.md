@@ -45,9 +45,9 @@ extend.
 | 6 | Inspections & Compliance | $25–40/mo | Medium | `lastInspectionAt` (Unit) | Unit Mgmt, S3 |
 | 7 | Lease Renewal (full negotiation flow) | $15–25/mo | Medium | none dedicated — base one-click renewal via `Lease.renewalOfLeaseId` already ships | Lease Mgmt, Messaging |
 | 8 | Eviction Management | $30–50/mo | Medium | none dedicated — will use `Property.state` for jurisdiction lookup | Lease Mgmt, property jurisdiction data |
-| 9 | Owner Portal | $25–40/mo | Low | **Shipped** (as "Financial Reporting & Owner Statements", merged 2026-05-31): `Owner`, `PropertyOwner`, `OwnerStatement` models + `routes/owners.ts` (see `schema.md`, `routes.md`). Not gated — see gating note above. | Payments, Properties |
+| 9 | Owner Portal | $25–40/mo | Low | **Partially shipped** (as "Financial Reporting & Owner Statements", merged 2026-05-31): `Owner`, `PropertyOwner`, `OwnerStatement` models + `routes/owners.ts` (see `schema.md`, `routes.md`) — but these are manager-facing routes gated by `requireRoles(['owner','manager'])` (staff role, not an owner account), with no separate owner login or owner-facing portal UI. Not gated by module flag either — see gating note above. | Payments, Properties |
 | 10 | Communications & Resident Engagement | $20–30/mo | Low | none dedicated — base one-to-one Message thread already ships | Messaging, Notifications, Twilio |
-| 11 | Reporting & Analytics | $25–40/mo | Low | **Shipped** (merged 2026-05-31): `routes/reports.ts` + reporting UI. Not gated — see gating note above. | All modules |
+| 11 | Reporting & Analytics | $25–40/mo | Low | **Partially shipped** (merged 2026-05-31): `routes/reports.ts` provides a fixed set of reports (financial summary/trend, rent roll, spend-by-location, vacancy snapshot) with CSV export — but no custom/drag-and-drop report builder, no vacancy-rate history/market comparison, and no PDF export. Not gated by module flag either — see gating note above. | All modules |
 
 ## Notes on base-product overlap
 
@@ -64,13 +64,18 @@ product, per `BUILD_OUTLINE.md` §14:
   features.
 
 **Module 9 (Owner Portal) and Module 11 (Reporting & Analytics)** are both
-further along than their "Low priority" roadmap position suggests — both are
-fully shipped, not just schema-hooked. `Owner`, `PropertyOwner`, and
-`OwnerStatement` are full Prisma models (not just placeholder columns), and
-`/organizations/:orgId/owners` and `/organizations/:orgId/reports` are live,
-role-gated API routes. Neither is behind module gating (no
+further along than their "Low priority" roadmap position suggests, but
+neither is fully shipped — treat both as partial. `Owner`, `PropertyOwner`,
+and `OwnerStatement` are full Prisma models (not just placeholder columns),
+and `/organizations/:orgId/owners` and `/organizations/:orgId/reports` are
+live API routes — but both are gated by `requireRoles(['owner','manager'])`,
+a manager-side staff role check, not owner authentication, so there is no
+actual owner-facing portal (separate login, disbursement statements, PDF
+reports) yet, and the reports module is a fixed set of endpoints rather than
+the custom report builder / vacancy history / PDF export the module spec
+calls for. Neither is behind module *billing* gating either (no
 `active_modules`/`ModuleGate` exists at all yet — see the note at the top of
-this file), so both currently run as free, always-on functionality. Verify
+this file), so what is built runs as free, always-on functionality. Verify
 against `BUILD_OUTLINE.md` §11/§12 (Implementation Delta Appendix /
 Phase-by-Phase Status) for the latest state before assuming anything here is
 gated — this doc can drift from the build outline's own delta tracking.
