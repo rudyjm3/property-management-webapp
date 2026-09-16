@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { api } from '@/lib/api';
 import { exportCsv } from '@/lib/exportCsv';
 import { exportPdf } from '@/lib/exportPdf';
@@ -28,17 +28,22 @@ export function ReportBuilder({ propertyId, periodStart, periodEnd }: Props) {
   const [error, setError] = useState('');
   const [savedReports, setSavedReports] = useState<any[]>([]);
   const [saveName, setSaveName] = useState('');
+  // Loading a saved config changes `source` and runs its own request with the
+  // saved columns; this skips the source-change effect's default (full-column)
+  // reload from clobbering that result right after.
+  const skipNextSourceEffect = useRef(false);
 
   useEffect(() => {
     api.reports.savedReports.list().then(setSavedReports).catch(() => {});
   }, []);
 
-  async function runReport(columns?: string[]) {
+  async function runReport(columns?: string[], sourceOverride?: string) {
+    const effectiveSource = sourceOverride ?? source;
     setLoading(true);
     setError('');
     try {
       const result = await api.reports.runBuilder({
-        source,
+        source: effectiveSource,
         columns,
         filters: { propertyId, periodStart, periodEnd },
       });
@@ -53,6 +58,10 @@ export function ReportBuilder({ propertyId, periodStart, periodEnd }: Props) {
   }
 
   useEffect(() => {
+    if (skipNextSourceEffect.current) {
+      skipNextSourceEffect.current = false;
+      return;
+    }
     runReport();
   }, [source]); // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -89,9 +98,9 @@ export function ReportBuilder({ propertyId, periodStart, periodEnd }: Props) {
   }
 
   async function handleLoadSaved(saved: any) {
+    skipNextSourceEffect.current = true;
     setSource(saved.source);
-    // Re-run with the saved column selection once the source's data has loaded.
-    setTimeout(() => runReport(saved.columns), 0);
+    await runReport(saved.columns, saved.source);
   }
 
   async function handleDeleteSaved(id: string) {

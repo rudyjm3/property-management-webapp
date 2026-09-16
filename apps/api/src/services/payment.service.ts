@@ -276,6 +276,18 @@ export async function voidPayment(
   }
 
   return prisma.$transaction(async (tx) => {
+    // Serialize concurrent voids of the same payment: acquire the org-wide
+    // ledger lock *before* reading anything, then re-check status under the
+    // lock. Without this, two overlapping void requests can both pass the
+    // status check above and both compute the same reversal, double-posting
+    // it once the lock only serializes the writes.
+    await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${organizationId})::bigint)`;
+
+    const current = await tx.payment.findUnique({ where: { id: paymentId }, select: { status: true } });
+    if (!current || current.status === 'voided') {
+      throw new AppError(400, 'PAYMENT_ALREADY_VOIDED', 'This payment has already been voided.');
+    }
+
     // Reverse whatever this payment already posted to the ledger (e.g. an ACH
     // credit from the Stripe webhook) so the balance reflects the void.
     // No-ops for payments that never posted a ledger entry (cash/check/waived).

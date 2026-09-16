@@ -45,6 +45,7 @@ describe('payment.service voidPayment', () => {
     const tx = {
       ledgerEntry,
       payment: {
+        findUnique: vi.fn().mockResolvedValue({ status: basePayment.status }),
         update: vi.fn().mockResolvedValue({ ...basePayment, status: 'voided' }),
       },
       $executeRaw: vi.fn().mockResolvedValue(undefined),
@@ -107,5 +108,20 @@ describe('payment.service voidPayment', () => {
 
     expect(tx.ledgerEntry.create).not.toHaveBeenCalled();
     expect(tx.payment.update).toHaveBeenCalled();
+  });
+
+  it('re-checks status under the lock and refuses a double-reversal from a concurrent void', async () => {
+    const tx = mockTx([
+      { id: 'entry-1', organizationId: 'org-1', paymentId: 'payment-1', type: 'credit', amount: 1500, balanceAfter: 1500 },
+    ]);
+    // Simulates a second, overlapping void request: by the time this transaction
+    // acquires the advisory lock, a concurrent one has already voided the payment.
+    tx.payment.findUnique = vi.fn().mockResolvedValue({ status: 'voided' });
+
+    await expect(voidPayment('org-1', 'payment-1', 'Duplicate ACH charge')).rejects.toMatchObject({
+      code: 'PAYMENT_ALREADY_VOIDED',
+    });
+    expect(tx.ledgerEntry.create).not.toHaveBeenCalled();
+    expect(tx.payment.update).not.toHaveBeenCalled();
   });
 });

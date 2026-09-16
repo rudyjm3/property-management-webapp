@@ -102,24 +102,31 @@ export async function getOwnerStatement(ownerId: string, statementId: string) {
 
 export async function getOwnerDashboard(ownerId: string) {
   const propertyIds = await getOwnedPropertyIds(ownerId);
+  const currentYear = new Date().getFullYear();
+  const yearStart = new Date(currentYear, 0, 1);
+  const yearEnd = new Date(currentYear + 1, 0, 1);
 
-  const [properties, statements] = await Promise.all([
+  const [properties, recentStatements, ytdStatements] = await Promise.all([
     getOwnerProperties(ownerId),
     prisma.ownerStatement.findMany({
       where: { ownerId, status: 'sent' },
       orderBy: { periodStart: 'desc' },
-      take: 12,
+      take: 5,
       include: { property: { select: { id: true, name: true } } },
+    }),
+    // Separate, unlimited query — YTD must sum every current-year statement,
+    // not just whatever happens to land in the take:5 recent-statements list
+    // (an owner with several properties can easily have more than 5 for the year).
+    prisma.ownerStatement.findMany({
+      where: { ownerId, status: 'sent', periodStart: { gte: yearStart, lt: yearEnd } },
+      select: { distributionAmount: true },
     }),
   ]);
 
   const totalUnits = properties.reduce((sum, p) => sum + p.unitCount, 0);
   const occupiedUnits = properties.reduce((sum, p) => sum + p.occupiedUnits, 0);
 
-  const currentYear = new Date().getFullYear();
-  const ytdDistributions = statements
-    .filter((s) => s.periodStart.getFullYear() === currentYear)
-    .reduce((sum, s) => sum + Number(s.distributionAmount), 0);
+  const ytdDistributions = ytdStatements.reduce((sum, s) => sum + Number(s.distributionAmount), 0);
 
   return {
     propertyCount: properties.length,
@@ -127,7 +134,7 @@ export async function getOwnerDashboard(ownerId: string) {
     occupiedUnits,
     portfolioOccupancyPct: totalUnits > 0 ? Math.round((occupiedUnits / totalUnits) * 100) : 0,
     ytdDistributions,
-    recentStatements: statements.slice(0, 5),
+    recentStatements,
     properties,
     ownedPropertyIds: propertyIds,
   };
