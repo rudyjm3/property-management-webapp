@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Alert, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import { Alert, Linking, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useMutation } from '@tanstack/react-query';
 import { useAuth } from '@/contexts/AuthContext';
@@ -7,6 +7,8 @@ import { tenantApi } from '@/lib/api';
 import { Card } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
 import type { PreferredContact, UpdateTenantProfileInput } from '@propflow/shared';
+
+const WEB_URL = process.env.EXPO_PUBLIC_WEB_URL ?? 'http://localhost:3000';
 
 const CONTACT_OPTIONS: PreferredContact[] = ['email', 'sms', 'call'];
 const PROFILE_UPDATE_KEYS: Array<keyof UpdateTenantProfileInput> = [
@@ -289,6 +291,13 @@ export default function AccountScreen() {
           </Card>
         )}
 
+        <TouchableOpacity
+          onPress={() => Linking.openURL(`${WEB_URL}/privacy`)}
+          style={styles.privacyLink}
+        >
+          <Text style={styles.privacyLinkText}>Privacy Policy</Text>
+        </TouchableOpacity>
+
         <Button title="Sign Out" onPress={handleSignOut} variant="secondary" style={{ marginTop: 16 }} />
       </ScrollView>
     </SafeAreaView>
@@ -297,6 +306,8 @@ export default function AccountScreen() {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#f9fafb' },
+  privacyLink: { marginTop: 24, alignItems: 'center' },
+  privacyLinkText: { fontSize: 13, color: '#6366f1', fontWeight: '600' },
   content: { padding: 16, paddingBottom: 32 },
   heading: { fontSize: 24, fontWeight: '700', color: '#111827', marginBottom: 12 },
   profileRow: { flexDirection: 'row', alignItems: 'center', gap: 16 },
