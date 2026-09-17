@@ -84,6 +84,19 @@ function formatDateOnly(iso: string): string {
   return new Date(year, month - 1, day).toLocaleDateString();
 }
 
+// `new Date().toISOString()` reports the UTC date, which is already
+// tomorrow for viewers west of UTC in the evening. Build the YYYY-MM-DD
+// string from the local date components instead so a "today" default for a
+// date-only field (removedAt/installDate) actually matches the viewer's
+// calendar day.
+function todayLocalDateString(): string {
+  const d = new Date();
+  const year = d.getFullYear();
+  const month = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+}
+
 const UNIT_STATUS_LABELS: Record<string, string> = {
   occupied: 'Occupied',
   vacant: 'Vacant',
@@ -226,6 +239,18 @@ export default function UnitDetailPage() {
       loadAppliances();
     }
   }, [unitIntelligenceActive, loadAppliances]);
+
+  // A scanned QR label links here with ?appliance=<id> to highlight that
+  // appliance's row — but a query param alone doesn't trigger browser
+  // fragment scrolling the way a #hash would, so without this the page just
+  // loads at the top with the (offscreen) row highlighted.
+  useEffect(() => {
+    if (highlightedApplianceId && appliances.length > 0) {
+      document
+        .getElementById(`appliance-${highlightedApplianceId}`)
+        ?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    }
+  }, [highlightedApplianceId, appliances]);
 
   async function handleCreateWorkOrder(e: React.FormEvent) {
     e.preventDefault();
@@ -820,7 +845,7 @@ export default function UnitDetailPage() {
                                   className="btn btn-sm btn-secondary"
                                   onClick={() => {
                                     setRetiringAppliance(a);
-                                    setRetireDate(new Date().toISOString().slice(0, 10));
+                                    setRetireDate(todayLocalDateString());
                                   }}
                                 >
                                   Retire
@@ -1052,7 +1077,7 @@ export default function UnitDetailPage() {
                 </p>
                 <div className="form-group">
                   <label>Removal Date (old appliance)</label>
-                  <input type="date" name="removedAt" defaultValue={new Date().toISOString().slice(0, 10)} required />
+                  <input type="date" name="removedAt" defaultValue={todayLocalDateString()} required />
                 </div>
                 <div style={{ marginTop: '16px', paddingTop: '16px', borderTop: '1px solid var(--color-border)' }}>
                   <p style={{ fontSize: '12px', color: 'var(--color-text-muted)', marginBottom: '12px', fontWeight: 500, textTransform: 'uppercase', letterSpacing: '0.5px' }}>
@@ -1091,7 +1116,7 @@ export default function UnitDetailPage() {
                     </div>
                     <div className="form-group">
                       <label>Install Date</label>
-                      <input type="date" name="installDate" defaultValue={new Date().toISOString().slice(0, 10)} />
+                      <input type="date" name="installDate" defaultValue={todayLocalDateString()} />
                     </div>
                   </div>
                   <div className="form-group">
