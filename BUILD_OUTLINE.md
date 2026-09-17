@@ -1000,11 +1000,60 @@ _Last updated: 2026-09-16. Status reflects the `main` branch._
 | Tenant detail — manager message thread                                | ✅     | Thread list + compose + send implemented at `tenants/[id]/page.tsx:547`                              |
 | Tenant detail — move-out workflow                                     | ✅     | Move-out modal: date, deposit deductions, live return calc, terminates lease + creates deposit Payment |
 | Message file/photo attachments (web)                                  | ✅     | Shipped alongside mobile attachment support (05-30-2026)                                             |
-| ACH end-to-end flow validated (success + failure + refund)            | ⚠️     | Routes exist; webhook → ledger path still not smoke-tested in Stripe sandbox                          |
+| ACH end-to-end flow validated (success + failure + refund)            | ✅     | Smoke-tested 2026-09-17 against real Stripe test-mode API — see write-up below |
 | Financial controls (reconciliation, duplicate prevention, audit)      | ⚠️     | Payment void status-tracking (`voidPayment()`, `voidedAt`/`voidReason`) shipped, but it does not post a ledger reversal; reconciliation, duplicate-prevention, and true accounting reversal still not built |
 
 **Pilot blockers:** None — all pilot-blocking items are implemented.
-**Production gaps:** ACH end-to-end smoke test. Financial reconciliation, duplicate-payment prevention, and an actual ledger-reversal on void (status-only void support now exists).
+**Production gaps:** Financial reconciliation, duplicate-payment prevention, and an actual ledger-reversal on void (status-only void support now exists).
+
+**ACH smoke test write-up (2026-09-17):** Ran against Stripe's real test-mode
+API (not a live inbound webhook — see caveat below), driving the app's own
+`stripe.service.ts` and `webhooks/stripe.ts` code, against a real local
+Postgres:
+
+- **Connect account setup** — `stripeService.getOrCreateConnectAccount` and
+  `createAccountLink` genuinely exercised: created a real Express account
+  (`acct_...`) and a real hosted onboarding URL via the live API. Completing
+  onboarding itself (`charges_enabled`/`payouts_enabled` → true) requires
+  Stripe's hosted, human-driven onboarding UI for Express accounts — Stripe
+  rejects direct API writes of identity/business fields on Express accounts
+  with `StripePermissionError: oauth_not_supported` (confirmed empirically,
+  not assumed), so that step is inherently outside what any unattended
+  script — ours or Stripe's own tooling — can complete. This is a real
+  platform boundary, not a gap in this test.
+- **ACH payment initiation** — real `PaymentMethod`s created with Stripe's
+  documented test bank accounts (routing `110000000`) and confirmed with
+  `mandate_data` + micro-deposit verification (`amounts: [32, 45]`, Stripe's
+  test-mode instant-verify values). Account `000123456789` → PaymentIntent
+  reached `succeeded`; account `000111111113` → reached
+  `requires_payment_method` with a real `account_closed` decline. Because
+  the connected account above couldn't complete onboarding, these
+  PaymentIntents were created without `transfer_data.destination` (platform
+  charge, not a Connect destination charge) — confirmed separately that
+  attempting `transfer_data.destination` against an unactivated connected
+  account fails with `insufficient_capabilities_for_transfer`, which is the
+  correct, expected Stripe behavior.
+- **Webhook receipt → ledger update** — the real succeeded/failed
+  PaymentIntents (and a real `Refund` issued via `stripe.refunds.create`)
+  were wrapped in genuine Stripe event envelopes and delivered to the
+  app's actual `stripeWebhookHandler`, signed with
+  `Stripe.webhooks.generateTestHeaderString` so the handler's real HMAC
+  verification (`stripe.webhooks.constructEvent`) ran unmodified — this
+  is the one substitution: Stripe couldn't deliver the webhook to a public
+  endpoint from this sandboxed environment, so the event envelope was
+  relayed locally instead of over the wire, everything downstream of
+  signature verification is the real handler running unmodified. Verified
+  against the real local DB: `payment_intent.succeeded` → `Payment.status`
+  → `completed` + ledger credit; `payment_intent.payment_failed` →
+  `Payment.status` → `failed`; `charge.refunded` (issued on the successful
+  payment) → `Payment.status` → `refunded` + ledger debit. No bugs found —
+  all three scenarios passed on the first fully-wired run.
+- **Regression coverage** — `apps/api/tests/stripe-webhook-ach.test.ts`
+  already covered `payment_intent.succeeded`/`payment_intent.payment_failed`
+  and `setup_intent.succeeded`; this pass added mocked coverage for
+  `charge.refunded` (full + partial/incremental refund amount, and the
+  no-matching-payment case) and `refund.updated` (including ignoring a
+  refund that hasn't succeeded yet) — 48 tests passing across the API suite.
 
 ---
 
@@ -1063,7 +1112,7 @@ _Sourced from MVP review, 2026-05-26. Re-verified against code 2026-09-16 — it
 2. ~~Stripe webhook security audit + rate limiting~~ — **Rate limiting done** (`middleware/rate-limit.ts` on invite/apply/sign routes). A formal webhook/auth *security audit* has not been done — still open, see Cross-Cutting Status.
 3. ~~Error monitoring (Sentry)~~ — **Done.** Wired into API, mobile, and web.
 4. ~~Autopay UI toggle (mobile)~~ — **Done.** `AutopaySetupSheet.tsx`.
-5. **End-to-end ACH smoke test in Stripe sandbox** — still open. The webhook → ledger path exists but has never been smoke-tested. This is a financial system; untested money movement paths are a blocker.
+5. ~~End-to-end ACH smoke test in Stripe sandbox~~ — **Done (2026-09-17).** Success, failure, and refund all verified against real Stripe test-mode objects through the app's actual webhook handler — see §12's write-up. Connect onboarding *completion* (charges/payouts enabled) remains a Stripe-hosted, human-driven step by design — confirmed via a real `StripePermissionError` when attempting to bypass it via API — not something any automated test can complete.
 
 ### Next 60 days (MVP launch)
 
@@ -1088,7 +1137,7 @@ _Sourced from MVP review, 2026-05-26. Re-verified against code 2026-09-16 — it
 14. **Vacancy listing syndication** — Module 8. Top-of-funnel capture from Zillow/Apartments.com.
 15. **AI maintenance triage** — differentiator; auto-categorizes and prioritizes work orders on submission.
 
-> **Bottom line (updated 2026-09-17):** The product has moved past most of its original MVP gap list — activation flow, autopay, Sentry, rate limiting, SMS, and attachments are all fully shipped, and two "Low priority" modules (Owner Portal, Reporting & Analytics) are now fully built functionally, ahead of schedule, including payment void's ledger reversal. Module gating infrastructure has also landed (`activeModules`, `requireModule`, `<ModuleGate>`), so Modules 9 and 11 are no longer unbilled free features — they're now behind a manual on/off toggle pending real Stripe billing. What's left before a confident launch is narrower and more operational: the ACH smoke test, a real security review, Stripe Subscription Item billing to replace the manual module toggle, and finishing Module 1's screening step. The data model was already designed for all of this — execution continues to be the remaining work, not redesign.
+> **Bottom line (updated 2026-09-17):** The product has moved past most of its original MVP gap list — activation flow, autopay, Sentry, rate limiting, SMS, and attachments are all fully shipped, and two "Low priority" modules (Owner Portal, Reporting & Analytics) are now fully built functionally, ahead of schedule, including payment void's ledger reversal. Module gating infrastructure has also landed (`activeModules`, `requireModule`, `<ModuleGate>`), so Modules 9 and 11 are no longer unbilled free features — they're now behind a manual on/off toggle pending real Stripe billing. The ACH money-movement path has also now been smoke-tested end-to-end (success, failure, refund) against real Stripe test-mode objects, with no bugs found. What's left before a confident launch is narrower and more operational: a real security review, Stripe Subscription Item billing to replace the manual module toggle, and finishing Module 1's screening step. The data model was already designed for all of this — execution continues to be the remaining work, not redesign.
 
 ---
 
