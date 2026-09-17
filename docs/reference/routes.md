@@ -39,11 +39,13 @@ file directly for per-endpoint behavior.
 
 ## Not mounted through `index.ts`
 
-- Stripe webhook (`POST /api/webhooks/stripe`) and Supabase auth webhook
-  (`POST /api/webhooks/auth`) are documented in `BUILD_OUTLINE.md` §9 as
-  separate unauthenticated webhook endpoints outside the `/api/v1/organizations`
-  tree — verify current wiring in `apps/api/src/index.ts` before relying on
-  the exact path if it matters for a task.
+- Stripe webhook (`POST /api/webhooks/stripe`) is registered directly in
+  `apps/api/src/index.ts`, outside the `/api/v1` tree, before `express.json()`
+  so it receives the raw body `stripe.webhooks.constructEvent` needs to verify
+  the `stripe-signature` header. No other webhook endpoint exists — a prior
+  version of this doc claimed a `POST /api/webhooks/auth` Supabase auth
+  webhook that was never actually built; corrected 09-17-2026 as part of the
+  P3 security review (see `BUILD_OUTLINE.md` §12).
 
 ## Web app (Next.js, `apps/web/app/`)
 

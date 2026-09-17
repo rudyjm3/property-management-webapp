@@ -126,7 +126,7 @@ interface CreateWorkOrderData {
 export async function createWorkOrder(organizationId: string, data: CreateWorkOrderData) {
   let unitId: string | null = null;
   let propertyId: string | null = null;
-  let tenantId: string | null = data.tenantId ?? null;
+  let tenantId: string | null = null;
 
   if (data.unitId) {
     // Unit-scoped: verify unit belongs to org; property always derived from the
@@ -142,6 +142,36 @@ export async function createWorkOrder(organizationId: string, data: CreateWorkOr
 
     unitId = unit.id;
     propertyId = unit.propertyId;
+
+    if (data.tenantId) {
+      // Verify the caller-supplied tenantId actually belongs to this org AND
+      // has an active/month-to-month lease on this specific unit — checking
+      // organizationId alone would still let staff attach a tenant from an
+      // unrelated unit, and getTenantWorkOrders() surfaces any work order
+      // matching { tenantId } in that tenant's own portal regardless of
+      // which unit it's for.
+      const participant = await prisma.leaseParticipant.findFirst({
+        where: {
+          tenantId: data.tenantId,
+          lease: {
+            unitId,
+            status: { in: ['active', 'month_to_month'] },
+            deletedAt: null,
+          },
+        },
+        select: { tenantId: true },
+      });
+
+      if (!participant) {
+        throw new AppError(
+          404,
+          'TENANT_NOT_FOUND',
+          'Tenant not found or has no active lease on this unit.'
+        );
+      }
+
+      tenantId = participant.tenantId;
+    }
   } else {
     // Property-level (common area): no unit, no tenant.
     if (!data.propertyId) {
@@ -224,6 +254,28 @@ export async function updateWorkOrder(
       'NO_TENANT_TO_CHARGE',
       'This work order has no associated tenant to charge.'
     );
+  }
+
+  // Verify caller-supplied vendorId/assignedToUserId belong to this org before
+  // writing them — otherwise another org's vendor/staff contact info could be
+  // attached to (and leaked via) this work order.
+  if (data.vendorId) {
+    const vendor = await prisma.vendor.findFirst({
+      where: { id: data.vendorId, organizationId },
+      select: { id: true },
+    });
+    if (!vendor) {
+      throw new AppError(404, 'VENDOR_NOT_FOUND', 'Vendor not found in your organization.');
+    }
+  }
+  if (data.assignedToUserId) {
+    const assignee = await prisma.user.findFirst({
+      where: { id: data.assignedToUserId, organizationId },
+      select: { id: true },
+    });
+    if (!assignee) {
+      throw new AppError(404, 'USER_NOT_FOUND', 'Assignee not found in your organization.');
+    }
   }
 
   const updateData: Record<string, unknown> = { ...data };

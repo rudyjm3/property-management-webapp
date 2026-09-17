@@ -2,6 +2,7 @@ import { Router, Request, Response, NextFunction } from 'express';
 import { prisma } from '@propflow/db';
 import { supabaseAdmin } from '../lib/supabase';
 import { requireAuth, requireSupabaseAuth } from '../middleware/auth';
+import { authRateLimit } from '../middleware/rate-limit';
 import { sendPasswordResetEmail, sendSignupConfirmationEmail } from '../services/email.service';
 
 const router = Router();
@@ -57,7 +58,7 @@ router.get('/me', requireAuth, async (req: Request, res: Response, next: NextFun
  * Called after Supabase signup to create the User + Organization records in our DB.
  * Body: { name, orgName, orgPhone, timezone }
  */
-router.post('/register', requireSupabaseAuth, async (req: Request, res: Response, next: NextFunction) => {
+router.post('/register', authRateLimit, requireSupabaseAuth, async (req: Request, res: Response, next: NextFunction) => {
   try {
     const { name, orgName, orgPhone, timezone } = req.body as {
       name: string;
@@ -136,7 +137,7 @@ router.post('/register', requireSupabaseAuth, async (req: Request, res: Response
  * Generates a password-reset link via Supabase Admin and sends it through Resend.
  * Public endpoint — always returns success to avoid email enumeration.
  */
-router.post('/forgot-password', async (req: Request, res: Response, next: NextFunction) => {
+router.post('/forgot-password', authRateLimit, async (req: Request, res: Response, next: NextFunction) => {
   try {
     const { email, redirectTo } = req.body as { email?: string; redirectTo?: string };
     if (!email) {
@@ -165,7 +166,7 @@ router.post('/forgot-password', async (req: Request, res: Response, next: NextFu
  * Creates a Supabase user and sends a confirmation email via Resend instead of Supabase.
  * Body: { email, password, redirectTo? }
  */
-router.post('/signup-initiate', async (req: Request, res: Response, next: NextFunction) => {
+router.post('/signup-initiate', authRateLimit, async (req: Request, res: Response, next: NextFunction) => {
   try {
     const { email, password, redirectTo } = req.body as { email?: string; password?: string; redirectTo?: string };
     if (!email || !password) {

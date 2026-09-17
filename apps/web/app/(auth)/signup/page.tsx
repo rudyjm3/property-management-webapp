@@ -153,7 +153,11 @@ export default function SignupPage() {
             color: 'var(--color-text-muted)',
           }}
         >
-          By signing up you agree to our Terms of Service and Privacy Policy.
+          By signing up you agree to our Terms of Service and{' '}
+          <Link href="/privacy" style={{ color: 'var(--color-primary)', fontWeight: 500 }}>
+            Privacy Policy
+          </Link>
+          .
         </p>
       </div>
     </div>
