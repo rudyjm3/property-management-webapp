@@ -849,8 +849,14 @@ Response: { data: [...], nextCursor: "<id>" | null }
 
 ### Webhooks
 
-- Stripe events: `POST /api/webhooks/stripe` (no auth, verified by Stripe signature header)
-- Supabase auth events: `POST /api/webhooks/auth`
+- Stripe events: `POST /api/webhooks/stripe` (no auth, verified by Stripe signature header
+  via `stripe.webhooks.constructEvent` against the raw request body — see the security
+  review write-up in §12 Cross-Cutting Status, which confirmed this is implemented
+  correctly and can't be bypassed)
+- No Supabase auth webhook exists in the codebase today — a prior version of this doc
+  claimed a `POST /api/webhooks/auth` endpoint that was never actually built; corrected
+  09-17-2026. `apps/api/src/index.ts` registers exactly one webhook route
+  (`/api/webhooks/stripe`).
 
 ---
 
@@ -1076,12 +1082,30 @@ Postgres:
 | Message photo/file attachments (mobile)                                    | ✅     | Document picker for message attachments shipped 05-30-2026                 |
 | Notification preferences on Account tab                                    | ❌     | Not implemented — no notif-related code in `account.tsx`                  |
 | Contact manager shortcut on Account/Home tab                               | ❌     | Not implemented                                                            |
-| iOS + Android device smoke test                                            | ❌     | Not evidenced                                                              |
-| App Store submission readiness (icons, splash, EAS config, privacy policy) | ⚠️     | `app.json` has bundle IDs and icon/splash assets exist; not verified as final (vs. placeholder) or accompanied by a privacy policy |
+| iOS + Android device smoke test                                            | ⚠️     | Not evidenced still — **could not be performed in the P3 review environment** (no macOS/Xcode for the iOS Simulator, no `/dev/kvm` or Android SDK for the Android Emulator; confirmed empirically, see 09-17-2026 write-up below). `expo export` (both platforms), lint, and typecheck all pass, and the core-flow screens (login, pay rent, submit work order with photo, send message) were verified by source review against their backing API routes. This is not a substitute for an on-device pass — still required before submission. |
+| App Store submission readiness (icons, splash, EAS config, privacy policy) | ⚠️     | Icons/splash were literal 1×1 placeholder PNGs — replaced 09-17-2026 with real 1024×1024 brand-color assets (`apps/mobile/assets/{icon,adaptive-icon,splash-icon}.png`); still not final designer artwork. Privacy policy added: `apps/web/app/privacy/page.tsx`, linked from the mobile Account tab and the web signup page. EAS build credentials and Apple/Google developer account access are outside what this environment can verify or configure — still required before an actual submission. |
 | Mobile CI coverage                                                         | ✅     | Mobile lint step added to `.github/workflows/ci.yml` (09-16-2026); mobile build already covered via `turbo run build` |
 
 **Pilot blockers:** None remaining from this list — activation screen, autopay, and mobile CI are now in place.
-**Production gaps:** Notification preferences + contact-manager shortcut on Account tab. Full App Store submission prep (verify icon/splash assets, add privacy policy). Mobile E2E tests / device smoke test.
+**Production gaps:** Notification preferences + contact-manager shortcut on Account tab. Real on-device iOS/Android smoke test (still unverified — see note above). EAS build credentials and Apple/Google developer account setup, which this environment cannot provide.
+
+**Mobile verification write-up (2026-09-17):** Ran in the same sandboxed Linux
+container as the rest of this P3 pass, which has no iOS Simulator (no macOS/Xcode)
+and no Android Emulator (`/dev/kvm` absent, no Android SDK installed) —
+confirmed by directly checking for both before concluding device testing
+wasn't possible here, rather than assuming it. What *was* verified:
+`expo export` succeeds for both `ios` and `android` bundles (2,949/2,947
+modules respectively, including the new icon assets); `eslint` and `tsc
+--noEmit` are clean; and the four core-flow screens (login, Pay Now sheet,
+`SubmitWorkOrderSheet` with `expo-image-picker` + upload flow, messages
+compose/attach) were read end-to-end and checked against the API routes and
+services they call, all of which were separately verified during the
+security review below to be correctly org-scoped and auth-gated. This is a
+source-level review, not a live device run, and does not exercise real touch
+input, native permission prompts, push delivery, or platform-specific
+rendering — an actual iOS/Android device or simulator pass is still needed
+before submission and is the responsibility of whoever has that hardware/
+tooling available.
 
 ---
 
@@ -1096,9 +1120,67 @@ Postgres:
 | API automated tests runnable on clean install                    | ⚠️     |
 | Seed / demo environment end-to-end workflow                      | ⚠️     |
 | Real observability (logs, error monitoring, alerting)            | ✅     | Sentry wired into web, API, and mobile (05-31-2026) |
-| Rate limiting on public/auth/payment endpoints                   | ✅     | `middleware/rate-limit.ts` applied to invite/apply/sign routes |
-| Security review (auth, file access, org isolation, webhook HMAC) | ⚠️     | No formal audit yet; a cross-org work-order scoping leak was found and fixed reactively (07-19-2026), suggesting more may exist |
+| Rate limiting on public/auth/payment endpoints                   | ✅     | `middleware/rate-limit.ts` now applied to invite/apply/sign routes **and** `/auth/register`, `/auth/forgot-password`, `/auth/signup-initiate` (`authRateLimit`, previously defined but never wired — closed 09-17-2026), plus tenant-portal payment-initiation routes (`paymentRateLimit`, same gap) |
+| Security review (auth, file access, org isolation, webhook HMAC) | ✅     | Formal audit completed 09-17-2026 — see write-up below. Findings fixed; none deferred. |
 | Financial accuracy tests (payments, refunds, late fees, ledger)  | ❌     |
+
+**Security review write-up (2026-09-17, P3):** Systematic pass across API route
+files, their backing services, the webhook handler, and rate-limit config,
+following on from the reactive work-order leak fix (07-19-2026, `75b0bb8`).
+Findings, all fixed in this pass:
+
+- **Org isolation — `workOrder.service.ts`, `createWorkOrder`:** a
+  caller-supplied `tenantId` was written to a unit-scoped work order without
+  verifying it belonged to the requesting org, letting an authenticated user
+  in Org A attach (and thereby expose, via the response's `tenant` include)
+  another org's tenant name/email/phone to a work order in Org A — and
+  surface that work order in the wrong tenant's own portal. Fixed by
+  verifying the tenant against `organizationId` before use, mirroring the
+  existing unit/property verification in the same function.
+- **Org isolation — `workOrder.service.ts`, `updateWorkOrder`:**
+  `vendorId`/`assignedToUserId` were written directly from the request body
+  with no org check, letting a work order in Org A be assigned to a vendor
+  or staff user belonging to a different org (leaking their contact info via
+  the same `include`). Fixed by verifying both against `organizationId`
+  before the update.
+- **Identity spoofing — `routes/documents.ts`:** `resolveUserId()` fell back
+  to a client-controlled `x-user-id` header whenever `req.user` was unset.
+  In the current route wiring `requireAuth` always runs first so this path
+  wasn't reachable, but it was a live spoofing vector waiting for any future
+  reordering or reuse of the helper, and served no legitimate purpose.
+  Removed; the function now only reads `req.user.userId`.
+- **Rate limiting gap:** `authRateLimit` and `paymentRateLimit` were defined
+  in `middleware/rate-limit.ts` but never applied anywhere. The public,
+  unauthenticated `/auth/register`, `/auth/forgot-password`, and
+  `/auth/signup-initiate` endpoints (prime email-enumeration/spam targets)
+  had only the blanket 500-req/15-min global limit. Wired `authRateLimit`
+  (10/15 min) onto all three, and `paymentRateLimit` (30/15 min) onto the
+  tenant-portal payment-initiation routes it was evidently built for.
+- **Timing side-channel — `routes/notificationJobs.ts`:** the `CRON_SECRET`
+  check used `!==` string comparison. Switched to `crypto.timingSafeEqual`
+  with a length check first (equal-length buffers required for
+  `timingSafeEqual`).
+- **Documentation bug:** `BUILD_OUTLINE.md` §9 and `docs/reference/routes.md`
+  both claimed a `POST /api/webhooks/auth` Supabase auth webhook existed;
+  `apps/api/src/index.ts` registers only `/api/webhooks/stripe`. No such
+  endpoint — and therefore no such attack surface — ever existed. Corrected
+  both docs.
+
+Areas reviewed and found correctly implemented, no changes needed: the
+Stripe webhook's HMAC verification (`stripe.webhooks.constructEvent` against
+the raw body, registered before `express.json()`, rejects on bad signature);
+Supabase Storage document/attachment access (org-scoped `findFirst` before
+every signed-URL mint, 900s upload / 3600s download expiry, org-prefixed
+storage keys); tenant-portal and owner-portal data access (every query
+scoped to the authenticated tenant's/owner's own ID, never a client-supplied
+one); module-gating (`requireModule` resolves org fresh per request from
+whichever auth identity is present, fails closed); and role-gating
+consistency with `docs/reference/rbac.md`'s documented (intentional) gaps —
+no route was found open to a wider audience than that doc already describes.
+A broader Explore-agent pass across the remaining service files
+(property/unit/lease/tenant/owner/staff/ledger/notification/report/payment/
+vendor/lease-esignature/rental-application/screening) found no further
+org-scoping gaps.
 
 ---
 
@@ -1109,7 +1191,7 @@ _Sourced from MVP review, 2026-05-26. Re-verified against code 2026-09-16 — it
 ### Now (before any paying customers)
 
 1. ~~Tenant invite-code activation screen (mobile)~~ — **Done.** `apps/mobile/app/(auth)/activate.tsx`.
-2. ~~Stripe webhook security audit + rate limiting~~ — **Rate limiting done** (`middleware/rate-limit.ts` on invite/apply/sign routes). A formal webhook/auth *security audit* has not been done — still open, see Cross-Cutting Status.
+2. ~~Stripe webhook security audit + rate limiting~~ — **Done (2026-09-17).** Rate limiting now covers invite/apply/sign routes plus the auth and tenant-payment endpoints it was missing from. The formal security audit (webhook HMAC, org isolation, file access, auth/role gating) is complete — see Cross-Cutting Status for the full write-up.
 3. ~~Error monitoring (Sentry)~~ — **Done.** Wired into API, mobile, and web.
 4. ~~Autopay UI toggle (mobile)~~ — **Done.** `AutopaySetupSheet.tsx`.
 5. ~~End-to-end ACH smoke test in Stripe sandbox~~ — **Done (2026-09-17).** Success, failure, and refund all verified against real Stripe test-mode objects through the app's actual webhook handler — see §12's write-up. Connect onboarding *completion* (charges/payouts enabled) remains a Stripe-hosted, human-driven step by design — confirmed via a real `StripePermissionError` when attempting to bypass it via API — not something any automated test can complete.
@@ -1126,8 +1208,9 @@ _Sourced from MVP review, 2026-05-26. Re-verified against code 2026-09-16 — it
 
 16. ~~Module gating infrastructure~~ — **Done (2026-09-17).** `Organization.activeModules`, the `requireModule(...)` API middleware, and the web `<ModuleGate>` component now exist and are wired to Modules 9 (Owner Portal) and 11 (Reporting & Analytics) — see #12 and `docs/reference/modules.md`. Activation is currently a manual toggle (Settings → Organization, or `PATCH /organizations/:orgId`), not Stripe Subscription Item billing — that wiring is still open and is the remaining step before selling these as paid upsells.
 17. **Background/credit check integration for Module 1** — the application + e-signature flow is built; the screening/credit-check step (TransUnion SmartMove or equivalent) against the existing `screeningConsentAt`/`ssnFullEncrypted`/`govtIdNumber` fields is not.
-18. **Formal security review** — a cross-org work-order scoping leak was found and fixed reactively (07-19-2026); no audit pass has been done to look for others across auth, file access, org isolation, and webhook HMAC verification.
+18. ~~Formal security review~~ — **Done (2026-09-17).** Systematic audit across auth, file access, org isolation, and webhook HMAC verification, following on from the reactive 07-19-2026 work-order leak fix; found and fixed two further org-scoping gaps plus a rate-limiting gap and an identity-spoofing vector — see Cross-Cutting Status for the full write-up.
 19. **Notification preferences + contact-manager shortcut (mobile Account tab)** — spec'd in §8 but not implemented.
+20. **iOS/Android device smoke test + full App Store submission prep** — icons/splash and a privacy policy landed 09-17-2026 (see Phase 3 table), but a real on-device pass, EAS build credentials, and Apple/Google developer account setup are still outside what this environment can verify or provide.
 
 ### Months 3–6 (growth phase)
 
@@ -1137,7 +1220,7 @@ _Sourced from MVP review, 2026-05-26. Re-verified against code 2026-09-16 — it
 14. **Vacancy listing syndication** — Module 8. Top-of-funnel capture from Zillow/Apartments.com.
 15. **AI maintenance triage** — differentiator; auto-categorizes and prioritizes work orders on submission.
 
-> **Bottom line (updated 2026-09-17):** The product has moved past most of its original MVP gap list — activation flow, autopay, Sentry, rate limiting, SMS, and attachments are all fully shipped, and two "Low priority" modules (Owner Portal, Reporting & Analytics) are now fully built functionally, ahead of schedule, including payment void's ledger reversal. Module gating infrastructure has also landed (`activeModules`, `requireModule`, `<ModuleGate>`), so Modules 9 and 11 are no longer unbilled free features — they're now behind a manual on/off toggle pending real Stripe billing. The ACH money-movement path has also now been smoke-tested end-to-end (success, failure, refund) against real Stripe test-mode objects, with no bugs found. What's left before a confident launch is narrower and more operational: a real security review, Stripe Subscription Item billing to replace the manual module toggle, and finishing Module 1's screening step. The data model was already designed for all of this — execution continues to be the remaining work, not redesign.
+> **Bottom line (updated 2026-09-17):** The product has moved past most of its original MVP gap list — activation flow, autopay, Sentry, rate limiting, SMS, and attachments are all fully shipped, and two "Low priority" modules (Owner Portal, Reporting & Analytics) are now fully built functionally, ahead of schedule, including payment void's ledger reversal. Module gating infrastructure has also landed (`activeModules`, `requireModule`, `<ModuleGate>`), so Modules 9 and 11 are no longer unbilled free features — they're now behind a manual on/off toggle pending real Stripe billing. The ACH money-movement path has also now been smoke-tested end-to-end (success, failure, refund) against real Stripe test-mode objects, with no bugs found. The formal security review is also now done (org isolation, file access, webhook HMAC, auth/role gating), with the gaps it found fixed in the same pass. What's left before a confident launch is narrower and more operational: Stripe Subscription Item billing to replace the manual module toggle, finishing Module 1's screening step, and a real on-device mobile smoke test plus App Store/Play Store submission logistics (EAS credentials, developer accounts) that no sandboxed environment can complete. The data model was already designed for all of this — execution continues to be the remaining work, not redesign.
 
 ---
 
