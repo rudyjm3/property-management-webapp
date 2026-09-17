@@ -144,20 +144,33 @@ export async function createWorkOrder(organizationId: string, data: CreateWorkOr
     propertyId = unit.propertyId;
 
     if (data.tenantId) {
-      // Verify the caller-supplied tenantId actually belongs to this org —
-      // otherwise a client could attach another org's tenant to this work
-      // order, leaking that tenant's name/email/phone into this org's data
-      // and surfacing the work order in the wrong tenant's portal.
-      const tenant = await prisma.tenant.findFirst({
-        where: { id: data.tenantId, organizationId },
-        select: { id: true },
+      // Verify the caller-supplied tenantId actually belongs to this org AND
+      // has an active/month-to-month lease on this specific unit — checking
+      // organizationId alone would still let staff attach a tenant from an
+      // unrelated unit, and getTenantWorkOrders() surfaces any work order
+      // matching { tenantId } in that tenant's own portal regardless of
+      // which unit it's for.
+      const participant = await prisma.leaseParticipant.findFirst({
+        where: {
+          tenantId: data.tenantId,
+          lease: {
+            unitId,
+            status: { in: ['active', 'month_to_month'] },
+            deletedAt: null,
+          },
+        },
+        select: { tenantId: true },
       });
 
-      if (!tenant) {
-        throw new AppError(404, 'TENANT_NOT_FOUND', 'Tenant not found in your organization.');
+      if (!participant) {
+        throw new AppError(
+          404,
+          'TENANT_NOT_FOUND',
+          'Tenant not found or has no active lease on this unit.'
+        );
       }
 
-      tenantId = tenant.id;
+      tenantId = participant.tenantId;
     }
   } else {
     // Property-level (common area): no unit, no tenant.
