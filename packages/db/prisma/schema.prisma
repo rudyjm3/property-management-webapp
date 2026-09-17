@@ -210,6 +210,7 @@ model Unit {
   workOrders         WorkOrder[]
   messages           Message[]
   rentalApplications RentalApplication[]
+  appliances         Appliance[]
 
   @@unique([propertyId, unitNumber])
   @@index([propertyId])
@@ -232,6 +233,44 @@ enum UnitStatus {
   notice
   maintenance
   unlisted
+}
+
+// ─── Appliance (Unit Intelligence & Appliance Registry) ────────────────────────
+
+model Appliance {
+  id                String             @id @default(uuid())
+  unitId            String             @map("unit_id")
+  category          ApplianceCategory  @default(other)
+  make              String?            @db.VarChar(100)
+  model             String?            @db.VarChar(100)
+  serialNumber      String?            @map("serial_number") @db.VarChar(100)
+  purchaseDate      DateTime?          @map("purchase_date") @db.Date
+  installDate       DateTime?          @map("install_date") @db.Date
+  warrantyExpiresAt DateTime?          @map("warranty_expires_at") @db.Date
+  notes             String?
+  createdAt         DateTime           @default(now()) @map("created_at")
+  updatedAt         DateTime           @updatedAt @map("updated_at")
+
+  unit       Unit        @relation(fields: [unitId], references: [id], onDelete: Cascade)
+  workOrders WorkOrder[]
+
+  @@index([unitId])
+  @@map("appliances")
+}
+
+// End-of-life threshold, in years, used to compute a replacement alert off
+// installDate (falling back to purchaseDate) — see appliance.service.ts.
+enum ApplianceCategory {
+  hvac
+  water_heater
+  refrigerator
+  dishwasher
+  washer
+  dryer
+  oven_range
+  microwave
+  garbage_disposal
+  other
 }
 
 // ─── Tenant ───────────────────────────────────────────────────────────────────
@@ -695,6 +734,7 @@ model WorkOrder {
   assignedToUserId       String?                @map("assigned_to_user_id")
   submittedByUserId      String?                @map("submitted_by_user_id")
   vendorId               String?                @map("vendor_id")
+  applianceId            String?                @map("appliance_id")
   title                  String?                @db.VarChar(200)
   category               WorkOrderCategory      @default(general)
   priority               WorkOrderPriority      @default(routine)
@@ -720,16 +760,18 @@ model WorkOrder {
   createdAt              DateTime               @default(now()) @map("created_at")
   updatedAt              DateTime               @updatedAt @map("updated_at")
 
-  unit            Unit?     @relation(fields: [unitId], references: [id])
-  property        Property? @relation(fields: [propertyId], references: [id])
-  tenant          Tenant?   @relation(fields: [tenantId], references: [id])
-  assignedTo      User?     @relation("AssignedWorkOrders", fields: [assignedToUserId], references: [id])
-  submittedByUser User?     @relation("SubmittedWorkOrders", fields: [submittedByUserId], references: [id])
-  vendor          Vendor?   @relation(fields: [vendorId], references: [id])
+  unit            Unit?      @relation(fields: [unitId], references: [id])
+  property        Property?  @relation(fields: [propertyId], references: [id])
+  tenant          Tenant?    @relation(fields: [tenantId], references: [id])
+  assignedTo      User?      @relation("AssignedWorkOrders", fields: [assignedToUserId], references: [id])
+  submittedByUser User?      @relation("SubmittedWorkOrders", fields: [submittedByUserId], references: [id])
+  vendor          Vendor?    @relation(fields: [vendorId], references: [id])
+  appliance       Appliance? @relation(fields: [applianceId], references: [id])
   messages        Message[]
 
   @@index([unitId])
   @@index([propertyId])
+  @@index([applianceId])
   @@index([status])
   @@index([priority])
   @@index([createdAt])

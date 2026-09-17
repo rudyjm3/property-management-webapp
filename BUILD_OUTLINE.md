@@ -1315,9 +1315,51 @@ a third-party e-sign vendor).
 - QR code label generation for each appliance (scannable in the field)
 - Appliance-linked work orders (tie a work order directly to a specific appliance)
 
-**Data hooks already in schema:**
+**Status (2026-09-17):** Built and gated behind `requireModule('unit_intelligence')` —
+see `docs/reference/modules.md` for the full gating detail. Summary:
 
-- `appliance_count` (Unit) — maintained by module, surfaced on unit detail
+- **Appliance records** — shipped. A new `Appliance` model (`unitId` FK, `category`,
+  `make`, `model`, `serialNumber`, `purchaseDate`, `installDate`,
+  `warrantyExpiresAt`, `notes`) with full CRUD (`GET/POST/PATCH/DELETE
+  .../units/:unitId/appliances[/:applianceId]`) and a matching card on the
+  existing unit detail page — no separate appliance-management page.
+- **Maintenance cost tracking** — shipped, but reuses `WorkOrder`'s existing
+  `laborCost`/`partsCost`/`totalCost` fields rather than a dedicated cost
+  ledger. Each appliance exposes a `totalMaintenanceCost` (sum of
+  `totalCost` across its linked work orders) and a `maintenanceHistory` list
+  (the linked work orders themselves, most recent first) on `GET
+  .../appliances/:applianceId`. There's no separate cost-over-time chart —
+  just the running total and the underlying work order list.
+- **Age-based replacement alerts** — shipped, computed on read (not
+  persisted, no background job or notification). Each category has a rough
+  industry-standard expected lifespan in years (`APPLIANCE_EXPECTED_LIFESPAN_YEARS`
+  in `packages/shared/src/constants/index.ts`, e.g. 15 years for HVAC, 10 for
+  a water heater) — not manufacturer-specific data. An appliance is flagged
+  `approaching` within 2 years of that threshold and `overdue` once past it,
+  measured from `installDate` (falling back to `purchaseDate`, or no alert
+  at all if neither is recorded). Surfaced as a badge in the unit detail
+  appliance table only — not on the manager dashboard.
+- **QR code label generation** — shipped, using the `qrcode` npm package
+  client-side (no new API endpoint). There is **no dedicated per-appliance
+  detail page** in the app — the QR code encodes a link back to the unit
+  detail page with `?appliance=<id>`, which scrolls to and highlights that
+  appliance's row. "Print" opens the browser print dialog scoped to the
+  label via a print media query; it is not a formatted label-stock template.
+- **Appliance-linked work orders** — shipped. `WorkOrder.applianceId`
+  (optional FK, `ON DELETE SET NULL`) can be set on work order creation or
+  update; the API verifies the appliance belongs to the *same unit* as the
+  work order. Deleting an appliance keeps its work order history — the FK
+  is nulled out, not cascaded.
+- **`Unit.applianceCount`** — no longer a dormant placeholder. It's
+  recomputed (via `appliance.count()`, not an in-place increment/decrement —
+  see `docs/reference/schema.md` for why) inside the same transaction as
+  every appliance create/delete, so it always reflects the live count
+  rather than being maintained by a separate reconciliation job.
+- **Not built**: no S3-backed photo/document attachment specific to
+  appliances (the module roadmap lists S3 as a dependency, but appliance
+  records don't yet hook into the existing `Document` model the way units
+  and leases do), and no manufacturer-specific lifespan data or recall
+  lookups — the expected-lifespan table is a rough per-category heuristic.
 
 **Dependencies:** Unit management, S3
 

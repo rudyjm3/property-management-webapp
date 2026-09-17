@@ -12,6 +12,7 @@ const MODULE_LABELS: Record<ModuleKey, string> = {
   [MODULE_KEYS.REPORTING_ANALYTICS]: 'Reporting & Analytics',
   [MODULE_KEYS.ADVANCED_TENANT_ONBOARDING]: 'Advanced Tenant Onboarding',
   [MODULE_KEYS.ADVANCED_PAYMENTS_ACCOUNTING]: 'Advanced Payments & Accounting',
+  [MODULE_KEYS.UNIT_INTELLIGENCE]: 'Unit Intelligence & Appliance Registry',
 };
 
 const TIMEZONES = [

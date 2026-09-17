@@ -13,10 +13,11 @@ and gate the UI via a `<ModuleGate module="...">` wrapper.
 **As of 2026-09-17, that gating infrastructure now exists** — see "Module
 gating infrastructure" below — and is wired to the two modules that had
 shipped ahead of it, Module 9 (Owner Portal) and Module 11 (Reporting &
-Analytics), the screening step of Module 1 (Advanced Tenant Onboarding), and
-now Module 4 (Advanced Payments & Accounting), all built across this and
-the prior update. No other module has functionality built yet, so no other
-module needs gating today. Full Stripe Subscription Item billing is still
+Analytics), the screening step of Module 1 (Advanced Tenant Onboarding),
+Module 4 (Advanced Payments & Accounting), and now Module 2 (Unit
+Intelligence & Appliance Registry), all built across this and prior
+updates. No other module has functionality built yet, so no other module
+needs gating today. Full Stripe Subscription Item billing is still
 not wired — see the "How activation works today" section for the interim
 mechanism. What exists beyond gating is (a) base schema columns kept
 nullable so a module's eventual launch doesn't require a breaking
@@ -29,8 +30,8 @@ with what a module will later extend.
   (`packages/db/prisma/migrations/20260917041729_add_organization_active_modules`).
   Holds module keys, defined in `packages/shared/src/constants/index.ts` as
   `MODULE_KEYS` (`owner_portal`, `reporting_analytics`,
-  `advanced_tenant_onboarding`, `advanced_payments_accounting`) /
-  `ALL_MODULE_KEYS`.
+  `advanced_tenant_onboarding`, `advanced_payments_accounting`,
+  `unit_intelligence`) / `ALL_MODULE_KEYS`.
 - **API middleware**: `requireModule(moduleKey)`
   (`apps/api/src/middleware/module-gate.ts`) — looks up the requesting org's
   `activeModules` fresh per request and returns `403 MODULE_NOT_ACTIVE` if
@@ -42,7 +43,12 @@ with what a module will later extend.
     `/organizations/:orgId/owners` and `/organizations/:orgId/reports`
     (manager-facing, on top of their existing `requireRoles(['owner',
     'manager'])`) and to `/owner-portal` (owner-facing, on top of
-    `requireOwnerAuth`).
+    `requireOwnerAuth`). Module 2 (Unit Intelligence & Appliance Registry)
+    uses the same pattern one level deeper in the route tree: in
+    `apps/api/src/routes/units.ts`, `requireModule('unit_intelligence')` is
+    applied to the whole `appliances.ts` router at its
+    `/:unitId/appliances` mount (which itself nests under
+    `/organizations/:orgId/properties/:propertyId/units`).
   - **Per-route gating**: in `apps/api/src/routes/applications.ts`, to just
     the screening endpoints (`POST`/`GET .../applications/:id/screening`)
     — the rest of that router (application links, review, e-sign) ships
@@ -85,7 +91,11 @@ with what a module will later extend.
   new "Schedule E Export" tab on `/reports` (whose own tab-visibility check
   additionally requires `reporting_analytics`, since the page itself is
   gated on that module), and around the management-fee-default field under
-  Settings → Organization.
+  Settings → Organization. Module 2 also has no standalone page — its
+  "Appliances" card, its Add/Edit/QR-label controls, and the appliance
+  picker on the unit detail page's "Add Work Order" modal are all wrapped
+  in `<ModuleGate module="unit_intelligence">` on the existing unit detail
+  page (`/properties/[id]/units/[unitId]`).
 - **How activation works today**: no Stripe Subscription Item billing yet.
   Instead, `PATCH /organizations/:orgId` accepts an `activeModules` array
   (validated against `ALL_MODULE_KEYS`), settable by any `owner`/`manager` —
@@ -93,7 +103,7 @@ with what a module will later extend.
   the web app. This is a placeholder switch to make gating testable, not a
   billing decision; it should move behind an actual paid-subscription check
   once module billing ships. The seed script's demo org
-  (`packages/db/prisma/seed.ts`) defaults all four gated modules to active
+  (`packages/db/prisma/seed.ts`) defaults all five gated modules to active
   so local dev/demo environments see the gated features without an extra
   step.
 
@@ -107,16 +117,19 @@ active, see the module table below and `schema.md`.
 | Column | Table | Module | Notes |
 |---|---|---|---|
 | `taxParcelId` | Property | Advanced Payments & Accounting | Needed for Schedule E / tax reporting |
-| `applianceCount` | Unit | Unit Intelligence & Appliance Registry | Maintained by module, surfaced on unit detail |
 | `lastInspectionAt` | Unit | Inspections & Compliance | Timestamp of most recent inspection, any type |
 | `w9OnFile` | Vendor | Vendor & Contractor Mgmt (1099 reporting) | Required for contractor tax reporting |
+
+`applianceCount` (Unit) is no longer in this table — it's populated for real
+as of Module 2 (Unit Intelligence & Appliance Registry), see the module
+table below.
 
 ## Module list (priority per BUILD_OUTLINE.md §7)
 
 | # | Module | Price | Priority | Schema hooks already in place | Depends on |
 |---|---|---|---|---|---|
 | 1 | Advanced Tenant Onboarding | $25–40/mo | High | `ssnFullEncrypted`, `screeningConsentAt`, `govtIdNumber`, `govtIdType` (Tenant + RentalApplication) — application form + e-signature ship ungated as base product (`routes/apply.ts`, `routes/sign.ts`, `rental-application.service.ts`); **screening step gated + shipped (2026-09-17)**: consent + encrypted SSN/govt ID capture on the application form, a `ScreeningCheck` model, manager trigger/review UI (`applications/:id`), and approve/deny driving the existing tenant+lease path. `requireModule('advanced_tenant_onboarding')` on the screening endpoints only (rest of `applications.ts` stays ungated). **TransUnion SmartMove call is mocked** (`screening-provider.client.ts`) — no credentials in any environment | Lease Mgmt, Stripe, Resend, 3rd-party screening API |
-| 2 | Unit Intelligence & Appliance Registry | $20–35/mo | High | `applianceCount` (Unit) | Unit Mgmt, S3 |
+| 2 | Unit Intelligence & Appliance Registry | $20–35/mo | High | **Fully shipped (2026-09-17)**: a new `Appliance` model (`unitId` FK, category, make/model/serial, purchase/install dates, warranty expiry) with CRUD at `.../units/:unitId/appliances[/:applianceId]`, gated behind `requireModule('unit_intelligence')` at that router's mount in `units.ts`. Maintenance cost tracking reuses `WorkOrder.laborCost/partsCost/totalCost` via a new optional `WorkOrder.applianceId` FK (`ON DELETE SET NULL`) — each appliance exposes a summed `totalMaintenanceCost` and its linked-work-order history. Age-based replacement alerts are computed on read from a per-category expected-lifespan heuristic (`APPLIANCE_EXPECTED_LIFESPAN_YEARS`), not manufacturer data, and are **not** surfaced on the dashboard — only as a badge in the unit detail appliance table. QR labels are generated client-side (`qrcode` npm package, no new endpoint) and link to the unit detail page with `?appliance=<id>` — there's **no separate per-appliance detail page**. `Unit.applianceCount` is recomputed via `appliance.count()` on every create/delete (not an in-place increment, since that column defaults to `null` and Postgres NULL-propagation would otherwise leave a naive `{ increment: 1 }` permanently null). **Not built**: appliance photo/document attachments (no S3 hookup despite S3 being a listed dependency), manufacturer-specific lifespan/recall data. See `BUILD_OUTLINE.md` §14 Module 2 for the full breakdown. | Unit Mgmt, S3 |
 | 3 | Grounds & Property Maintenance | $25–40/mo | Medium | none dedicated — reuses WorkOrder + Vendor | Work Orders, Vendor |
 | 4 | Advanced Payments & Accounting | $30–50/mo | Medium | `taxParcelId` (Property) — used by the Schedule E export. **Gated + shipped (2026-09-17)**: card payments alongside ACH (`initiate-card` on both manager and tenant payment routes); partial payment recording with balance carry-forward, *manager-recorded payments only* (`Payment.record-partial`) — no partial support in the self-service ACH/card checkout flow; a `SecurityDepositDisposition` model formalizing the deposit-vs-deductions math the move-out workflow already computes (reconciled against itemized deductions, **not** against move-in/move-out inspection records — Module 6 doesn't exist); a `Disbursement` model computing a configurable management-fee deduction against an `OwnerStatement.distributionAmount` — **bookkeeping only, no payout wiring** since Owner Portal has no owner bank-account capture; a Schedule E data export (`GET /reports/schedule-e-export`) gated behind both `advanced_payments_accounting` and `reporting_analytics`. P&L by property is **not** duplicated here — see the "Notes on base-product overlap" section below for why it stays under Module 11. `requireModule('advanced_payments_accounting')` applied per-route across `payments.ts`, `tenants-portal.ts`, `leases.ts`, `owners.ts`, and `reports.ts` — see "Module gating infrastructure" above | Stripe, Payment Ledger, Owner Portal (for disbursements) |
 | 5 | Vendor & Contractor Management | $20–30/mo | Medium | `w9OnFile` (Vendor) | Work Orders |
@@ -198,3 +211,16 @@ above and `BUILD_OUTLINE.md` §14 Module 4 for exactly what shipped vs. what
 didn't (notably: no partial payments through the self-service checkout
 flow, no inspection-based deposit reconciliation, and no actual owner
 payout wiring behind disbursements).
+
+**Module 2 (Unit Intelligence & Appliance Registry)** is like Module 4 in
+that none of its functionality predates the module — the `Appliance` model,
+its CRUD routes, `WorkOrder.applianceId`, and the unit detail page's
+appliance UI were all built and gated together in this change, entirely
+behind `requireModule('unit_intelligence')` applied at the `appliances.ts`
+router mount (router-mount gating, like `owners`/`reports`, just one level
+deeper since appliances nest under a unit under a property). See the
+module table above and `BUILD_OUTLINE.md` §14 Module 2 for exactly what
+shipped vs. what's simplified (notably: replacement alerts use a rough
+per-category heuristic rather than manufacturer data, QR codes link to the
+unit page rather than a dedicated appliance page, and there's no S3-backed
+appliance photo/document attachment).

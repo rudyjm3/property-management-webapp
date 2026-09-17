@@ -1,12 +1,63 @@
 'use client';
 
 import { useCallback, useEffect, useState } from 'react';
-import { useParams, useRouter } from 'next/navigation';
+import { useParams, useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import { api } from '@/lib/api';
 import { formatPhone } from '@/lib/phone';
 import DocumentPanel from '@/components/DocumentPanel';
+import ModuleGate from '@/components/ModuleGate';
+import ApplianceQrModal from '@/components/ApplianceQrModal';
 import { useAuth } from '@/contexts/AuthContext';
+import { MODULE_KEYS } from '@propflow/shared';
+
+const APPLIANCE_CATEGORIES = [
+  'hvac',
+  'water_heater',
+  'refrigerator',
+  'dishwasher',
+  'washer',
+  'dryer',
+  'oven_range',
+  'microwave',
+  'garbage_disposal',
+  'other',
+];
+
+const APPLIANCE_CATEGORY_LABELS: Record<string, string> = {
+  hvac: 'HVAC',
+  water_heater: 'Water Heater',
+  refrigerator: 'Refrigerator',
+  dishwasher: 'Dishwasher',
+  washer: 'Washer',
+  dryer: 'Dryer',
+  oven_range: 'Oven / Range',
+  microwave: 'Microwave',
+  garbage_disposal: 'Garbage Disposal',
+  other: 'Other',
+};
+
+interface ApplianceReplacementAlert {
+  ageYears: number;
+  expectedLifespanYears: number;
+  status: 'approaching' | 'overdue';
+}
+
+interface Appliance {
+  id: string;
+  unitId: string;
+  category: string;
+  make: string | null;
+  model: string | null;
+  serialNumber: string | null;
+  purchaseDate: string | null;
+  installDate: string | null;
+  warrantyExpiresAt: string | null;
+  notes: string | null;
+  replacementAlert: ApplianceReplacementAlert | null;
+  totalMaintenanceCost: number;
+  workOrderCount: number;
+}
 
 const UNIT_STATUS_LABELS: Record<string, string> = {
   occupied: 'Occupied',
@@ -84,10 +135,12 @@ const WO_PRIORITIES = ['routine','urgent','emergency'];
 export default function UnitDetailPage() {
   const params = useParams();
   const router = useRouter();
+  const searchParams = useSearchParams();
   const propertyId = params.id as string;
   const unitId = params.unitId as string;
   const { profile } = useAuth();
   const isMaintenance = profile?.role === 'maintenance';
+  const unitIntelligenceActive = profile?.organization.activeModules?.includes(MODULE_KEYS.UNIT_INTELLIGENCE) ?? false;
   const [unit, setUnit] = useState<UnitDetail | null>(null);
   const [loading, setLoading] = useState(true);
   const [showEditUnit, setShowEditUnit] = useState(false);
@@ -97,7 +150,17 @@ export default function UnitDetailPage() {
   const [woDescription, setWoDescription] = useState('');
   const [woCategory, setWoCategory] = useState('general');
   const [woPriority, setWoPriority] = useState('routine');
+  const [woApplianceId, setWoApplianceId] = useState('');
   const [woSubmitting, setWoSubmitting] = useState(false);
+
+  // Appliances (Module 2 — Unit Intelligence & Appliance Registry)
+  const [appliances, setAppliances] = useState<Appliance[]>([]);
+  const [appliancesLoading, setAppliancesLoading] = useState(false);
+  const [showApplianceModal, setShowApplianceModal] = useState(false);
+  const [editingAppliance, setEditingAppliance] = useState<Appliance | null>(null);
+  const [applianceSubmitting, setApplianceSubmitting] = useState(false);
+  const [qrAppliance, setQrAppliance] = useState<Appliance | null>(null);
+  const highlightedApplianceId = searchParams.get('appliance');
 
   const loadUnit = useCallback(async () => {
     try {
@@ -110,9 +173,27 @@ export default function UnitDetailPage() {
     }
   }, [propertyId, unitId]);
 
+  const loadAppliances = useCallback(async () => {
+    setAppliancesLoading(true);
+    try {
+      const data = await api.appliances.list(propertyId, unitId);
+      setAppliances(data);
+    } catch (err) {
+      console.error('Failed to load appliances:', err);
+    } finally {
+      setAppliancesLoading(false);
+    }
+  }, [propertyId, unitId]);
+
   useEffect(() => {
     loadUnit();
   }, [loadUnit]);
+
+  useEffect(() => {
+    if (unitIntelligenceActive) {
+      loadAppliances();
+    }
+  }, [unitIntelligenceActive, loadAppliances]);
 
   async function handleCreateWorkOrder(e: React.FormEvent) {
     e.preventDefault();
@@ -125,6 +206,7 @@ export default function UnitDetailPage() {
         description: woDescription,
         category: woCategory,
         priority: woPriority,
+        applianceId: woApplianceId || null,
         tenantId: unit.leases.find((l) => l.status === 'active')?.participants.find((p) => p.isPrimary)?.tenant.id ?? null,
       });
       router.push(`/work-orders/${wo.id}`);
@@ -132,6 +214,48 @@ export default function UnitDetailPage() {
       console.error('Failed to create work order:', err);
     } finally {
       setWoSubmitting(false);
+    }
+  }
+
+  async function handleSaveAppliance(e: React.FormEvent<HTMLFormElement>) {
+    e.preventDefault();
+    const formData = new FormData(e.currentTarget);
+    const data = {
+      category: formData.get('category') as string,
+      make: (formData.get('make') as string) || null,
+      model: (formData.get('model') as string) || null,
+      serialNumber: (formData.get('serialNumber') as string) || null,
+      purchaseDate: (formData.get('purchaseDate') as string) || null,
+      installDate: (formData.get('installDate') as string) || null,
+      warrantyExpiresAt: (formData.get('warrantyExpiresAt') as string) || null,
+      notes: (formData.get('notes') as string) || null,
+    };
+    setApplianceSubmitting(true);
+    try {
+      if (editingAppliance) {
+        await api.appliances.update(propertyId, unitId, editingAppliance.id, data);
+      } else {
+        await api.appliances.create(propertyId, unitId, data);
+      }
+      setShowApplianceModal(false);
+      setEditingAppliance(null);
+      await loadAppliances();
+    } catch (err) {
+      console.error('Failed to save appliance:', err);
+    } finally {
+      setApplianceSubmitting(false);
+    }
+  }
+
+  async function handleDeleteAppliance(appliance: Appliance) {
+    if (!confirm(`Remove this ${APPLIANCE_CATEGORY_LABELS[appliance.category] ?? appliance.category} record? Its work order history is kept but unlinked.`)) {
+      return;
+    }
+    try {
+      await api.appliances.delete(propertyId, unitId, appliance.id);
+      await loadAppliances();
+    } catch (err) {
+      console.error('Failed to delete appliance:', err);
     }
   }
 
@@ -201,6 +325,20 @@ export default function UnitDetailPage() {
                     </select>
                   </div>
                 </div>
+                {unitIntelligenceActive && appliances.length > 0 && (
+                  <div className="form-group">
+                    <label>Appliance (optional)</label>
+                    <select value={woApplianceId} onChange={(e) => setWoApplianceId(e.target.value)}>
+                      <option value="">-- None --</option>
+                      {appliances.map((a) => (
+                        <option key={a.id} value={a.id}>
+                          {APPLIANCE_CATEGORY_LABELS[a.category] ?? a.category}
+                          {a.make || a.model ? ` — ${[a.make, a.model].filter(Boolean).join(' ')}` : ''}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                )}
                 <div className="form-group">
                   <label>Description *</label>
                   <textarea
@@ -506,6 +644,207 @@ export default function UnitDetailPage() {
             </form>
           </div>
         </div>
+      )}
+
+      {/* Appliances — Module 2: Unit Intelligence & Appliance Registry */}
+      <ModuleGate module={MODULE_KEYS.UNIT_INTELLIGENCE}>
+        <div className="card" style={{ marginTop: '24px' }}>
+          <div className="card-body">
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
+              <h3 style={{ fontSize: '16px', fontWeight: 600 }}>Appliances ({appliances.length})</h3>
+              {!isMaintenance && (
+                <button
+                  className="btn btn-secondary"
+                  onClick={() => {
+                    setEditingAppliance(null);
+                    setShowApplianceModal(true);
+                  }}
+                >
+                  + Add Appliance
+                </button>
+              )}
+            </div>
+            {appliancesLoading ? (
+              <div className="empty-state" style={{ padding: '24px' }}>
+                <p>Loading appliances…</p>
+              </div>
+            ) : appliances.length === 0 ? (
+              <div className="empty-state" style={{ padding: '24px' }}>
+                <p>No appliances recorded for this unit</p>
+              </div>
+            ) : (
+              <div className="table-container">
+                <table>
+                  <thead>
+                    <tr>
+                      <th>Category</th>
+                      <th>Make / Model</th>
+                      <th>Serial #</th>
+                      <th>Installed</th>
+                      <th>Warranty Expires</th>
+                      <th>Maintenance Cost</th>
+                      <th>Status</th>
+                      <th></th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {appliances.map((a) => (
+                      <tr
+                        key={a.id}
+                        id={`appliance-${a.id}`}
+                        style={highlightedApplianceId === a.id ? { background: 'var(--color-bg)' } : undefined}
+                      >
+                        <td>{APPLIANCE_CATEGORY_LABELS[a.category] ?? a.category}</td>
+                        <td>{[a.make, a.model].filter(Boolean).join(' ') || '--'}</td>
+                        <td>{a.serialNumber || '--'}</td>
+                        <td>
+                          {a.installDate
+                            ? new Date(a.installDate).toLocaleDateString()
+                            : a.purchaseDate
+                              ? new Date(a.purchaseDate).toLocaleDateString()
+                              : '--'}
+                        </td>
+                        <td>{a.warrantyExpiresAt ? new Date(a.warrantyExpiresAt).toLocaleDateString() : '--'}</td>
+                        <td>${a.totalMaintenanceCost.toLocaleString()}</td>
+                        <td>
+                          {a.replacementAlert ? (
+                            <span className={`badge ${a.replacementAlert.status === 'overdue' ? 'badge-danger' : 'badge-notice'}`}>
+                              {a.replacementAlert.status === 'overdue' ? 'Replace soon' : 'Aging'} ({a.replacementAlert.ageYears}y)
+                            </span>
+                          ) : (
+                            <span className="badge badge-occupied">OK</span>
+                          )}
+                        </td>
+                        <td>
+                          <div style={{ display: 'flex', gap: '6px', justifyContent: 'flex-end' }}>
+                            <button className="btn btn-sm btn-secondary" onClick={() => setQrAppliance(a)}>
+                              QR Label
+                            </button>
+                            {!isMaintenance && (
+                              <>
+                                <button
+                                  className="btn btn-sm btn-secondary"
+                                  onClick={() => {
+                                    setEditingAppliance(a);
+                                    setShowApplianceModal(true);
+                                  }}
+                                >
+                                  Edit
+                                </button>
+                                <button className="btn btn-sm btn-danger" onClick={() => handleDeleteAppliance(a)}>
+                                  Remove
+                                </button>
+                              </>
+                            )}
+                          </div>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
+        </div>
+      </ModuleGate>
+
+      {showApplianceModal && (
+        <div
+          className="modal-overlay"
+          onClick={() => {
+            setShowApplianceModal(false);
+            setEditingAppliance(null);
+          }}
+        >
+          <div className="modal" onClick={(e) => e.stopPropagation()}>
+            <div className="modal-header">
+              <h2 className="modal-title">{editingAppliance ? 'Edit Appliance' : 'Add Appliance'}</h2>
+              <button
+                className="modal-close"
+                onClick={() => {
+                  setShowApplianceModal(false);
+                  setEditingAppliance(null);
+                }}
+              >
+                ×
+              </button>
+            </div>
+            <form onSubmit={handleSaveAppliance}>
+              <div className="modal-body">
+                <div className="form-row">
+                  <div className="form-group">
+                    <label>Category *</label>
+                    <select name="category" required defaultValue={editingAppliance?.category ?? 'other'}>
+                      {APPLIANCE_CATEGORIES.map((c) => (
+                        <option key={c} value={c}>
+                          {APPLIANCE_CATEGORY_LABELS[c]}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                  <div className="form-group">
+                    <label>Serial Number</label>
+                    <input name="serialNumber" defaultValue={editingAppliance?.serialNumber ?? ''} />
+                  </div>
+                </div>
+                <div className="form-row">
+                  <div className="form-group">
+                    <label>Make</label>
+                    <input name="make" defaultValue={editingAppliance?.make ?? ''} />
+                  </div>
+                  <div className="form-group">
+                    <label>Model</label>
+                    <input name="model" defaultValue={editingAppliance?.model ?? ''} />
+                  </div>
+                </div>
+                <div className="form-row">
+                  <div className="form-group">
+                    <label>Purchase Date</label>
+                    <input type="date" name="purchaseDate" defaultValue={editingAppliance?.purchaseDate?.slice(0, 10) ?? ''} />
+                  </div>
+                  <div className="form-group">
+                    <label>Install Date</label>
+                    <input type="date" name="installDate" defaultValue={editingAppliance?.installDate?.slice(0, 10) ?? ''} />
+                  </div>
+                </div>
+                <div className="form-group">
+                  <label>Warranty Expires</label>
+                  <input type="date" name="warrantyExpiresAt" defaultValue={editingAppliance?.warrantyExpiresAt?.slice(0, 10) ?? ''} />
+                </div>
+                <div className="form-group">
+                  <label>Notes</label>
+                  <textarea name="notes" rows={3} defaultValue={editingAppliance?.notes ?? ''} />
+                </div>
+              </div>
+              <div className="modal-footer">
+                <button
+                  type="button"
+                  className="btn btn-secondary"
+                  onClick={() => {
+                    setShowApplianceModal(false);
+                    setEditingAppliance(null);
+                  }}
+                  disabled={applianceSubmitting}
+                >
+                  Cancel
+                </button>
+                <button type="submit" className="btn btn-primary" disabled={applianceSubmitting}>
+                  {applianceSubmitting ? 'Saving…' : 'Save Appliance'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {qrAppliance && (
+        <ApplianceQrModal
+          appliance={qrAppliance}
+          unitNumber={unit.unitNumber}
+          propertyId={propertyId}
+          unitId={unitId}
+          onClose={() => setQrAppliance(null)}
+        />
       )}
 
       {/* Work Orders */}

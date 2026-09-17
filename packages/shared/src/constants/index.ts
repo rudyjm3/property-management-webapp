@@ -24,6 +24,37 @@ export const UNIT_TYPES = [
 ] as const;
 export const UNIT_STATUSES = ['vacant', 'occupied', 'notice', 'maintenance', 'unlisted'] as const;
 
+// ─── Appliance (Unit Intelligence & Appliance Registry) ────────────────────────
+
+export const APPLIANCE_CATEGORIES = [
+  'hvac',
+  'water_heater',
+  'refrigerator',
+  'dishwasher',
+  'washer',
+  'dryer',
+  'oven_range',
+  'microwave',
+  'garbage_disposal',
+  'other',
+] as const;
+
+// Expected end-of-life, in years from install date (or purchase date if no
+// install date is recorded), used to compute the age-based replacement alert.
+// Rough industry-standard figures — not manufacturer-specific.
+export const APPLIANCE_EXPECTED_LIFESPAN_YEARS: Record<(typeof APPLIANCE_CATEGORIES)[number], number> = {
+  hvac: 15,
+  water_heater: 10,
+  refrigerator: 13,
+  dishwasher: 10,
+  washer: 10,
+  dryer: 13,
+  oven_range: 15,
+  microwave: 9,
+  garbage_disposal: 12,
+  other: 10,
+};
+
 // ─── Tenant ───────────────────────────────────────────────────────────────────
 
 export const PORTAL_STATUSES = ['invited', 'active', 'never_logged_in'] as const;
@@ -161,6 +192,7 @@ export const MODULE_KEYS = {
   REPORTING_ANALYTICS: 'reporting_analytics',
   ADVANCED_TENANT_ONBOARDING: 'advanced_tenant_onboarding',
   ADVANCED_PAYMENTS_ACCOUNTING: 'advanced_payments_accounting',
+  UNIT_INTELLIGENCE: 'unit_intelligence',
 } as const;
 
 export type ModuleKey = (typeof MODULE_KEYS)[keyof typeof MODULE_KEYS];

@@ -41,6 +41,7 @@ const workOrderInclude = {
   assignedTo: { select: { id: true, name: true, email: true } },
   submittedByUser: { select: { id: true, name: true, role: true } },
   vendor: { select: { id: true, companyName: true, contactName: true, phonePrimary: true } },
+  appliance: { select: { id: true, category: true, make: true, model: true } },
 };
 
 // Org scoping: unit-scoped orders resolve via unit → property; property-level
@@ -111,6 +112,7 @@ export async function getWorkOrder(organizationId: string, workOrderId: string) 
 interface CreateWorkOrderData {
   unitId?: string | null;
   propertyId?: string | null;
+  applianceId?: string | null;
   title?: string | null;
   category: string;
   priority?: string;
@@ -127,6 +129,7 @@ export async function createWorkOrder(organizationId: string, data: CreateWorkOr
   let unitId: string | null = null;
   let propertyId: string | null = null;
   let tenantId: string | null = null;
+  let applianceId: string | null = null;
 
   if (data.unitId) {
     // Unit-scoped: verify unit belongs to org; property always derived from the
@@ -172,6 +175,22 @@ export async function createWorkOrder(organizationId: string, data: CreateWorkOr
 
       tenantId = participant.tenantId;
     }
+
+    if (data.applianceId) {
+      // Verify the appliance belongs to this specific unit — an appliance
+      // record from a different unit (even in the same org) must never be
+      // linkable to this work order.
+      const appliance = await prisma.appliance.findFirst({
+        where: { id: data.applianceId, unitId },
+        select: { id: true },
+      });
+
+      if (!appliance) {
+        throw new AppError(404, 'APPLIANCE_NOT_FOUND', 'Appliance not found on this unit.');
+      }
+
+      applianceId = appliance.id;
+    }
   } else {
     // Property-level (common area): no unit, no tenant.
     if (!data.propertyId) {
@@ -209,6 +228,7 @@ export async function createWorkOrder(organizationId: string, data: CreateWorkOr
       preferredContactWindow: data.preferredContactWindow ?? null,
       slaDeadlineAt: computeSlaDeadline(requestedPriority),
       tenantId,
+      applianceId,
       submittedByUserId: data.submittedByUserId ?? null,
       // Some local DB states have NOT NULL without default on these columns.
       photosBefore: [],
@@ -229,6 +249,7 @@ interface UpdateWorkOrderData {
   isCapitalProject?: boolean;
   assignedToUserId?: string | null;
   vendorId?: string | null;
+  applianceId?: string | null;
   scheduledAt?: string | null;
   resolutionNotes?: string | null;
   laborCost?: number | null;
@@ -275,6 +296,22 @@ export async function updateWorkOrder(
     });
     if (!assignee) {
       throw new AppError(404, 'USER_NOT_FOUND', 'Assignee not found in your organization.');
+    }
+  }
+  if (data.applianceId) {
+    if (!existing.unitId) {
+      throw new AppError(
+        400,
+        'NO_UNIT_FOR_APPLIANCE',
+        'Property-level work orders cannot be linked to an appliance.'
+      );
+    }
+    const appliance = await prisma.appliance.findFirst({
+      where: { id: data.applianceId, unitId: existing.unitId },
+      select: { id: true },
+    });
+    if (!appliance) {
+      throw new AppError(404, 'APPLIANCE_NOT_FOUND', "Appliance not found on this work order's unit.");
     }
   }
 
