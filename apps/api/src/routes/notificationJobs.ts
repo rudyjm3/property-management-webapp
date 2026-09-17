@@ -1,4 +1,5 @@
 import { Router, Request, Response, NextFunction } from 'express';
+import { timingSafeEqual } from 'crypto';
 import * as notifService from '../services/notification.service';
 
 const router = Router({ mergeParams: true });
@@ -16,7 +17,11 @@ function requireCronSecret(req: Request, res: Response, next: NextFunction): voi
 
   const auth = req.headers.authorization ?? '';
   const provided = auth.startsWith('Bearer ') ? auth.slice(7) : '';
-  if (provided !== secret) {
+  const providedBuf = Buffer.from(provided);
+  const secretBuf = Buffer.from(secret);
+  const valid =
+    providedBuf.length === secretBuf.length && timingSafeEqual(providedBuf, secretBuf);
+  if (!valid) {
     res.status(401).json({ error: { code: 'UNAUTHORIZED', message: 'Invalid or missing cron secret.' } });
     return;
   }

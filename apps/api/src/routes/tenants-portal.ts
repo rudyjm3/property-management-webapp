@@ -7,6 +7,7 @@ import * as messageService from '../services/message.service';
 import { generateUploadPresignedUrl, buildStorageKey } from '../services/storage.service';
 import type { SubmitWorkOrderInput, UpdateTenantProfileInput } from '@propflow/shared';
 import { updateTenantProfileSchema } from '@propflow/shared';
+import { paymentRateLimit } from '../middleware/rate-limit';
 
 const router = Router();
 
@@ -57,7 +58,7 @@ router.get('/payments', async (req: Request, res: Response, next: NextFunction) 
 });
 
 // POST /api/v1/tenant/payments/initiate
-router.post('/payments/initiate', async (req: Request, res: Response, next: NextFunction) => {
+router.post('/payments/initiate', paymentRateLimit, async (req: Request, res: Response, next: NextFunction) => {
   try {
     const { tenantId, orgId } = req.tenant!;
     const { paymentId } = req.body as { paymentId: string };
@@ -76,7 +77,7 @@ router.post('/payments/initiate', async (req: Request, res: Response, next: Next
 
 
 // POST /api/v1/tenant/payments/initiate-multi
-router.post('/payments/initiate-multi', async (req: Request, res: Response, next: NextFunction) => {
+router.post('/payments/initiate-multi', paymentRateLimit, async (req: Request, res: Response, next: NextFunction) => {
   try {
     const { tenantId, orgId } = req.tenant!;
     const { paymentIds } = req.body as { paymentIds: string[] };

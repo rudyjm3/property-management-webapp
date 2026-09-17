@@ -13,9 +13,9 @@ const router = Router({ mergeParams: true });
 
 const requireManagerAccess = requireRoles(['owner', 'manager']);
 
-/** Resolve the calling user's ID from auth middleware or the x-user-id header. */
+/** Resolve the calling user's ID from auth middleware. */
 function resolveUserId(req: Request): string {
-  const userId = req.user?.userId ?? (req.headers['x-user-id'] as string | undefined);
+  const userId = req.user?.userId;
   if (!userId) throw new AppError(401, 'UNAUTHORIZED', 'Missing user identity');
   return userId;
 }
