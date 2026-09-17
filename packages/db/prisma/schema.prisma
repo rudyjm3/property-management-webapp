@@ -10,45 +10,52 @@ datasource db {
 // ─── Organization ─────────────────────────────────────────────────────────────
 
 model Organization {
-  id                   String             @id @default(uuid())
-  name                 String             @db.VarChar(200)
-  slug                 String             @unique @db.VarChar(200)
-  logoUrl              String?            @map("logo_url")
-  email                String?            @db.VarChar(320)
-  phone                String?            @db.VarChar(20)
-  timezone             String             @default("America/Chicago") @db.VarChar(100)
-  dateFormat           String?            @map("date_format") @db.VarChar(20)
-  planTier             PlanTier           @default(starter) @map("plan_tier")
-  stripeCustomerId     String?            @unique @map("stripe_customer_id")
-  stripeSubscriptionId String?            @map("stripe_subscription_id")
+  id                            String               @id @default(uuid())
+  name                          String               @db.VarChar(200)
+  slug                          String               @unique @db.VarChar(200)
+  logoUrl                       String?              @map("logo_url")
+  email                         String?              @db.VarChar(320)
+  phone                         String?              @db.VarChar(20)
+  timezone                      String               @default("America/Chicago") @db.VarChar(100)
+  dateFormat                    String?              @map("date_format") @db.VarChar(20)
+  planTier                      PlanTier             @default(starter) @map("plan_tier")
+  stripeCustomerId              String?              @unique @map("stripe_customer_id")
+  stripeSubscriptionId          String?              @map("stripe_subscription_id")
   subscriptionStatus            SubscriptionStatus   @default(trialing) @map("subscription_status")
   trialEndsAt                   DateTime?            @map("trial_ends_at")
   stripeAccountId               String?              @unique @map("stripe_account_id")
   stripeAccountStatus           ConnectAccountStatus @default(not_connected) @map("stripe_account_status")
   stripeAccountDetailsSubmitted Boolean              @default(false) @map("stripe_account_details_submitted")
-  lateFeeAmount        Decimal            @default(50) @map("late_fee_amount") @db.Decimal(10, 2)
-  gracePeriodDays      Int                @default(5) @map("grace_period_days")
-  rentDueDay           Int                @default(1) @map("rent_due_day")
+  lateFeeAmount                 Decimal              @default(50) @map("late_fee_amount") @db.Decimal(10, 2)
+  gracePeriodDays               Int                  @default(5) @map("grace_period_days")
+  rentDueDay                    Int                  @default(1) @map("rent_due_day")
   // Add-on module gating — module keys the org has active (e.g. "owner_portal").
   // No billing wiring yet; see packages/shared/src/constants/modules.ts for the key list.
-  activeModules        String[]           @default([]) @map("active_modules")
-  createdAt            DateTime           @default(now()) @map("created_at")
-  updatedAt            DateTime           @updatedAt @map("updated_at")
+  activeModules                 String[]             @default([]) @map("active_modules")
+  // Advanced Payments & Accounting (Module 4) — org-wide default management-fee
+  // percentage deducted from an owner's gross distribution when a Disbursement
+  // is created. Overridable per-disbursement; only meaningful once the module
+  // is active, but kept ungated on the schema so it's never a breaking migration.
+  defaultManagementFeePct       Decimal              @default(10.00) @map("default_management_fee_pct") @db.Decimal(5, 2)
+  createdAt                     DateTime             @default(now()) @map("created_at")
+  updatedAt                     DateTime             @updatedAt @map("updated_at")
 
-  users               User[]
-  properties          Property[]
-  tenants             Tenant[]
-  vendors             Vendor[]
-  messages            Message[]
-  documents           Document[]
-  notifications       Notification[]
-  ledgerEntries       LedgerEntry[]
-  rentalApplications  RentalApplication[]
-  owners              Owner[]
-  ownerStatements     OwnerStatement[]
-  vacancyHistory      VacancyHistory[]
-  savedReports        SavedReport[]
-  screeningChecks     ScreeningCheck[]
+  users                       User[]
+  properties                  Property[]
+  tenants                     Tenant[]
+  vendors                     Vendor[]
+  messages                    Message[]
+  documents                   Document[]
+  notifications               Notification[]
+  ledgerEntries               LedgerEntry[]
+  rentalApplications          RentalApplication[]
+  owners                      Owner[]
+  ownerStatements             OwnerStatement[]
+  vacancyHistory              VacancyHistory[]
+  savedReports                SavedReport[]
+  screeningChecks             ScreeningCheck[]
+  disbursements               Disbursement[]
+  securityDepositDispositions SecurityDepositDisposition[]
 
   @@map("organizations")
 }
@@ -143,11 +150,12 @@ model Property {
   createdAt             DateTime     @default(now()) @map("created_at")
   updatedAt             DateTime     @updatedAt @map("updated_at")
 
-  organization    Organization    @relation(fields: [organizationId], references: [id])
+  organization    Organization     @relation(fields: [organizationId], references: [id])
   units           Unit[]
   workOrders      WorkOrder[]
   propertyOwners  PropertyOwner[]
   ownerStatements OwnerStatement[]
+  disbursements   Disbursement[]
   vacancyHistory  VacancyHistory[]
 
   @@index([organizationId])
@@ -197,11 +205,11 @@ model Unit {
   createdAt            DateTime   @default(now()) @map("created_at")
   updatedAt            DateTime   @updatedAt @map("updated_at")
 
-  property            Property            @relation(fields: [propertyId], references: [id])
-  leases              Lease[]
-  workOrders          WorkOrder[]
-  messages            Message[]
-  rentalApplications  RentalApplication[]
+  property           Property            @relation(fields: [propertyId], references: [id])
+  leases             Lease[]
+  workOrders         WorkOrder[]
+  messages           Message[]
+  rentalApplications RentalApplication[]
 
   @@unique([propertyId, unitNumber])
   @@index([propertyId])
@@ -229,62 +237,62 @@ enum UnitStatus {
 // ─── Tenant ───────────────────────────────────────────────────────────────────
 
 model Tenant {
-  id                            String           @id @default(uuid())
-  organizationId                String           @map("organization_id")
-  supabaseUserId                String?          @unique @map("supabase_user_id")
+  id                            String            @id @default(uuid())
+  organizationId                String            @map("organization_id")
+  supabaseUserId                String?           @unique @map("supabase_user_id")
   // Identity
-  email                         String           @db.VarChar(320)
-  name                          String           @db.VarChar(200)
-  fullLegalName                 String?          @map("full_legal_name") @db.VarChar(200)
-  preferredName                 String?          @map("preferred_name") @db.VarChar(200)
-  dateOfBirth                   DateTime?        @map("date_of_birth") @db.Date
-  phone                         String?          @db.VarChar(20)
-  phoneSecondary                String?          @map("phone_secondary") @db.VarChar(20)
+  email                         String            @db.VarChar(320)
+  name                          String            @db.VarChar(200)
+  fullLegalName                 String?           @map("full_legal_name") @db.VarChar(200)
+  preferredName                 String?           @map("preferred_name") @db.VarChar(200)
+  dateOfBirth                   DateTime?         @map("date_of_birth") @db.Date
+  phone                         String?           @db.VarChar(20)
+  phoneSecondary                String?           @map("phone_secondary") @db.VarChar(20)
   preferredContact              PreferredContact? @map("preferred_contact")
-  languagePreference            String?          @map("language_preference") @db.VarChar(10)
-  avatarUrl                     String?          @map("avatar_url")
+  languagePreference            String?           @map("language_preference") @db.VarChar(10)
+  avatarUrl                     String?           @map("avatar_url")
   // Screening — module-flagged, all nullable; populate when Screening module ships
-  ssnLast4                      String?          @map("ssn_last4") @db.Char(4)
-  ssnFullEncrypted              String?          @map("ssn_full_encrypted")
+  ssnLast4                      String?           @map("ssn_last4") @db.Char(4)
+  ssnFullEncrypted              String?           @map("ssn_full_encrypted")
   govtIdType                    GovernmentIdType? @map("govt_id_type")
-  govtIdNumber                  String?          @map("govt_id_number")
-  screeningConsentAt            DateTime?        @map("screening_consent_at")
+  govtIdNumber                  String?           @map("govt_id_number")
+  screeningConsentAt            DateTime?         @map("screening_consent_at")
   // Address history
-  currentAddress                String?          @map("current_address") @db.VarChar(500)
-  previousAddress               String?          @map("previous_address") @db.VarChar(500)
+  currentAddress                String?           @map("current_address") @db.VarChar(500)
+  previousAddress               String?           @map("previous_address") @db.VarChar(500)
   // Employment & income
-  employerName                  String?          @map("employer_name") @db.VarChar(200)
-  employerPhone                 String?          @map("employer_phone") @db.VarChar(20)
-  monthlyGrossIncome            Decimal?         @map("monthly_gross_income") @db.Decimal(10, 2)
-  incomeSource                  IncomeSource?    @map("income_source")
+  employerName                  String?           @map("employer_name") @db.VarChar(200)
+  employerPhone                 String?           @map("employer_phone") @db.VarChar(20)
+  monthlyGrossIncome            Decimal?          @map("monthly_gross_income") @db.Decimal(10, 2)
+  incomeSource                  IncomeSource?     @map("income_source")
   // Emergency contacts
-  emergencyContactName          String?          @map("emergency_contact_name") @db.VarChar(200)
-  emergencyContactPhone         String?          @map("emergency_contact_phone") @db.VarChar(20)
-  emergencyContact1Relationship String?          @map("emergency_contact_1_relationship") @db.VarChar(100)
-  emergencyContact1Email        String?          @map("emergency_contact_1_email") @db.VarChar(320)
-  emergencyContact2Name         String?          @map("emergency_contact_2_name") @db.VarChar(200)
-  emergencyContact2Phone        String?          @map("emergency_contact_2_phone") @db.VarChar(20)
-  emergencyContact2Relationship String?          @map("emergency_contact_2_relationship") @db.VarChar(100)
+  emergencyContactName          String?           @map("emergency_contact_name") @db.VarChar(200)
+  emergencyContactPhone         String?           @map("emergency_contact_phone") @db.VarChar(20)
+  emergencyContact1Relationship String?           @map("emergency_contact_1_relationship") @db.VarChar(100)
+  emergencyContact1Email        String?           @map("emergency_contact_1_email") @db.VarChar(320)
+  emergencyContact2Name         String?           @map("emergency_contact_2_name") @db.VarChar(200)
+  emergencyContact2Phone        String?           @map("emergency_contact_2_phone") @db.VarChar(20)
+  emergencyContact2Relationship String?           @map("emergency_contact_2_relationship") @db.VarChar(100)
   // Vehicles & pets (JSONB)
   vehicles                      Json?
   pets                          Json?
   // Portal
-  portalStatus                  PortalStatus     @default(never_logged_in) @map("portal_status")
-  portalInvitedAt               DateTime?        @map("portal_invited_at")
-  notifPaymentConfirm           String?          @map("notif_payment_confirm") @db.VarChar(20)
-  notifWorkOrderUpdate          String?          @map("notif_work_order_update") @db.VarChar(20)
-  notifMessage                  String?          @map("notif_message") @db.VarChar(20)
-  expoPushToken                 String?          @map("expo_push_token") @db.VarChar(200)
+  portalStatus                  PortalStatus      @default(never_logged_in) @map("portal_status")
+  portalInvitedAt               DateTime?         @map("portal_invited_at")
+  notifPaymentConfirm           String?           @map("notif_payment_confirm") @db.VarChar(20)
+  notifWorkOrderUpdate          String?           @map("notif_work_order_update") @db.VarChar(20)
+  notifMessage                  String?           @map("notif_message") @db.VarChar(20)
+  expoPushToken                 String?           @map("expo_push_token") @db.VarChar(200)
   // Invite-code activation (mobile onboarding)
-  inviteCode                    String?          @unique @map("invite_code") @db.Char(8)
-  inviteCodeExpiresAt           DateTime?        @map("invite_code_expires_at")
+  inviteCode                    String?           @unique @map("invite_code") @db.Char(8)
+  inviteCodeExpiresAt           DateTime?         @map("invite_code_expires_at")
   // Autopay
-  autopayEnabled                Boolean          @default(false) @map("autopay_enabled")
-  stripeCustomerId              String?          @unique @map("stripe_customer_id")
-  stripeDefaultPaymentMethodId  String?          @map("stripe_default_payment_method_id")
-  createdAt                     DateTime         @default(now()) @map("created_at")
-  updatedAt                     DateTime         @updatedAt @map("updated_at")
-  deletedAt                     DateTime?        @map("deleted_at")
+  autopayEnabled                Boolean           @default(false) @map("autopay_enabled")
+  stripeCustomerId              String?           @unique @map("stripe_customer_id")
+  stripeDefaultPaymentMethodId  String?           @map("stripe_default_payment_method_id")
+  createdAt                     DateTime          @default(now()) @map("created_at")
+  updatedAt                     DateTime          @updatedAt @map("updated_at")
+  deletedAt                     DateTime?         @map("deleted_at")
 
   organization      Organization       @relation(fields: [organizationId], references: [id])
   leaseParticipants LeaseParticipant[]
@@ -300,55 +308,55 @@ model Tenant {
 // ─── Rental Application ───────────────────────────────────────────────────────
 
 model RentalApplication {
-  id             String                   @id @default(uuid())
-  organizationId String                   @map("organization_id")
-  unitId         String                   @map("unit_id")
-  token          String                   @unique @db.VarChar(36)
-  status         RentalApplicationStatus  @default(pending)
+  id                    String                  @id @default(uuid())
+  organizationId        String                  @map("organization_id")
+  unitId                String                  @map("unit_id")
+  token                 String                  @unique @db.VarChar(36)
+  status                RentalApplicationStatus @default(pending)
   // Applicant info
-  applicantName        String             @map("applicant_name") @db.VarChar(200)
-  applicantEmail       String             @map("applicant_email") @db.VarChar(320)
-  applicantPhone       String?            @map("applicant_phone") @db.VarChar(20)
-  dateOfBirth          DateTime?          @map("date_of_birth") @db.Date
-  currentAddress       String?            @map("current_address") @db.VarChar(500)
-  previousAddress      String?            @map("previous_address") @db.VarChar(500)
+  applicantName         String                  @map("applicant_name") @db.VarChar(200)
+  applicantEmail        String                  @map("applicant_email") @db.VarChar(320)
+  applicantPhone        String?                 @map("applicant_phone") @db.VarChar(20)
+  dateOfBirth           DateTime?               @map("date_of_birth") @db.Date
+  currentAddress        String?                 @map("current_address") @db.VarChar(500)
+  previousAddress       String?                 @map("previous_address") @db.VarChar(500)
   // Employment
-  employerName         String?            @map("employer_name") @db.VarChar(200)
-  employerPhone        String?            @map("employer_phone") @db.VarChar(20)
-  monthlyGrossIncome   Decimal?           @map("monthly_gross_income") @db.Decimal(10, 2)
-  incomeSource         IncomeSource?      @map("income_source")
+  employerName          String?                 @map("employer_name") @db.VarChar(200)
+  employerPhone         String?                 @map("employer_phone") @db.VarChar(20)
+  monthlyGrossIncome    Decimal?                @map("monthly_gross_income") @db.Decimal(10, 2)
+  incomeSource          IncomeSource?           @map("income_source")
   // Household
-  occupantCount        Int                @default(1) @map("occupant_count")
-  pets                 Json?
-  vehicles             Json?
+  occupantCount         Int                     @default(1) @map("occupant_count")
+  pets                  Json?
+  vehicles              Json?
   // Emergency contact
-  emergencyContactName  String?           @map("emergency_contact_name") @db.VarChar(200)
-  emergencyContactPhone String?           @map("emergency_contact_phone") @db.VarChar(20)
+  emergencyContactName  String?                 @map("emergency_contact_name") @db.VarChar(200)
+  emergencyContactPhone String?                 @map("emergency_contact_phone") @db.VarChar(20)
   // Consent
-  consentGiven         Boolean            @default(false) @map("consent_given")
-  consentIp            String?            @map("consent_ip") @db.VarChar(45)
-  consentAt            DateTime?          @map("consent_at")
+  consentGiven          Boolean                 @default(false) @map("consent_given")
+  consentIp             String?                 @map("consent_ip") @db.VarChar(45)
+  consentAt             DateTime?               @map("consent_at")
   // Screening — Advanced Tenant Onboarding module (gated); captured here
   // before a Tenant record exists, then copied onto Tenant's own dormant
   // screening fields when the application is approved. ssnFullEncrypted and
   // govtIdNumber are ciphertext at rest (see encryption.service.ts) — never
   // plaintext, never logged.
-  screeningConsentAt     DateTime?        @map("screening_consent_at")
-  screeningConsentIp     String?          @map("screening_consent_ip") @db.VarChar(45)
-  ssnFullEncrypted       String?          @map("ssn_full_encrypted")
-  govtIdType             GovernmentIdType? @map("govt_id_type")
-  govtIdNumber           String?          @map("govt_id_number")
+  screeningConsentAt    DateTime?               @map("screening_consent_at")
+  screeningConsentIp    String?                 @map("screening_consent_ip") @db.VarChar(45)
+  ssnFullEncrypted      String?                 @map("ssn_full_encrypted")
+  govtIdType            GovernmentIdType?       @map("govt_id_type")
+  govtIdNumber          String?                 @map("govt_id_number")
   // Review
-  reviewNotes          String?            @map("review_notes")
-  reviewedAt           DateTime?          @map("reviewed_at")
-  reviewedByUserId     String?            @map("reviewed_by_user_id")
-  createdTenantId      String?            @map("created_tenant_id")
-  submittedAt          DateTime?          @map("submitted_at")
-  createdAt            DateTime           @default(now()) @map("created_at")
-  updatedAt            DateTime           @updatedAt @map("updated_at")
+  reviewNotes           String?                 @map("review_notes")
+  reviewedAt            DateTime?               @map("reviewed_at")
+  reviewedByUserId      String?                 @map("reviewed_by_user_id")
+  createdTenantId       String?                 @map("created_tenant_id")
+  submittedAt           DateTime?               @map("submitted_at")
+  createdAt             DateTime                @default(now()) @map("created_at")
+  updatedAt             DateTime                @updatedAt @map("updated_at")
 
-  organization    Organization      @relation(fields: [organizationId], references: [id])
-  unit            Unit              @relation(fields: [unitId], references: [id])
+  organization    Organization     @relation(fields: [organizationId], references: [id])
+  unit            Unit             @relation(fields: [unitId], references: [id])
   screeningChecks ScreeningCheck[]
 
   @@index([organizationId])
@@ -365,23 +373,23 @@ model RentalApplication {
 // pending real TransUnion SmartMove API credentials. Never store raw
 // SSN/govt ID here; those live only as ciphertext on RentalApplication/Tenant.
 model ScreeningCheck {
-  id                  String              @id @default(uuid())
-  organizationId      String              @map("organization_id")
-  rentalApplicationId String              @map("rental_application_id")
-  provider            ScreeningProvider   @default(transunion_smartmove)
-  status              ScreeningStatus     @default(pending)
+  id                  String             @id @default(uuid())
+  organizationId      String             @map("organization_id")
+  rentalApplicationId String             @map("rental_application_id")
+  provider            ScreeningProvider  @default(transunion_smartmove)
+  status              ScreeningStatus    @default(pending)
   decision            ScreeningDecision?
-  providerReferenceId String?             @map("provider_reference_id")
-  reportUrl           String?             @map("report_url")
-  errorMessage        String?             @map("error_message")
-  requestedByUserId   String              @map("requested_by_user_id")
-  requestedAt         DateTime            @default(now()) @map("requested_at")
-  completedAt         DateTime?           @map("completed_at")
-  createdAt           DateTime            @default(now()) @map("created_at")
-  updatedAt           DateTime            @updatedAt @map("updated_at")
+  providerReferenceId String?            @map("provider_reference_id")
+  reportUrl           String?            @map("report_url")
+  errorMessage        String?            @map("error_message")
+  requestedByUserId   String             @map("requested_by_user_id")
+  requestedAt         DateTime           @default(now()) @map("requested_at")
+  completedAt         DateTime?          @map("completed_at")
+  createdAt           DateTime           @default(now()) @map("created_at")
+  updatedAt           DateTime           @updatedAt @map("updated_at")
 
-  organization      Organization       @relation(fields: [organizationId], references: [id])
-  rentalApplication RentalApplication  @relation(fields: [rentalApplicationId], references: [id])
+  organization      Organization      @relation(fields: [organizationId], references: [id])
+  rentalApplication RentalApplication @relation(fields: [rentalApplicationId], references: [id])
 
   @@index([organizationId])
   @@index([rentalApplicationId])
@@ -488,16 +496,49 @@ model Lease {
   updatedAt                   DateTime              @updatedAt @map("updated_at")
   deletedAt                   DateTime?             @map("deleted_at")
 
-  unit         Unit               @relation(fields: [unitId], references: [id])
-  renewalOf    Lease?             @relation("LeaseRenewals", fields: [renewalOfLeaseId], references: [id])
-  renewals     Lease[]            @relation("LeaseRenewals")
-  participants LeaseParticipant[]
-  payments     Payment[]
+  unit                       Unit                        @relation(fields: [unitId], references: [id])
+  renewalOf                  Lease?                      @relation("LeaseRenewals", fields: [renewalOfLeaseId], references: [id])
+  renewals                   Lease[]                     @relation("LeaseRenewals")
+  participants               LeaseParticipant[]
+  payments                   Payment[]
+  securityDepositDisposition SecurityDepositDisposition?
 
   @@index([unitId])
   @@index([status])
   @@index([endDate])
   @@map("leases")
+}
+
+// ─── SecurityDepositDisposition (Advanced Payments & Accounting / Module 4) ───
+// Formalizes the deposit-vs-deductions math the move-out workflow already
+// computes onto `Lease.securityDeposit*` into a persisted, auditable
+// disposition record. Reconciles against the itemized deductions captured at
+// move-out — NOT against move-in/move-out inspection records, since the
+// Inspections & Compliance module (Module 6) doesn't exist yet; the
+// moveIn/moveOutConditionNotes fields below are manager-entered free text
+// until that module ships a real inspection model to link against.
+
+model SecurityDepositDisposition {
+  id                    String                @id @default(uuid())
+  organizationId        String                @map("organization_id")
+  leaseId               String                @unique @map("lease_id")
+  depositAmount         Decimal               @map("deposit_amount") @db.Decimal(10, 2)
+  totalDeductions       Decimal               @map("total_deductions") @db.Decimal(10, 2)
+  returnAmount          Decimal               @map("return_amount") @db.Decimal(10, 2)
+  status                SecurityDepositStatus
+  deductions            Json
+  moveInConditionNotes  String?               @map("move_in_condition_notes")
+  moveOutConditionNotes String?               @map("move_out_condition_notes")
+  reconciledByUserId    String                @map("reconciled_by_user_id")
+  reconciledAt          DateTime              @default(now()) @map("reconciled_at")
+  createdAt             DateTime              @default(now()) @map("created_at")
+  updatedAt             DateTime              @updatedAt @map("updated_at")
+
+  organization Organization @relation(fields: [organizationId], references: [id])
+  lease        Lease        @relation(fields: [leaseId], references: [id])
+
+  @@index([organizationId])
+  @@map("security_deposit_dispositions")
 }
 
 enum LeaseStatus {
@@ -566,13 +607,22 @@ model Payment {
   lateFeeWaived         Boolean?      @map("late_fee_waived")
   lateFeeWaivedReason   String?       @map("late_fee_waived_reason") @db.VarChar(500)
   notes                 String?
+  // Partial payment handling (Advanced Payments & Accounting / Module 4).
+  // originalAmount preserves the amount that was actually due before a
+  // partial payment reduced `amount` down to what was actually received.
+  // carriedFromPaymentId points a carry-forward payment (the remaining
+  // balance) back at the original payment it was split from.
+  originalAmount        Decimal?      @map("original_amount") @db.Decimal(10, 2)
+  carriedFromPaymentId  String?       @map("carried_from_payment_id")
   createdAt             DateTime      @default(now()) @map("created_at")
   updatedAt             DateTime      @updatedAt @map("updated_at")
   deletedAt             DateTime?     @map("deleted_at")
 
-  lease         Lease         @relation(fields: [leaseId], references: [id])
-  tenant        Tenant        @relation(fields: [tenantId], references: [id])
-  ledgerEntries LedgerEntry[]
+  lease                  Lease         @relation(fields: [leaseId], references: [id])
+  tenant                 Tenant        @relation(fields: [tenantId], references: [id])
+  ledgerEntries          LedgerEntry[]
+  carriedFromPayment     Payment?      @relation("PaymentCarryForward", fields: [carriedFromPaymentId], references: [id])
+  carriedForwardPayments Payment[]     @relation("PaymentCarryForward")
 
   @@index([leaseId])
   @@index([tenantId])
@@ -638,37 +688,37 @@ model LedgerEntry {
 // ─── Work Order ───────────────────────────────────────────────────────────────
 
 model WorkOrder {
-  id                     String            @id @default(uuid())
-  unitId                 String?           @map("unit_id")
-  propertyId             String?           @map("property_id")
-  tenantId               String?           @map("tenant_id")
-  assignedToUserId       String?           @map("assigned_to_user_id")
-  submittedByUserId      String?           @map("submitted_by_user_id")
-  vendorId               String?           @map("vendor_id")
-  title                  String?           @db.VarChar(200)
-  category               WorkOrderCategory @default(general)
-  priority               WorkOrderPriority @default(routine)
-  status                 WorkOrderStatus   @default(new_order)
+  id                     String                 @id @default(uuid())
+  unitId                 String?                @map("unit_id")
+  propertyId             String?                @map("property_id")
+  tenantId               String?                @map("tenant_id")
+  assignedToUserId       String?                @map("assigned_to_user_id")
+  submittedByUserId      String?                @map("submitted_by_user_id")
+  vendorId               String?                @map("vendor_id")
+  title                  String?                @db.VarChar(200)
+  category               WorkOrderCategory      @default(general)
+  priority               WorkOrderPriority      @default(routine)
+  status                 WorkOrderStatus        @default(new_order)
   locationType           WorkOrderLocationType? @map("location_type")
-  isCapitalProject       Boolean           @default(false) @map("is_capital_project")
+  isCapitalProject       Boolean                @default(false) @map("is_capital_project")
   description            String
-  slaDeadlineAt          DateTime?         @map("sla_deadline_at")
-  slaBreached            Boolean           @default(false) @map("sla_breached")
-  entryPermissionGranted Boolean           @default(false) @map("entry_permission_granted")
-  preferredContactWindow String?           @map("preferred_contact_window") @db.VarChar(200)
-  scheduledAt            DateTime?         @map("scheduled_at")
-  completedAt            DateTime?         @map("completed_at")
-  resolutionNotes        String?           @map("resolution_notes")
-  laborCost              Decimal?          @map("labor_cost") @db.Decimal(10, 2)
-  partsCost              Decimal?          @map("parts_cost") @db.Decimal(10, 2)
-  totalCost              Decimal?          @map("total_cost") @db.Decimal(10, 2)
-  chargedToTenant        Boolean?          @map("charged_to_tenant")
-  tenantChargeAmount     Decimal?          @map("tenant_charge_amount") @db.Decimal(10, 2)
-  photosBefore           String[]          @map("photos_before")
-  photosAfter            String[]          @map("photos_after")
-  videoUrl               String?           @map("video_url") @db.VarChar(1000)
-  createdAt              DateTime          @default(now()) @map("created_at")
-  updatedAt              DateTime          @updatedAt @map("updated_at")
+  slaDeadlineAt          DateTime?              @map("sla_deadline_at")
+  slaBreached            Boolean                @default(false) @map("sla_breached")
+  entryPermissionGranted Boolean                @default(false) @map("entry_permission_granted")
+  preferredContactWindow String?                @map("preferred_contact_window") @db.VarChar(200)
+  scheduledAt            DateTime?              @map("scheduled_at")
+  completedAt            DateTime?              @map("completed_at")
+  resolutionNotes        String?                @map("resolution_notes")
+  laborCost              Decimal?               @map("labor_cost") @db.Decimal(10, 2)
+  partsCost              Decimal?               @map("parts_cost") @db.Decimal(10, 2)
+  totalCost              Decimal?               @map("total_cost") @db.Decimal(10, 2)
+  chargedToTenant        Boolean?               @map("charged_to_tenant")
+  tenantChargeAmount     Decimal?               @map("tenant_charge_amount") @db.Decimal(10, 2)
+  photosBefore           String[]               @map("photos_before")
+  photosAfter            String[]               @map("photos_after")
+  videoUrl               String?                @map("video_url") @db.VarChar(1000)
+  createdAt              DateTime               @default(now()) @map("created_at")
+  updatedAt              DateTime               @updatedAt @map("updated_at")
 
   unit            Unit?     @relation(fields: [unitId], references: [id])
   property        Property? @relation(fields: [propertyId], references: [id])
@@ -767,21 +817,21 @@ enum VendorStatus {
 // ─── Message ──────────────────────────────────────────────────────────────────
 
 model Message {
-  id                String    @id @default(uuid())
-  organizationId    String    @map("organization_id")
-  threadId          String?   @map("thread_id") @db.VarChar(36)
-  unitId            String?   @map("unit_id")
-  workOrderId       String?   @map("work_order_id")
-  subject           String?   @db.VarChar(500)
-  senderUserId      String?   @map("sender_user_id")
-  recipientTenantId String?   @map("recipient_tenant_id")
-  body              String
-  attachmentUrl     String?   @map("attachment_url")
-  attachmentStorageKey String? @map("attachment_storage_key") @db.VarChar(1000)
-  attachmentName    String?   @map("attachment_name") @db.VarChar(500)
-  attachmentMimeType String?  @map("attachment_mime_type") @db.VarChar(100)
-  readAt            DateTime? @map("read_at")
-  createdAt         DateTime  @default(now()) @map("created_at")
+  id                   String    @id @default(uuid())
+  organizationId       String    @map("organization_id")
+  threadId             String?   @map("thread_id") @db.VarChar(36)
+  unitId               String?   @map("unit_id")
+  workOrderId          String?   @map("work_order_id")
+  subject              String?   @db.VarChar(500)
+  senderUserId         String?   @map("sender_user_id")
+  recipientTenantId    String?   @map("recipient_tenant_id")
+  body                 String
+  attachmentUrl        String?   @map("attachment_url")
+  attachmentStorageKey String?   @map("attachment_storage_key") @db.VarChar(1000)
+  attachmentName       String?   @map("attachment_name") @db.VarChar(500)
+  attachmentMimeType   String?   @map("attachment_mime_type") @db.VarChar(100)
+  readAt               DateTime? @map("read_at")
+  createdAt            DateTime  @default(now()) @map("created_at")
 
   organization Organization @relation(fields: [organizationId], references: [id])
   sender       User?        @relation("SentMessages", fields: [senderUserId], references: [id])
@@ -798,19 +848,19 @@ model Message {
 // ─── Document ─────────────────────────────────────────────────────────────────
 
 model Document {
-  id               String              @id @default(uuid())
-  organizationId   String              @map("organization_id")
-  entityType       DocumentEntityType  @map("entity_type")
-  entityId         String              @map("entity_id")
-  name             String              @db.VarChar(500)
-  storageKey       String              @map("storage_key")
-  mimeType         String              @map("mime_type") @db.VarChar(100)
-  sizeBytes        Int                 @map("size_bytes")
-  uploadedByUserId String              @map("uploaded_by_user_id")
-  visibleToTenant  Boolean             @default(false) @map("visible_to_tenant")
-  docCategory      DocumentCategory?   @map("doc_category")
-  label            String?             @db.VarChar(200)
-  createdAt        DateTime            @default(now()) @map("created_at")
+  id               String             @id @default(uuid())
+  organizationId   String             @map("organization_id")
+  entityType       DocumentEntityType @map("entity_type")
+  entityId         String             @map("entity_id")
+  name             String             @db.VarChar(500)
+  storageKey       String             @map("storage_key")
+  mimeType         String             @map("mime_type") @db.VarChar(100)
+  sizeBytes        Int                @map("size_bytes")
+  uploadedByUserId String             @map("uploaded_by_user_id")
+  visibleToTenant  Boolean            @default(false) @map("visible_to_tenant")
+  docCategory      DocumentCategory?  @map("doc_category")
+  label            String?            @db.VarChar(200)
+  createdAt        DateTime           @default(now()) @map("created_at")
 
   organization Organization @relation(fields: [organizationId], references: [id])
   uploadedBy   User         @relation("UploadedDocuments", fields: [uploadedByUserId], references: [id])
@@ -855,13 +905,14 @@ model Owner {
 
   // Owner portal auth — mirrors Tenant's portal fields. supabaseUserId is set
   // once the owner accepts their portal invite and activates their account.
-  supabaseUserId String?       @unique @map("supabase_user_id")
-  portalStatus   PortalStatus  @default(never_logged_in) @map("portal_status")
+  supabaseUserId  String?      @unique @map("supabase_user_id")
+  portalStatus    PortalStatus @default(never_logged_in) @map("portal_status")
   portalInvitedAt DateTime?    @map("portal_invited_at")
 
-  organization    Organization    @relation(fields: [organizationId], references: [id])
-  propertyOwners  PropertyOwner[]
-  statements      OwnerStatement[]
+  organization   Organization     @relation(fields: [organizationId], references: [id])
+  propertyOwners PropertyOwner[]
+  statements     OwnerStatement[]
+  disbursements  Disbursement[]
 
   @@unique([organizationId, email])
   @@index([organizationId])
@@ -907,14 +958,55 @@ model OwnerStatement {
   createdAt          DateTime             @default(now()) @map("created_at")
   updatedAt          DateTime             @updatedAt @map("updated_at")
 
-  organization Organization @relation(fields: [organizationId], references: [id])
-  property     Property     @relation(fields: [propertyId], references: [id])
-  owner        Owner        @relation(fields: [ownerId], references: [id])
+  organization  Organization   @relation(fields: [organizationId], references: [id])
+  property      Property       @relation(fields: [propertyId], references: [id])
+  owner         Owner          @relation(fields: [ownerId], references: [id])
+  disbursements Disbursement[]
 
   @@index([organizationId])
   @@index([propertyId])
   @@index([ownerId])
   @@map("owner_statements")
+}
+
+// ─── Disbursement (Advanced Payments & Accounting / Module 4) ────────────────
+// A record of an owner disbursement computed from an OwnerStatement's
+// distributionAmount, with a configurable management-fee deduction. This is
+// a bookkeeping record only — no payout wiring to the owner's bank account
+// (Owner Portal doesn't capture owner bank details), so `status` tracks
+// whether the manager has recorded the money as sent outside the app.
+
+enum DisbursementStatus {
+  pending
+  completed
+  cancelled
+}
+
+model Disbursement {
+  id                    String             @id @default(uuid())
+  organizationId        String             @map("organization_id")
+  ownerStatementId      String             @map("owner_statement_id")
+  ownerId               String             @map("owner_id")
+  propertyId            String             @map("property_id")
+  grossAmount           Decimal            @map("gross_amount") @db.Decimal(12, 2)
+  managementFeePct      Decimal            @map("management_fee_pct") @db.Decimal(5, 2)
+  managementFeeAmount   Decimal            @map("management_fee_amount") @db.Decimal(12, 2)
+  netDisbursementAmount Decimal            @map("net_disbursement_amount") @db.Decimal(12, 2)
+  status                DisbursementStatus @default(pending)
+  referenceNote         String?            @map("reference_note") @db.VarChar(500)
+  disbursedAt           DateTime?          @map("disbursed_at")
+  createdAt             DateTime           @default(now()) @map("created_at")
+  updatedAt             DateTime           @updatedAt @map("updated_at")
+
+  organization   Organization   @relation(fields: [organizationId], references: [id])
+  ownerStatement OwnerStatement @relation(fields: [ownerStatementId], references: [id])
+  owner          Owner          @relation(fields: [ownerId], references: [id])
+  property       Property       @relation(fields: [propertyId], references: [id])
+
+  @@index([organizationId])
+  @@index([ownerStatementId])
+  @@index([ownerId])
+  @@map("disbursements")
 }
 
 // ─── Notification ─────────────────────────────────────────────────────────────
@@ -943,15 +1035,15 @@ model Notification {
 // it against a manually-entered market rate for the same period.
 
 model VacancyHistory {
-  id                  String    @id @default(uuid())
-  organizationId      String    @map("organization_id")
-  propertyId          String?   @map("property_id")
-  snapshotDate        DateTime  @map("snapshot_date") @db.Date
-  totalUnits          Int       @map("total_units")
-  vacantUnits         Int       @map("vacant_units")
-  vacancyRatePct      Decimal   @map("vacancy_rate_pct") @db.Decimal(5, 2)
+  id                   String   @id @default(uuid())
+  organizationId       String   @map("organization_id")
+  propertyId           String?  @map("property_id")
+  snapshotDate         DateTime @map("snapshot_date") @db.Date
+  totalUnits           Int      @map("total_units")
+  vacantUnits          Int      @map("vacant_units")
+  vacancyRatePct       Decimal  @map("vacancy_rate_pct") @db.Decimal(5, 2)
   marketVacancyRatePct Decimal? @map("market_vacancy_rate_pct") @db.Decimal(5, 2)
-  createdAt           DateTime  @default(now()) @map("created_at")
+  createdAt            DateTime @default(now()) @map("created_at")
 
   organization Organization @relation(fields: [organizationId], references: [id])
   property     Property?    @relation(fields: [propertyId], references: [id])
@@ -967,15 +1059,15 @@ model VacancyHistory {
 // managers save/reload a custom report instead of re-picking columns each time.
 
 model SavedReport {
-  id             String   @id @default(uuid())
-  organizationId String   @map("organization_id")
-  createdByUserId String  @map("created_by_user_id")
-  name           String   @db.VarChar(200)
-  source         String   @db.VarChar(50) // financial-summary | financial-trend | rent-roll | spend-by-location | vacancy-snapshot | vacancy-history
-  columns        String[]
-  filters        Json
-  createdAt      DateTime @default(now()) @map("created_at")
-  updatedAt      DateTime @updatedAt @map("updated_at")
+  id              String   @id @default(uuid())
+  organizationId  String   @map("organization_id")
+  createdByUserId String   @map("created_by_user_id")
+  name            String   @db.VarChar(200)
+  source          String   @db.VarChar(50) // financial-summary | financial-trend | rent-roll | spend-by-location | vacancy-snapshot | vacancy-history
+  columns         String[]
+  filters         Json
+  createdAt       DateTime @default(now()) @map("created_at")
+  updatedAt       DateTime @updatedAt @map("updated_at")
 
   organization Organization @relation(fields: [organizationId], references: [id])
   createdBy    User         @relation(fields: [createdByUserId], references: [id])

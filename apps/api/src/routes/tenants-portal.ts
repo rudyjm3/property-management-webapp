@@ -6,8 +6,11 @@ import { validate } from '../middleware/validate';
 import * as messageService from '../services/message.service';
 import { generateUploadPresignedUrl, buildStorageKey } from '../services/storage.service';
 import type { SubmitWorkOrderInput, UpdateTenantProfileInput } from '@propflow/shared';
-import { updateTenantProfileSchema } from '@propflow/shared';
+import { updateTenantProfileSchema, MODULE_KEYS } from '@propflow/shared';
 import { paymentRateLimit } from '../middleware/rate-limit';
+import { requireModule } from '../middleware/module-gate';
+
+const requireAccountingModule = requireModule(MODULE_KEYS.ADVANCED_PAYMENTS_ACCOUNTING);
 
 const router = Router();
 
@@ -94,6 +97,25 @@ router.post('/payments/initiate-multi', paymentRateLimit, async (req: Request, r
   }
 });
 
+
+// POST /api/v1/tenant/payments/initiate-card
+// Advanced Payments & Accounting (Module 4) — card payments alongside ACH.
+router.post('/payments/initiate-card', paymentRateLimit, requireAccountingModule, async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const { tenantId, orgId } = req.tenant!;
+    const { paymentId } = req.body as { paymentId: string };
+
+    if (!paymentId) {
+      res.status(400).json({ error: { code: 'MISSING_PAYMENT_ID', message: 'paymentId is required.' } });
+      return;
+    }
+
+    const result = await tenantPortalService.initiateTenantCardPayment(tenantId, orgId, paymentId);
+    res.json({ data: result });
+  } catch (err) {
+    next(err);
+  }
+});
 
 // ─── Work Orders ─────────────────────────────────────────────────────────────
 

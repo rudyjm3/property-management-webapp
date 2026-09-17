@@ -8,6 +8,7 @@ const MODULE_LABELS: Record<ModuleKey, string> = {
   owner_portal: 'Owner Portal',
   reporting_analytics: 'Reporting & Analytics',
   advanced_tenant_onboarding: 'Advanced Tenant Onboarding',
+  advanced_payments_accounting: 'Advanced Payments & Accounting',
 };
 
 interface ModuleGateProps {

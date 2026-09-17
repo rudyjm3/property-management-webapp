@@ -56,7 +56,15 @@ just because `index.ts` doesn't gate it. As of this writing:
   `advanced_tenant_onboarding`, but via `requireModule(...)` applied to
   just those routes rather than the whole router — the rest of
   `applications.ts` (application links, review, e-sign) ships ungated as
-  base product. See `modules.md` for the full module-gating picture.
+  base product. `advanced_payments_accounting` follows the same
+  per-route pattern in five places: `POST .../payments/:paymentId/{initiate-card,record-partial}`
+  in `payments.ts`, `POST /tenant/payments/initiate-card` in
+  `tenants-portal.ts`, `GET`/`POST .../leases/:leaseId/security-deposit-disposition`
+  in `leases.ts`, the three `.../disbursements` routes in `owners.ts`
+  (stacked on top of that router's `owner_portal` mount-level gate), and
+  `GET .../reports/schedule-e-export` in `reports.ts` (stacked on top of
+  that router's `reporting_analytics` mount-level gate). See `modules.md`
+  for the full module-gating picture.
 - **Partially gated** (mutations require `owner`/`manager`, reads are open to
   any org role): `properties.ts`, `tenants.ts`, `units.ts`; `organizations.ts`
   gates only its settings-update and one settings-read endpoint (and is

@@ -1,15 +1,24 @@
 import { Router, Request, Response, NextFunction } from 'express';
 import { requireRoles } from '../middleware/auth';
+import { requireModule } from '../middleware/module-gate';
 import {
   financialSummaryFiltersSchema,
   revenueTrendFiltersSchema,
   rentRollFiltersSchema,
   spendByLocationFiltersSchema,
+  scheduleEExportFiltersSchema,
+  MODULE_KEYS,
 } from '@propflow/shared';
 import * as reportService from '../services/report.service';
 
 const router = Router({ mergeParams: true });
 const requireManagerAccess = requireRoles(['owner', 'manager']);
+// Schedule E export is an Advanced Payments & Accounting (Module 4) feature
+// layered on top of this router's existing Reporting & Analytics (Module 11)
+// gate — a Schedule E request needs both modules active. P&L-by-property
+// itself stays under financial-summary/Module 11 (see docs/reference/modules.md
+// for why); this only gates the tax-export extension.
+const requireAccountingModule = requireModule(MODULE_KEYS.ADVANCED_PAYMENTS_ACCOUNTING);
 
 // GET /api/v1/organizations/:orgId/reports/financial-summary
 router.get('/financial-summary', requireManagerAccess, async (req: Request, res: Response, next: NextFunction) => {
@@ -49,6 +58,18 @@ router.get('/spend-by-location', requireManagerAccess, async (req: Request, res:
   try {
     const filters = spendByLocationFiltersSchema.parse(req.query);
     const data = await reportService.getSpendByLocation(req.params.orgId as string, filters);
+    res.json({ data });
+  } catch (err) {
+    next(err);
+  }
+});
+
+// GET /api/v1/organizations/:orgId/reports/schedule-e-export
+// Advanced Payments & Accounting (Module 4).
+router.get('/schedule-e-export', requireManagerAccess, requireAccountingModule, async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const filters = scheduleEExportFiltersSchema.parse(req.query);
+    const data = await reportService.getScheduleEExport(req.params.orgId as string, filters);
     res.json({ data });
   } catch (err) {
     next(err);

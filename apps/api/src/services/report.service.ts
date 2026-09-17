@@ -635,6 +635,89 @@ export async function getVacancyHistory(
   }));
 }
 
+// ─── Schedule E Export (Advanced Payments & Accounting / Module 4) ───────────
+// A tax-filing-support data export, not a filled IRS Schedule E form: it
+// projects the same income/expense computation getFinancialSummary already
+// does per property onto the subset of fields a preparer needs to fill
+// Schedule E's per-property columns (rents received, repair/maintenance
+// expenses, management fees, net income/loss), plus Property.taxParcelId.
+// Management fees come from any Disbursement rows recorded against that
+// property's OwnerStatements within the period — $0 if none were recorded
+// (e.g. the org doesn't use the Owner Portal / disbursement flow).
+
+export interface ScheduleEExportRow {
+  propertyId: string;
+  propertyName: string;
+  address: string;
+  taxParcelId: string | null;
+  rentsReceived: number;
+  otherIncome: number;
+  repairsAndMaintenanceExpenses: number;
+  managementFees: number;
+  totalExpenses: number;
+  netIncomeOrLoss: number;
+}
+
+export async function getScheduleEExport(
+  organizationId: string,
+  filters: FinancialSummaryFilters
+): Promise<{ periodStart: string; periodEnd: string; rows: ScheduleEExportRow[] }> {
+  const summary = await getFinancialSummary(organizationId, filters);
+
+  const start = new Date(filters.periodStart);
+  const end = new Date(filters.periodEnd);
+  end.setHours(23, 59, 59, 999);
+
+  // Recognize each disbursement's management fee on a single date (createdAt)
+  // rather than matching against its OwnerStatement's period range — an
+  // overlap match would double- (or triple-) count a multi-month statement's
+  // fee across every export period it overlaps. Cancelled disbursements are
+  // excluded entirely since they were never actually charged.
+  const disbursements = await prisma.disbursement.findMany({
+    where: {
+      organizationId,
+      status: { not: 'cancelled' },
+      ...(filters.propertyId ? { propertyId: filters.propertyId } : {}),
+      createdAt: { gte: start, lte: end },
+    },
+    select: { propertyId: true, managementFeeAmount: true },
+  });
+
+  const managementFeesByProperty = new Map<string, number>();
+  for (const d of disbursements) {
+    managementFeesByProperty.set(
+      d.propertyId,
+      (managementFeesByProperty.get(d.propertyId) ?? 0) + Number(d.managementFeeAmount)
+    );
+  }
+
+  const propertyTaxParcelIds = await prisma.property.findMany({
+    where: { organizationId, ...(filters.propertyId ? { id: filters.propertyId } : {}) },
+    select: { id: true, taxParcelId: true },
+  });
+  const taxParcelIdByProperty = new Map(propertyTaxParcelIds.map((p) => [p.id, p.taxParcelId]));
+
+  const rows: ScheduleEExportRow[] = summary.properties.map((p) => {
+    const managementFees = managementFeesByProperty.get(p.propertyId) ?? 0;
+    const rentsReceived = p.incomeBreakdown.rent + p.incomeBreakdown.lateFees;
+    const totalExpenses = p.totalExpenses + managementFees;
+    return {
+      propertyId: p.propertyId,
+      propertyName: p.propertyName,
+      address: p.address,
+      taxParcelId: taxParcelIdByProperty.get(p.propertyId) ?? null,
+      rentsReceived,
+      otherIncome: p.incomeBreakdown.other,
+      repairsAndMaintenanceExpenses: p.totalExpenses,
+      managementFees,
+      totalExpenses,
+      netIncomeOrLoss: rentsReceived + p.incomeBreakdown.other - totalExpenses,
+    };
+  });
+
+  return { periodStart: filters.periodStart, periodEnd: filters.periodEnd, rows };
+}
+
 // ─── Report Builder (Module 11) ───────────────────────────────────────────────
 // Runs an existing report source and projects it down to the columns the user
 // picked — the "configurable report builder" over the existing report data

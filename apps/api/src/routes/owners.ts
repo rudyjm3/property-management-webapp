@@ -1,17 +1,25 @@
 import { Router, Request, Response, NextFunction } from 'express';
 import { validate } from '../middleware/validate';
 import { requireRoles } from '../middleware/auth';
+import { requireModule } from '../middleware/module-gate';
 import {
   createOwnerSchema,
   updateOwnerSchema,
   assignPropertyOwnerSchema,
   createOwnerStatementSchema,
   updateOwnerStatementSchema,
+  createDisbursementSchema,
+  updateDisbursementSchema,
+  MODULE_KEYS,
 } from '@propflow/shared';
 import * as ownerService from '../services/owner.service';
 
 const router = Router({ mergeParams: true });
 const requireManagerAccess = requireRoles(['owner', 'manager']);
+// Disbursements are an Advanced Payments & Accounting (Module 4) feature —
+// gated per-route on top of this router's existing Owner Portal (Module 9)
+// gate, since owner statements themselves stay under Module 9.
+const requireAccountingModule = requireModule(MODULE_KEYS.ADVANCED_PAYMENTS_ACCOUNTING);
 
 // ─── Owner Statements (must be before /:ownerId) ─────────────────────────────
 
@@ -63,6 +71,47 @@ router.delete('/statements/:statementId', requireManagerAccess, async (req: Requ
   try {
     await ownerService.deleteOwnerStatement(req.params.orgId as string, req.params.statementId as string);
     res.status(204).send();
+  } catch (err) {
+    next(err);
+  }
+});
+
+// ─── Disbursements (must be before /:ownerId) ────────────────────────────────
+// Advanced Payments & Accounting (Module 4).
+
+// GET /api/v1/organizations/:orgId/owners/statements/:statementId/disbursements
+router.get('/statements/:statementId/disbursements', requireManagerAccess, requireAccountingModule, async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const disbursements = await ownerService.listDisbursements(req.params.orgId as string, req.params.statementId as string);
+    res.json({ data: disbursements });
+  } catch (err) {
+    next(err);
+  }
+});
+
+// POST /api/v1/organizations/:orgId/owners/statements/:statementId/disbursements
+router.post('/statements/:statementId/disbursements', requireManagerAccess, requireAccountingModule, validate(createDisbursementSchema), async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const disbursement = await ownerService.createDisbursement(
+      req.params.orgId as string,
+      req.params.statementId as string,
+      req.body
+    );
+    res.status(201).json({ data: disbursement });
+  } catch (err) {
+    next(err);
+  }
+});
+
+// PATCH /api/v1/organizations/:orgId/owners/disbursements/:disbursementId
+router.patch('/disbursements/:disbursementId', requireManagerAccess, requireAccountingModule, validate(updateDisbursementSchema), async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const disbursement = await ownerService.updateDisbursement(
+      req.params.orgId as string,
+      req.params.disbursementId as string,
+      req.body
+    );
+    res.json({ data: disbursement });
   } catch (err) {
     next(err);
   }

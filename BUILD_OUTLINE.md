@@ -1353,11 +1353,60 @@ a third-party e-sign vendor).
 - Profit & loss reporting by property
 - Schedule E export for tax filing
 
+**Status (2026-09-17):** Built and gated behind `requireModule('advanced_payments_accounting')`
+— see `docs/reference/modules.md` for the per-feature gating detail and what's
+partial. Summary:
+
+- **Card payments** — shipped. `POST /payments/:paymentId/initiate-card`
+  (manager) and `POST /tenant/payments/initiate-card` (tenant) create a
+  Stripe PaymentIntent with `payment_method_types: ['card']` instead of
+  `['us_bank_account']`; the existing `payment_intent.succeeded` webhook is
+  method-agnostic and needed no changes.
+- **Partial payment handling** — shipped, but scoped to manually-recorded
+  payments only (cash/check/money order/card-in-person via
+  `POST /payments/:paymentId/record-partial`). It splits the payment down to
+  the amount actually received and creates a new pending payment for the
+  remainder, due the same date. **Not supported**: a tenant paying a partial
+  amount through the self-service ACH/card checkout flow — that still
+  requires paying the PaymentIntent's full amount.
+- **Security deposit reconciliation** — shipped as a formal
+  `SecurityDepositDisposition` record (`POST`/`GET
+  /leases/:leaseId/security-deposit-disposition`), built from the deposit
+  amount vs. itemized deductions the existing move-out workflow already
+  captures. **Not** reconciled against move-in/move-out inspection records —
+  Module 6 (Inspections & Compliance) hasn't shipped, so there's no
+  inspection model to reconcile against yet. `moveInConditionNotes`/
+  `moveOutConditionNotes` are manager-entered free text in the meantime.
+- **Owner disbursements** — shipped as a `Disbursement` record
+  (`POST`/`GET /owners/statements/:statementId/disbursements`,
+  `PATCH /owners/disbursements/:disbursementId`) computed from an
+  `OwnerStatement.distributionAmount` minus a management-fee percentage
+  (org-wide default on `Organization.defaultManagementFeePct`, overridable
+  per-disbursement). **This is a bookkeeping record only** — there is no
+  payout wiring to the owner's bank account, because Owner Portal doesn't
+  capture owner bank details (see the Owner Portal dependency note below).
+  `status` just tracks whether the manager marked the money as sent outside
+  the app.
+- **Profit & loss reporting by property** — already existed as Module 11's
+  `GET /reports/financial-summary` (income/expenses/NOI by property, with
+  owner-share breakdown), built in P0 and gated behind
+  `reporting_analytics`. Module 4 does not duplicate it; see the gating
+  decision in `docs/reference/modules.md`.
+- **Schedule E export** — shipped as `GET /reports/schedule-e-export`, gated
+  behind **both** `reporting_analytics` (the router mount) and
+  `advanced_payments_accounting` (per-route). It's a data export for a tax
+  preparer to transfer into the real form — projecting rents received, other
+  income, repairs/maintenance expenses, recorded management fees, and
+  `Property.taxParcelId` per property — **not** a filled IRS Schedule E PDF.
+
 **Data hooks already in schema:**
 
 - `tax_parcel_id` (Property) — needed for Schedule E
 
-**Dependencies:** Stripe, Payment ledger, Owner Portal module (for disbursements)
+**Dependencies:** Stripe, Payment ledger, Owner Portal module (for
+disbursements) — Owner Portal itself has no owner-facing bank-account
+capture or payout flow, which is why disbursements stop at a bookkeeping
+record rather than an actual funds transfer.
 
 ---
 

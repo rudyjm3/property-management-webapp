@@ -148,6 +148,10 @@ export const LEDGER_ENTRY_TYPES = ['credit', 'debit'] as const;
 
 export const OWNER_STATEMENT_STATUSES = ['draft', 'sent'] as const;
 
+// ─── Disbursement (Advanced Payments & Accounting) ────────────────────────────
+
+export const DISBURSEMENT_STATUSES = ['pending', 'completed', 'cancelled'] as const;
+
 // ─── Add-On Modules ───────────────────────────────────────────────────────────
 
 // Keys stored in Organization.activeModules. Gates existing functionality that
@@ -156,6 +160,7 @@ export const MODULE_KEYS = {
   OWNER_PORTAL: 'owner_portal',
   REPORTING_ANALYTICS: 'reporting_analytics',
   ADVANCED_TENANT_ONBOARDING: 'advanced_tenant_onboarding',
+  ADVANCED_PAYMENTS_ACCOUNTING: 'advanced_payments_accounting',
 } as const;
 
 export type ModuleKey = (typeof MODULE_KEYS)[keyof typeof MODULE_KEYS];

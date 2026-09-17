@@ -55,9 +55,22 @@ interface PropertyOption {
   name: string;
 }
 
-type Tab = 'financial' | 'trend' | 'spend' | 'rentroll' | 'vacancy' | 'statements' | 'builder';
+type Tab = 'financial' | 'trend' | 'spend' | 'rentroll' | 'vacancy' | 'statements' | 'builder' | 'scheduleE';
 
-const TABS: { id: Tab; label: string; module?: 'owner_portal' }[] = [
+interface ScheduleERow {
+  propertyId: string;
+  propertyName: string;
+  address: string;
+  taxParcelId: string | null;
+  rentsReceived: number;
+  otherIncome: number;
+  repairsAndMaintenanceExpenses: number;
+  managementFees: number;
+  totalExpenses: number;
+  netIncomeOrLoss: number;
+}
+
+const TABS: { id: Tab; label: string; module?: 'owner_portal' | 'advanced_payments_accounting' }[] = [
   { id: 'financial', label: 'Financial Summary' },
   { id: 'trend', label: 'Revenue Trend' },
   { id: 'spend', label: 'Spend by Location' },
@@ -67,6 +80,9 @@ const TABS: { id: Tab; label: string; module?: 'owner_portal' }[] = [
   // and /owners/statements, both gated on owner_portal, not reporting_analytics.
   { id: 'statements', label: 'Owner Statements', module: MODULE_KEYS.OWNER_PORTAL },
   { id: 'builder', label: 'Report Builder' },
+  // Schedule E export is an Advanced Payments & Accounting (Module 4) feature
+  // layered on this Module 11-gated page — needs both modules active.
+  { id: 'scheduleE', label: 'Schedule E Export', module: MODULE_KEYS.ADVANCED_PAYMENTS_ACCOUNTING },
 ];
 
 function fmt(n: number): string {
@@ -106,6 +122,9 @@ function ReportsPageContent() {
   const [propertiesLoading, setPropertiesLoading] = useState(true);
   const [error, setError] = useState('');
   const [expandedProperty, setExpandedProperty] = useState<string | null>(null);
+  const [scheduleERows, setScheduleERows] = useState<ScheduleERow[]>([]);
+  const [scheduleELoading, setScheduleELoading] = useState(false);
+  const [scheduleEError, setScheduleEError] = useState('');
 
   const { start, end } = currentMonthRange();
   const [periodStart, setPeriodStart] = useState(start);
@@ -149,6 +168,38 @@ function ReportsPageContent() {
     loadReport();
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
+  async function loadScheduleE() {
+    if (!periodStart || !periodEnd) return;
+    setScheduleELoading(true);
+    setScheduleEError('');
+    try {
+      const data = await api.reports.scheduleEExport({
+        periodStart,
+        periodEnd,
+        propertyId: selectedPropertyId || undefined,
+      });
+      setScheduleERows(data.rows ?? []);
+    } catch (err: any) {
+      setScheduleEError(err.message || 'Failed to load Schedule E export.');
+    } finally {
+      setScheduleELoading(false);
+    }
+  }
+
+  useEffect(() => {
+    if (activeTab === 'scheduleE') loadScheduleE();
+  }, [activeTab]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  function handleExportScheduleE() {
+    if (scheduleERows.length === 0) return;
+    const headers = ['Property', 'Address', 'Tax Parcel ID', 'Rents Received', 'Other Income', 'Repairs & Maintenance', 'Management Fees', 'Total Expenses', 'Net Income/Loss'];
+    const rows = scheduleERows.map((r) => [
+      r.propertyName, r.address, r.taxParcelId ?? '',
+      r.rentsReceived, r.otherIncome, r.repairsAndMaintenanceExpenses, r.managementFees, r.totalExpenses, r.netIncomeOrLoss,
+    ]);
+    exportCsv(`schedule-e-export-${periodStart}-to-${periodEnd}.csv`, headers, rows);
+  }
+
   function handleExportFinancial() {
     if (!report) return;
     const headers = ['Property', 'Address', 'Rent', 'Late Fees', 'Deposits', 'Other Income', 'Total Income', 'Expenses', 'NOI'];
@@ -180,7 +231,7 @@ function ReportsPageContent() {
     noi >= 0 ? 'var(--color-success, #16a34a)' : 'var(--color-danger, #dc2626)';
 
   // Tabs that use the date-range filter vs those that are always fresh
-  const showDateFilter = activeTab === 'financial' || activeTab === 'trend' || activeTab === 'spend' || activeTab === 'builder';
+  const showDateFilter = activeTab === 'financial' || activeTab === 'trend' || activeTab === 'spend' || activeTab === 'builder' || activeTab === 'scheduleE';
 
   return (
     <div className="page-container">
@@ -566,6 +617,65 @@ function ReportsPageContent() {
             periodStart={periodStart}
             periodEnd={periodEnd}
           />
+        )}
+
+        {/* ─── Schedule E Export (Advanced Payments & Accounting / Module 4) ─── */}
+        {activeTab === 'scheduleE' && (
+          <div>
+            <p style={{ fontSize: '13px', color: 'var(--color-text-muted)', marginBottom: '16px' }}>
+              A tax-filing support export — not a filled IRS Schedule E form. It maps each
+              property&apos;s income/expenses onto Schedule E&apos;s per-property columns using{' '}
+              <code>Property.taxParcelId</code>, for a preparer to transfer into the actual form.
+            </p>
+            {scheduleEError && (
+              <div style={{ color: 'var(--color-danger)', marginBottom: '12px', fontSize: '14px' }}>
+                {scheduleEError}
+              </div>
+            )}
+            <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: '12px' }}>
+              <button className="btn btn-secondary" onClick={handleExportScheduleE} disabled={scheduleERows.length === 0}>
+                Export CSV
+              </button>
+            </div>
+            {scheduleELoading ? (
+              <div className="loading">Loading Schedule E export...</div>
+            ) : scheduleERows.length === 0 ? (
+              <div className="empty-state">
+                <h3>No data for this period</h3>
+              </div>
+            ) : (
+              <div className="table-container">
+                <table>
+                  <thead>
+                    <tr>
+                      <th>Property</th>
+                      <th>Tax Parcel ID</th>
+                      <th>Rents Received</th>
+                      <th>Other Income</th>
+                      <th>Repairs &amp; Maintenance</th>
+                      <th>Management Fees</th>
+                      <th>Total Expenses</th>
+                      <th>Net Income/Loss</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {scheduleERows.map((r) => (
+                      <tr key={r.propertyId}>
+                        <td>{r.propertyName}</td>
+                        <td>{r.taxParcelId ?? <span style={{ color: 'var(--color-text-muted)' }}>—</span>}</td>
+                        <td>{fmt(r.rentsReceived)}</td>
+                        <td>{fmt(r.otherIncome)}</td>
+                        <td>{fmt(r.repairsAndMaintenanceExpenses)}</td>
+                        <td>{fmt(r.managementFees)}</td>
+                        <td>{fmt(r.totalExpenses)}</td>
+                        <td style={{ fontWeight: 600, color: noiColor(r.netIncomeOrLoss) }}>{fmt(r.netIncomeOrLoss)}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
         )}
       </div>
     </div>

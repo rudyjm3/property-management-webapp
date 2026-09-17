@@ -1,7 +1,8 @@
 import { prisma } from '@propflow/db';
-import { PaymentType, PaymentStatus } from '@propflow/db';
+import { PaymentType, PaymentStatus, PaymentMethod } from '@propflow/db';
 import { AppError } from '../middleware/error-handler';
 import * as ledgerService from './ledger.service';
+import type { RecordPartialPaymentInput } from '@propflow/shared';
 
 // ─── Shared include shape ─────────────────────────────────────────────────────
 
@@ -253,6 +254,92 @@ export async function deletePayment(organizationId: string, paymentId: string) {
   await prisma.payment.update({
     where: { id: paymentId },
     data: { deletedAt: new Date() },
+  });
+}
+
+// ─── Partial payment (Advanced Payments & Accounting / Module 4) ────────────
+// Records a manually-recorded payment for less than the amount due, splits
+// the original payment down to the amount actually received, and creates a
+// new pending payment for the remainder due on the same date — so it shows
+// up automatically in the existing tenant/manager pending-balance displays,
+// which just sum pending Payment rows. Manual (non-Stripe) payments never
+// post ledger entries in this codebase (see voidPayment's reversal comment),
+// so this doesn't post one either, matching updatePayment's existing behavior.
+
+export async function recordPartialPayment(
+  organizationId: string,
+  paymentId: string,
+  data: RecordPartialPaymentInput
+) {
+  const payment = await getPayment(organizationId, paymentId);
+
+  if (payment.status !== 'pending') {
+    throw new AppError(400, 'PAYMENT_NOT_PENDING', 'Only pending payments can be partially paid.');
+  }
+
+  const amountDue = Number(payment.amount);
+  if (data.amountPaid >= amountDue) {
+    throw new AppError(
+      400,
+      'NOT_A_PARTIAL_PAYMENT',
+      'The amount paid is greater than or equal to the amount due — use the normal mark-paid flow instead.'
+    );
+  }
+
+  const remainder = Math.round((amountDue - data.amountPaid) * 100) / 100;
+  const paidAt = data.paidAt ? new Date(data.paidAt) : new Date();
+
+  return prisma.$transaction(async (tx) => {
+    // Conditional update, not a plain update: guards against two overlapping
+    // partial-payment requests both reading the payment as pending and each
+    // splitting the full amount, which would double the tenant's carried
+    // balance. Only the request that wins the race (count === 1) proceeds.
+    const { count } = await tx.payment.updateMany({
+      where: { id: paymentId, status: 'pending' },
+      data: {
+        amount: data.amountPaid,
+        originalAmount: amountDue,
+        status: 'completed',
+        method: data.method as PaymentMethod,
+        checkNumber: data.checkNumber ?? null,
+        referenceNote: data.referenceNote ?? null,
+        paidAt,
+        notes: data.notes ?? payment.notes,
+      },
+    });
+
+    if (count === 0) {
+      throw new AppError(400, 'PAYMENT_NOT_PENDING', 'Only pending payments can be partially paid.');
+    }
+
+    const updatedOriginal = await tx.payment.findUniqueOrThrow({
+      where: { id: paymentId },
+      include: paymentInclude,
+    });
+
+    const carriedForwardPayment = await tx.payment.create({
+      data: {
+        lease: { connect: { id: payment.leaseId } },
+        tenant: { connect: { id: payment.tenantId } },
+        amount: remainder,
+        type: payment.type,
+        status: 'pending',
+        dueDate: payment.dueDate,
+        // Carry forward the original's late-fee state — otherwise this new
+        // pending row (same overdue dueDate, lateFeeApplied reset to false)
+        // looks freshly-due to lateFeeJob and gets charged a second late fee
+        // for the same underlying overdue rent.
+        isLate: payment.isLate,
+        lateFeeApplied: payment.lateFeeApplied,
+        lateFeeWaived: payment.lateFeeWaived,
+        lateFeeWaivedReason: payment.lateFeeWaivedReason,
+        carriedFromPayment: { connect: { id: paymentId } },
+        notes: `Balance carried forward from payment ${paymentId}.`,
+      },
+      include: paymentInclude,
+    });
+
+    return { originalPayment: updatedOriginal, carriedForwardPayment };
   });
 }
 

@@ -338,10 +338,11 @@ export async function getTenantDocumentDownloadUrl(tenantId: string, documentId:
 
 // ─── Initiate Payment ─────────────────────────────────────────────────────────
 
-export async function initiateTenantPayment(
+async function initiateTenantPaymentWithMethod(
   tenantId: string,
   orgId: string,
-  paymentId: string
+  paymentId: string,
+  method: 'ach' | 'card'
 ) {
   // Sync Stripe Connect status and get fresh org
   const org = await prisma.organization.findUniqueOrThrow({ where: { id: orgId } });
@@ -380,8 +381,19 @@ export async function initiateTenantPayment(
     throw new AppError(403, 'FORBIDDEN', 'You cannot initiate payment on behalf of another tenant.');
   }
 
-  // Idempotent: return existing PaymentIntent if one already exists
+  // Idempotent: return existing PaymentIntent if one already exists — but
+  // only if it matches the requested method. A card-only intent (initiated
+  // via initiate-card, by the manager or the tenant) can't collect a bank
+  // account, so silently handing it back to an ACH caller (e.g. the mobile
+  // app, which only ever collects USBankAccount) would strand the tenant.
   if (payment.stripePaymentIntentId) {
+    if (payment.method !== method) {
+      throw new AppError(
+        409,
+        'PAYMENT_METHOD_MISMATCH',
+        `This payment already has a ${payment.method} PaymentIntent in progress. Cancel it before initiating ${method}.`
+      );
+    }
     const { default: Stripe } = await import('stripe');
     const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!, { apiVersion: '2025-02-24.acacia' });
     const pi = await stripe.paymentIntents.retrieve(payment.stripePaymentIntentId);
@@ -389,7 +401,7 @@ export async function initiateTenantPayment(
   }
 
   if (payment.status !== 'pending') {
-    throw new AppError(400, 'PAYMENT_NOT_PENDING', 'Only pending payments can be initiated via ACH.');
+    throw new AppError(400, 'PAYMENT_NOT_PENDING', `Only pending payments can be initiated via ${method}.`);
   }
 
   const pi = await stripeService.createPaymentIntent({
@@ -400,14 +412,34 @@ export async function initiateTenantPayment(
     propertyName: payment.lease.unit.property.name,
     amount: Number(payment.amount),
     stripeAccountId: freshOrg.stripeAccountId!,
+    method,
   });
 
   await prisma.payment.update({
     where: { id: paymentId },
-    data: { stripePaymentIntentId: pi.id, method: 'ach' },
+    data: { stripePaymentIntentId: pi.id, method },
   });
 
   return { clientSecret: pi.client_secret!, paymentIntentId: pi.id, status: pi.status };
+}
+
+export async function initiateTenantPayment(
+  tenantId: string,
+  orgId: string,
+  paymentId: string
+) {
+  return initiateTenantPaymentWithMethod(tenantId, orgId, paymentId, 'ach');
+}
+
+// Advanced Payments & Accounting (Module 4) — card payments alongside ACH.
+// The route layer gates this behind requireModule(ADVANCED_PAYMENTS_ACCOUNTING);
+// this function trusts that check has already run.
+export async function initiateTenantCardPayment(
+  tenantId: string,
+  orgId: string,
+  paymentId: string
+) {
+  return initiateTenantPaymentWithMethod(tenantId, orgId, paymentId, 'card');
 }
 
 // ─── Initiate Multi-Payment (combined ACH for rent + late fees) ───────────────
@@ -458,9 +490,20 @@ export async function initiateMultiTenantPayment(
     }
   }
 
-  // Idempotent: if all payments already share the same PI, return it
+  // Idempotent: if all payments already share the same PI, return it — but
+  // this endpoint always collects a bank account (it's the ACH multi-payment
+  // path used by the mobile app), so refuse to hand back a card-only intent
+  // that was created via initiate-card, which would strand the caller.
   const existingPiIds = [...new Set(payments.map((p) => p.stripePaymentIntentId).filter(Boolean))];
   if (existingPiIds.length === 1) {
+    const mismatched = payments.find((p) => p.stripePaymentIntentId && p.method !== 'ach');
+    if (mismatched) {
+      throw new AppError(
+        409,
+        'PAYMENT_METHOD_MISMATCH',
+        `Payment ${mismatched.id} already has a ${mismatched.method} PaymentIntent in progress. Cancel it before initiating ACH.`
+      );
+    }
     const { default: Stripe } = await import('stripe');
     const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!, { apiVersion: '2025-02-24.acacia' });
     const pi = await stripe.paymentIntents.retrieve(existingPiIds[0]!);

@@ -104,6 +104,7 @@ export const api = {
       gracePeriodDays?: number;
       lateFeeAmount?: number;
       activeModules?: string[];
+      defaultManagementFeePct?: number;
     }) =>
       apiFetch<any>(`/api/v1/organizations/${_orgId}`, {
         method: 'PATCH',
@@ -218,6 +219,14 @@ export const api = {
         method: 'POST',
         body: JSON.stringify(data),
       }),
+    // Advanced Payments & Accounting (Module 4) — security deposit reconciliation.
+    getSecurityDepositDisposition: (id: string) =>
+      apiFetch<any>(`/api/v1/organizations/${_orgId}/leases/${id}/security-deposit-disposition`),
+    reconcileSecurityDeposit: (id: string, data: { moveInConditionNotes?: string | null; moveOutConditionNotes?: string | null }) =>
+      apiFetch<any>(`/api/v1/organizations/${_orgId}/leases/${id}/security-deposit-disposition`, {
+        method: 'POST',
+        body: JSON.stringify(data),
+      }),
     delete: (id: string) =>
       apiFetch<void>(`/api/v1/organizations/${_orgId}/leases/${id}`, {
         method: 'DELETE',
@@ -288,6 +297,19 @@ export const api = {
       apiFetch<{ cancelled: boolean }>(
         `/api/v1/organizations/${_orgId}/payments/${paymentId}/cancel-ach`,
         { method: 'POST' }
+      ),
+    // Advanced Payments & Accounting (Module 4) — card payments alongside ACH.
+    initiateCard: (paymentId: string) =>
+      apiFetch<{ clientSecret: string; paymentIntentId: string; status: string }>(
+        `/api/v1/organizations/${_orgId}/payments/${paymentId}/initiate-card`,
+        { method: 'POST' }
+      ),
+    // Advanced Payments & Accounting (Module 4) — manually-recorded partial
+    // payment with the remaining balance carried forward.
+    recordPartial: (paymentId: string, data: { amountPaid: number; method?: string; checkNumber?: string | null; referenceNote?: string | null; notes?: string | null }) =>
+      apiFetch<any>(
+        `/api/v1/organizations/${_orgId}/payments/${paymentId}/record-partial`,
+        { method: 'POST', body: JSON.stringify(data) }
       ),
     void: (paymentId: string, reason: string) =>
       apiFetch<any>(
@@ -652,6 +674,19 @@ export const api = {
       apiFetch<void>(`/api/v1/organizations/${_orgId}/owners/statements/${id}`, {
         method: 'DELETE',
       }),
+    // Advanced Payments & Accounting (Module 4) — disbursements tied to a statement.
+    listDisbursements: (statementId: string) =>
+      apiFetch<any[]>(`/api/v1/organizations/${_orgId}/owners/statements/${statementId}/disbursements`),
+    createDisbursement: (statementId: string, data: { managementFeePct?: number; referenceNote?: string | null }) =>
+      apiFetch<any>(`/api/v1/organizations/${_orgId}/owners/statements/${statementId}/disbursements`, {
+        method: 'POST',
+        body: JSON.stringify(data),
+      }),
+    updateDisbursement: (disbursementId: string, data: { status: string; referenceNote?: string | null }) =>
+      apiFetch<any>(`/api/v1/organizations/${_orgId}/owners/disbursements/${disbursementId}`, {
+        method: 'PATCH',
+        body: JSON.stringify(data),
+      }),
   },
 
   reports: {
@@ -711,6 +746,14 @@ export const api = {
         `/api/v1/organizations/${_orgId}/reports/builder`,
         { method: 'POST', body: JSON.stringify(data) }
       ),
+    // Advanced Payments & Accounting (Module 4) — Schedule E tax export.
+    scheduleEExport: (params: { periodStart: string; periodEnd: string; propertyId?: string }) => {
+      const query = new URLSearchParams();
+      query.set('periodStart', params.periodStart);
+      query.set('periodEnd', params.periodEnd);
+      if (params.propertyId) query.set('propertyId', params.propertyId);
+      return apiFetch<any>(`/api/v1/organizations/${_orgId}/reports/schedule-e-export?${query.toString()}`);
+    },
     savedReports: {
       list: () => apiFetch<any[]>(`/api/v1/organizations/${_orgId}/reports/saved`),
       create: (data: { name: string; source: string; columns: string[]; filters: Record<string, unknown> }) =>
