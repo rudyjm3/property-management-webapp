@@ -99,4 +99,17 @@ describe('requireModule middleware', () => {
     expect(res.status).toHaveBeenCalledWith(401);
     expect(prisma.organization.findUnique).not.toHaveBeenCalled();
   });
+
+  it('forwards a DB lookup failure to next(err) instead of leaving the request hanging', async () => {
+    const dbError = new Error('connection reset');
+    (prisma.organization.findUnique as ReturnType<typeof vi.fn>).mockRejectedValue(dbError);
+
+    const req = { user: { orgId: 'org-1', userId: 'u1', role: 'manager' } } as unknown as Request;
+    const res = buildRes();
+
+    await requireModule('owner_portal')(req, res, next);
+
+    expect(next).toHaveBeenCalledWith(dbError);
+    expect(res.status).not.toHaveBeenCalled();
+  });
 });

@@ -16,21 +16,25 @@ export function requireModule(moduleKey: ModuleKey) {
       return;
     }
 
-    const org = await prisma.organization.findUnique({
-      where: { id: orgId },
-      select: { activeModules: true },
-    });
-
-    if (!org || !org.activeModules.includes(moduleKey)) {
-      res.status(403).json({
-        error: {
-          code: 'MODULE_NOT_ACTIVE',
-          message: `The "${moduleKey}" module is not active for this organization.`,
-        },
+    try {
+      const org = await prisma.organization.findUnique({
+        where: { id: orgId },
+        select: { activeModules: true },
       });
-      return;
-    }
 
-    next();
+      if (!org || !org.activeModules.includes(moduleKey)) {
+        res.status(403).json({
+          error: {
+            code: 'MODULE_NOT_ACTIVE',
+            message: `The "${moduleKey}" module is not active for this organization.`,
+          },
+        });
+        return;
+      }
+
+      next();
+    } catch (err) {
+      next(err);
+    }
   };
 }
