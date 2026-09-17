@@ -49,9 +49,31 @@ Manager-side account (owner/manager/maintenance staff).
 - `bedrooms, bathrooms, sqFt?, marketRent?, rentAmount, depositAmount`
 - `status: UnitStatus(vacant|occupied|notice|maintenance|unlisted)`
 - `parkingSpaces[], storageUnit?`, utility meter fields (electric/gas/water)
-- `applianceCount? [deferred: Unit Intelligence & Appliance Registry]`
+- `applianceCount?` — no longer deferred as of Unit Intelligence & Appliance
+  Registry (2026-09-17): recomputed from `appliance.count()` inside the same
+  transaction as every `Appliance` create/delete under this unit (not an
+  in-place increment/decrement — that field defaulted to `null`, and
+  Prisma's `{ increment: 1 }` compiles to `SET x = x + 1`, which stays
+  `NULL` forever under Postgres NULL-propagation if never initialized).
+  Still nullable for orgs that have never had `unit_intelligence` active.
 - `lastInspectionAt? [deferred: Inspections & Compliance]`
-- Has many: leases, workOrders, messages, rentalApplications
+- Has many: leases, workOrders, messages, rentalApplications, appliances
+  `[Unit Intelligence & Appliance Registry]`
+
+## Appliance
+Unit Intelligence & Appliance Registry module (gated).
+- `id, unitId(FK, cascade delete with its unit)`
+- `category: ApplianceCategory(hvac|water_heater|refrigerator|dishwasher|washer|dryer|oven_range|microwave|garbage_disposal|other)`, default `other`
+- `status: ApplianceStatus(active|removed)`, default `active` — an appliance is
+  never hard-deleted just for being replaced; it's marked `removed` and kept
+  for history. `DELETE` (hard delete, regardless of status) still exists for
+  correcting mistakes/duplicates.
+- `make?, model?, serialNumber?`
+- `purchaseDate?, installDate?, warrantyExpiresAt?, removedAt?` (all date-only)
+- `replacesApplianceId? (FK to Appliance, unique, self-relation "ApplianceReplacement", ON DELETE SET NULL)` — the prior appliance this one replaced in the same slot (e.g. old dishwasher → new dishwasher). `@unique` enforces a one-to-one chain: an old appliance can be pointed to by at most one replacement. The reverse relation is `replacedBy`.
+- `notes?`
+- Has many: workOrders (via `WorkOrder.applianceId`, `ON DELETE SET NULL` — deleting an appliance keeps its work order history, just unlinks it)
+- Replacement-alert status and maintenance cost rollup are computed at read time in `appliance.service.ts`, not persisted columns — see `modules.md`. `Unit.applianceCount` only counts `status: active` appliances.
 
 ## Tenant
 - `id, organizationId(FK), supabaseUserId?(unique)`
@@ -143,7 +165,8 @@ details).
 - `status: DisbursementStatus(pending|completed|cancelled)`, `referenceNote?, disbursedAt?`
 
 ## WorkOrder
-- `id` — nullable FKs to `unitId?, propertyId?, tenantId?, assignedToUserId?, submittedByUserId?, vendorId?` (property-level orders have no unit)
+- `id` — nullable FKs to `unitId?, propertyId?, tenantId?, assignedToUserId?, submittedByUserId?, vendorId?, applianceId?` (property-level orders have no unit)
+- `applianceId? [Unit Intelligence & Appliance Registry]` — optional link to a specific `Appliance`; the API verifies the appliance belongs to the *same* `unitId` as the work order (or rejects it) and property-level orders can never have one. `ON DELETE SET NULL` — deleting the appliance never deletes the work order.
 - `title?, category: WorkOrderCategory(plumbing|electrical|hvac|appliance|pest|structural|cosmetic|grounds|general|other)`
 - `priority: WorkOrderPriority(emergency|urgent|routine, + legacy low|normal)`
 - `status: WorkOrderStatus(new_order|assigned|in_progress|pending_parts|completed|closed|cancelled)`

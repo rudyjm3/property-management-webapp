@@ -18,7 +18,7 @@ file directly for per-endpoint behavior.
 | `/sign` | `routes/sign.ts` | none (rate-limited public lease e-signing) |
 | `/organizations/:orgId/notifications/jobs` | `routes/notificationJobs.ts` | `CRON_SECRET` only, no user JWT |
 | `/organizations/:orgId` | `routes/organizations.ts` | none at mount (org settings; per-route checks inside) |
-| `/organizations/:orgId/properties` | `routes/properties.ts` (nests `/:propertyId/units` → `routes/units.ts`) | `requireAuth`, `requireOrg` |
+| `/organizations/:orgId/properties` | `routes/properties.ts` (nests `/:propertyId/units` → `routes/units.ts`, which nests `/:unitId/appliances` → `routes/appliances.ts`) | `requireAuth`, `requireOrg`, plus `requireModule('unit_intelligence')` applied at the `appliances` router mount inside `units.ts` (rest of `properties.ts`/`units.ts` is ungated) |
 | `/organizations/:orgId/tenants` | `routes/tenants.ts` | `requireAuth`, `requireOrg` |
 | `/organizations/:orgId/leases` | `routes/leases.ts` | `requireAuth`, `requireOrg`, plus `requireModule('advanced_payments_accounting')` applied only to the `GET`/`POST .../leases/:leaseId/security-deposit-disposition` routes (rest of the router is ungated) |
 | `/organizations/:orgId/payments` | `routes/payments.ts` | `requireAuth`, `requireOrg`, plus `requireModule('advanced_payments_accounting')` applied only to `POST .../payments/:paymentId/initiate-card` and `.../record-partial` (rest of the router, including ACH, is ungated) |

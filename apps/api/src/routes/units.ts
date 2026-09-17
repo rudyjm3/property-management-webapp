@@ -1,12 +1,18 @@
 import { Router, Request, Response, NextFunction } from 'express';
-import { createUnitSchema, bulkCreateUnitSchema } from '@propflow/shared';
+import { createUnitSchema, bulkCreateUnitSchema, MODULE_KEYS } from '@propflow/shared';
 import { validate } from '../middleware/validate';
 import * as unitService from '../services/unit.service';
 import { requireRoles } from '../middleware/auth';
+import { requireModule } from '../middleware/module-gate';
+import applianceRoutes from './appliances';
 
 const router = Router({ mergeParams: true });
 
 const requireManagerAccess = requireRoles(['owner', 'manager']);
+
+// Appliance registry — Module 2 (Unit Intelligence & Appliance Registry),
+// gated by activeModules at the router mount (mirrors /owners and /reports).
+router.use('/:unitId/appliances', requireModule(MODULE_KEYS.UNIT_INTELLIGENCE), applianceRoutes);
 
 // GET /api/v1/organizations/:orgId/properties/:propertyId/units
 router.get('/', async (req: Request, res: Response, next: NextFunction) => {

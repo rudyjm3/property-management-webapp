@@ -23,6 +23,7 @@ import {
   RENTAL_APPLICATION_STATUSES,
   OWNER_STATEMENT_STATUSES,
   DISBURSEMENT_STATUSES,
+  APPLIANCE_CATEGORIES,
 } from '../constants';
 
 // ─── Organization ─────────────────────────────────────────────────────────────
@@ -83,6 +84,41 @@ export const bulkCreateUnitSchema = z.object({
 });
 
 export type BulkCreateUnitInput = z.infer<typeof bulkCreateUnitSchema>;
+
+// ─── Appliance (Unit Intelligence & Appliance Registry) ────────────────────────
+
+export const createApplianceSchema = z.object({
+  category: z.enum(APPLIANCE_CATEGORIES),
+  make: z.string().max(100).nullable().optional(),
+  model: z.string().max(100).nullable().optional(),
+  serialNumber: z.string().max(100).nullable().optional(),
+  purchaseDate: z.string().date().nullable().optional(),
+  installDate: z.string().date().nullable().optional(),
+  warrantyExpiresAt: z.string().date().nullable().optional(),
+  notes: z.string().max(2000).nullable().optional(),
+});
+
+export const updateApplianceSchema = createApplianceSchema.partial();
+
+// Retires an appliance (marks it removed) without replacing it.
+export const retireApplianceSchema = z.object({
+  removedAt: z.string().date().nullable().optional(),
+});
+
+// Retires the target appliance and creates a new one in its place, linked via
+// Appliance.replacesApplianceId. removedAt applies to the OLD appliance being
+// retired; the rest of the fields describe the NEW appliance.
+export const replaceApplianceSchema = z.object({
+  removedAt: z.string().date().nullable().optional(),
+  category: z.enum(APPLIANCE_CATEGORIES),
+  make: z.string().max(100).nullable().optional(),
+  model: z.string().max(100).nullable().optional(),
+  serialNumber: z.string().max(100).nullable().optional(),
+  purchaseDate: z.string().date().nullable().optional(),
+  installDate: z.string().date().nullable().optional(),
+  warrantyExpiresAt: z.string().date().nullable().optional(),
+  notes: z.string().max(2000).nullable().optional(),
+});
 
 // ─── Tenant ───────────────────────────────────────────────────────────────────
 
@@ -282,6 +318,7 @@ export const createWorkOrderSchema = z
   .object({
     unitId: z.string().uuid().nullable().optional(),
     propertyId: z.string().uuid().nullable().optional(),
+    applianceId: z.string().uuid().nullable().optional(),
     title: z.string().max(200).nullable().optional(),
     category: z.enum(WORK_ORDER_CATEGORIES),
     priority: z.enum(WORK_ORDER_PRIORITIES).default('routine'),
@@ -299,11 +336,16 @@ export const createWorkOrderSchema = z
   .refine((data) => data.unitId || !data.tenantId, {
     message: 'Property-level work orders cannot be associated with a tenant',
     path: ['tenantId'],
+  })
+  .refine((data) => data.unitId || !data.applianceId, {
+    message: 'Property-level work orders cannot be associated with an appliance',
+    path: ['applianceId'],
   });
 
 export const updateWorkOrderSchema = z.object({
   assignedToUserId: z.string().uuid().nullable().optional(),
   vendorId: z.string().uuid().nullable().optional(),
+  applianceId: z.string().uuid().nullable().optional(),
   priority: z.enum(WORK_ORDER_PRIORITIES).optional(),
   status: z.enum(WORK_ORDER_STATUSES).optional(),
   locationType: z.enum(WORK_ORDER_LOCATION_TYPES).nullable().optional(),

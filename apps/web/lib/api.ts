@@ -342,6 +342,44 @@ export const api = {
         { method: 'POST', body: JSON.stringify({ units }) }
       ),
   },
+  // Unit Intelligence & Appliance Registry (Module 2) — gated by activeModules.
+  appliances: {
+    list: (propertyId: string, unitId: string) =>
+      apiFetch<any[]>(
+        `/api/v1/organizations/${_orgId}/properties/${propertyId}/units/${unitId}/appliances`
+      ),
+    get: (propertyId: string, unitId: string, applianceId: string) =>
+      apiFetch<any>(
+        `/api/v1/organizations/${_orgId}/properties/${propertyId}/units/${unitId}/appliances/${applianceId}`
+      ),
+    create: (propertyId: string, unitId: string, data: any) =>
+      apiFetch<any>(
+        `/api/v1/organizations/${_orgId}/properties/${propertyId}/units/${unitId}/appliances`,
+        { method: 'POST', body: JSON.stringify(data) }
+      ),
+    update: (propertyId: string, unitId: string, applianceId: string, data: any) =>
+      apiFetch<any>(
+        `/api/v1/organizations/${_orgId}/properties/${propertyId}/units/${unitId}/appliances/${applianceId}`,
+        { method: 'PATCH', body: JSON.stringify(data) }
+      ),
+    delete: (propertyId: string, unitId: string, applianceId: string) =>
+      apiFetch<void>(
+        `/api/v1/organizations/${_orgId}/properties/${propertyId}/units/${unitId}/appliances/${applianceId}`,
+        { method: 'DELETE' }
+      ),
+    // Marks an appliance removed without replacing it.
+    retire: (propertyId: string, unitId: string, applianceId: string, removedAt?: string | null) =>
+      apiFetch<any>(
+        `/api/v1/organizations/${_orgId}/properties/${propertyId}/units/${unitId}/appliances/${applianceId}/retire`,
+        { method: 'POST', body: JSON.stringify({ removedAt }) }
+      ),
+    // Retires the target appliance and creates a new one linked to it.
+    replace: (propertyId: string, unitId: string, applianceId: string, data: any) =>
+      apiFetch<any>(
+        `/api/v1/organizations/${_orgId}/properties/${propertyId}/units/${unitId}/appliances/${applianceId}/replace`,
+        { method: 'POST', body: JSON.stringify(data) }
+      ),
+  },
   workOrders: {
     list: (params?: {
       status?: string;

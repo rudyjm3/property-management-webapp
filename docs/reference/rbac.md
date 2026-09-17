@@ -63,10 +63,14 @@ just because `index.ts` doesn't gate it. As of this writing:
   in `leases.ts`, the three `.../disbursements` routes in `owners.ts`
   (stacked on top of that router's `owner_portal` mount-level gate), and
   `GET .../reports/schedule-e-export` in `reports.ts` (stacked on top of
-  that router's `reporting_analytics` mount-level gate). See `modules.md`
-  for the full module-gating picture.
+  that router's `reporting_analytics` mount-level gate). `unit_intelligence`
+  gates the whole `appliances.ts` router, mounted at `/:unitId/appliances`
+  inside `units.ts` — router-mount gating like `owners`/`reports`, just one
+  level deeper in the route tree since appliances nest under a unit under a
+  property. See `modules.md` for the full module-gating picture.
 - **Partially gated** (mutations require `owner`/`manager`, reads are open to
-  any org role): `properties.ts`, `tenants.ts`, `units.ts`; `organizations.ts`
+  any org role): `properties.ts`, `tenants.ts`, `units.ts`, `appliances.ts`
+  (on top of its `unit_intelligence` module gate); `organizations.ts`
   gates only its settings-update and one settings-read endpoint (and is
   mounted in `index.ts` with no `requireAuth`/`requireOrg` at all — see
   `routes.md`)

@@ -5,6 +5,7 @@ import {
   WorkOrderCategory,
   WorkOrderLocationType,
 } from '@propflow/db';
+import { MODULE_KEYS } from '@propflow/shared';
 import { AppError } from '../middleware/error-handler';
 
 // ─── SLA deadline helpers ──────────────────────────────────────────────────────
@@ -28,7 +29,7 @@ function computeSlaDeadline(priority: string): Date {
 
 // ─── Shared include shape ─────────────────────────────────────────────────────
 
-const workOrderInclude = {
+const workOrderIncludeBase = {
   unit: {
     select: {
       id: true,
@@ -42,6 +43,28 @@ const workOrderInclude = {
   submittedByUser: { select: { id: true, name: true, role: true } },
   vendor: { select: { id: true, companyName: true, contactName: true, phonePrimary: true } },
 };
+
+const workOrderIncludeWithAppliance = {
+  ...workOrderIncludeBase,
+  appliance: { select: { id: true, category: true, make: true, model: true } },
+};
+
+function workOrderIncludeFor(unitIntelligenceActive: boolean) {
+  return unitIntelligenceActive ? workOrderIncludeWithAppliance : workOrderIncludeBase;
+}
+
+// WorkOrder itself ships ungated, but appliance linking (WorkOrder.applianceId)
+// is Module 2's (Unit Intelligence & Appliance Registry) own feature. Without
+// this check, an org could keep creating/reading appliance links through this
+// always-open router after deactivating the module — bypassing the gate that's
+// only applied at the appliances.ts router mount.
+async function isUnitIntelligenceActive(organizationId: string): Promise<boolean> {
+  const org = await prisma.organization.findUnique({
+    where: { id: organizationId },
+    select: { activeModules: true },
+  });
+  return org?.activeModules.includes(MODULE_KEYS.UNIT_INTELLIGENCE) ?? false;
+}
 
 // Org scoping: unit-scoped orders resolve via unit → property; property-level
 // orders (unitId null) resolve via their direct property relation. The second
@@ -71,6 +94,7 @@ interface ListWorkOrdersOptions {
 export async function listWorkOrders(organizationId: string, opts: ListWorkOrdersOptions = {}) {
   const { status, priority, category, propertyId, unitId, tenantId, limit = 100 } = opts;
   const dbPriority = priority ? toDbPriority(priority) : undefined;
+  const moduleActive = await isUnitIntelligenceActive(organizationId);
 
   return prisma.workOrder.findMany({
     where: {
@@ -82,7 +106,7 @@ export async function listWorkOrders(organizationId: string, opts: ListWorkOrder
       ...(unitId ? { unitId } : {}),
       ...(tenantId ? { tenantId } : {}),
     },
-    include: workOrderInclude,
+    include: workOrderIncludeFor(moduleActive),
     orderBy: [{ slaBreached: 'desc' }, { createdAt: 'desc' }],
     take: limit,
   });
@@ -91,12 +115,14 @@ export async function listWorkOrders(organizationId: string, opts: ListWorkOrder
 // ─── Get ──────────────────────────────────────────────────────────────────────
 
 export async function getWorkOrder(organizationId: string, workOrderId: string) {
+  const moduleActive = await isUnitIntelligenceActive(organizationId);
+
   const workOrder = await prisma.workOrder.findFirst({
     where: {
       id: workOrderId,
       ...orgScope(organizationId),
     },
-    include: workOrderInclude,
+    include: workOrderIncludeFor(moduleActive),
   });
 
   if (!workOrder) {
@@ -111,6 +137,7 @@ export async function getWorkOrder(organizationId: string, workOrderId: string) 
 interface CreateWorkOrderData {
   unitId?: string | null;
   propertyId?: string | null;
+  applianceId?: string | null;
   title?: string | null;
   category: string;
   priority?: string;
@@ -127,6 +154,8 @@ export async function createWorkOrder(organizationId: string, data: CreateWorkOr
   let unitId: string | null = null;
   let propertyId: string | null = null;
   let tenantId: string | null = null;
+  let applianceId: string | null = null;
+  const moduleActive = await isUnitIntelligenceActive(organizationId);
 
   if (data.unitId) {
     // Unit-scoped: verify unit belongs to org; property always derived from the
@@ -172,6 +201,30 @@ export async function createWorkOrder(organizationId: string, data: CreateWorkOr
 
       tenantId = participant.tenantId;
     }
+
+    if (data.applianceId) {
+      if (!moduleActive) {
+        throw new AppError(
+          403,
+          'MODULE_NOT_ACTIVE',
+          'The "unit_intelligence" module is not active for this organization.'
+        );
+      }
+
+      // Verify the appliance belongs to this specific unit — an appliance
+      // record from a different unit (even in the same org) must never be
+      // linkable to this work order.
+      const appliance = await prisma.appliance.findFirst({
+        where: { id: data.applianceId, unitId },
+        select: { id: true },
+      });
+
+      if (!appliance) {
+        throw new AppError(404, 'APPLIANCE_NOT_FOUND', 'Appliance not found on this unit.');
+      }
+
+      applianceId = appliance.id;
+    }
   } else {
     // Property-level (common area): no unit, no tenant.
     if (!data.propertyId) {
@@ -209,12 +262,13 @@ export async function createWorkOrder(organizationId: string, data: CreateWorkOr
       preferredContactWindow: data.preferredContactWindow ?? null,
       slaDeadlineAt: computeSlaDeadline(requestedPriority),
       tenantId,
+      applianceId,
       submittedByUserId: data.submittedByUserId ?? null,
       // Some local DB states have NOT NULL without default on these columns.
       photosBefore: [],
       photosAfter: [],
     },
-    include: workOrderInclude,
+    include: workOrderIncludeFor(moduleActive),
   });
 
   return workOrder;
@@ -229,6 +283,7 @@ interface UpdateWorkOrderData {
   isCapitalProject?: boolean;
   assignedToUserId?: string | null;
   vendorId?: string | null;
+  applianceId?: string | null;
   scheduledAt?: string | null;
   resolutionNotes?: string | null;
   laborCost?: number | null;
@@ -277,6 +332,30 @@ export async function updateWorkOrder(
       throw new AppError(404, 'USER_NOT_FOUND', 'Assignee not found in your organization.');
     }
   }
+  const moduleActive = await isUnitIntelligenceActive(organizationId);
+  if (data.applianceId) {
+    if (!moduleActive) {
+      throw new AppError(
+        403,
+        'MODULE_NOT_ACTIVE',
+        'The "unit_intelligence" module is not active for this organization.'
+      );
+    }
+    if (!existing.unitId) {
+      throw new AppError(
+        400,
+        'NO_UNIT_FOR_APPLIANCE',
+        'Property-level work orders cannot be linked to an appliance.'
+      );
+    }
+    const appliance = await prisma.appliance.findFirst({
+      where: { id: data.applianceId, unitId: existing.unitId },
+      select: { id: true },
+    });
+    if (!appliance) {
+      throw new AppError(404, 'APPLIANCE_NOT_FOUND', "Appliance not found on this work order's unit.");
+    }
+  }
 
   const updateData: Record<string, unknown> = { ...data };
 
@@ -307,7 +386,7 @@ export async function updateWorkOrder(
   return prisma.workOrder.update({
     where: { id: workOrderId },
     data: updateData,
-    include: workOrderInclude,
+    include: workOrderIncludeFor(moduleActive),
   });
 }
 
