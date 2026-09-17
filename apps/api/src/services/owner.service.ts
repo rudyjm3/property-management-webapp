@@ -408,6 +408,22 @@ export async function createDisbursement(
 ) {
   const statement = await getOwnerStatement(organizationId, ownerStatementId);
 
+  // A statement's distributionAmount represents its entire owed payout — an
+  // existing pending/completed disbursement already accounts for it, so a
+  // second one would double the recorded payout and double-count the
+  // management fee in the Schedule E export. Cancelled disbursements don't
+  // block a new one (that's how you correct a mistaken disbursement).
+  const existingActive = await prisma.disbursement.findFirst({
+    where: { organizationId, ownerStatementId, status: { in: ['pending', 'completed'] } },
+  });
+  if (existingActive) {
+    throw new AppError(
+      409,
+      'DISBURSEMENT_ALREADY_EXISTS',
+      'This owner statement already has an active disbursement. Cancel it before creating a new one.'
+    );
+  }
+
   const org = await prisma.organization.findUniqueOrThrow({
     where: { id: organizationId },
     select: { defaultManagementFeePct: true },

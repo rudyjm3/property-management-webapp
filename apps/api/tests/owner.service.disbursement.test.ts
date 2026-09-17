@@ -36,9 +36,31 @@ describe('owner.service createDisbursement', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     (prisma.ownerStatement.findFirst as any).mockResolvedValue(baseStatement);
+    (prisma.disbursement.findFirst as any).mockResolvedValue(null);
     (prisma.disbursement.create as any).mockImplementation(({ data }: any) =>
       Promise.resolve({ id: 'disb-1', ...data })
     );
+  });
+
+  it('rejects a second disbursement while one is already pending or completed', async () => {
+    (prisma.disbursement.findFirst as any).mockResolvedValue({ id: 'disb-existing', status: 'pending' });
+    (prisma.organization.findUniqueOrThrow as any).mockResolvedValue({ defaultManagementFeePct: 10 });
+
+    await expect(
+      createDisbursement('org-1', 'stmt-1', {})
+    ).rejects.toMatchObject({ code: 'DISBURSEMENT_ALREADY_EXISTS' });
+    expect(prisma.disbursement.create).not.toHaveBeenCalled();
+  });
+
+  it('allows a new disbursement once the prior one was cancelled', async () => {
+    // findFirst is scoped to status: { in: ['pending', 'completed'] }, so a
+    // cancelled-only prior disbursement resolves to null here.
+    (prisma.disbursement.findFirst as any).mockResolvedValue(null);
+    (prisma.organization.findUniqueOrThrow as any).mockResolvedValue({ defaultManagementFeePct: 10 });
+
+    const result = await createDisbursement('org-1', 'stmt-1', {});
+
+    expect(result.grossAmount).toBe(1000);
   });
 
   it('rejects when the statement does not belong to the org', async () => {

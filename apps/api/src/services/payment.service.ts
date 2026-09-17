@@ -290,8 +290,12 @@ export async function recordPartialPayment(
   const paidAt = data.paidAt ? new Date(data.paidAt) : new Date();
 
   return prisma.$transaction(async (tx) => {
-    const updatedOriginal = await tx.payment.update({
-      where: { id: paymentId },
+    // Conditional update, not a plain update: guards against two overlapping
+    // partial-payment requests both reading the payment as pending and each
+    // splitting the full amount, which would double the tenant's carried
+    // balance. Only the request that wins the race (count === 1) proceeds.
+    const { count } = await tx.payment.updateMany({
+      where: { id: paymentId, status: 'pending' },
       data: {
         amount: data.amountPaid,
         originalAmount: amountDue,
@@ -302,6 +306,14 @@ export async function recordPartialPayment(
         paidAt,
         notes: data.notes ?? payment.notes,
       },
+    });
+
+    if (count === 0) {
+      throw new AppError(400, 'PAYMENT_NOT_PENDING', 'Only pending payments can be partially paid.');
+    }
+
+    const updatedOriginal = await tx.payment.findUniqueOrThrow({
+      where: { id: paymentId },
       include: paymentInclude,
     });
 
@@ -313,6 +325,14 @@ export async function recordPartialPayment(
         type: payment.type,
         status: 'pending',
         dueDate: payment.dueDate,
+        // Carry forward the original's late-fee state — otherwise this new
+        // pending row (same overdue dueDate, lateFeeApplied reset to false)
+        // looks freshly-due to lateFeeJob and gets charged a second late fee
+        // for the same underlying overdue rent.
+        isLate: payment.isLate,
+        lateFeeApplied: payment.lateFeeApplied,
+        lateFeeWaived: payment.lateFeeWaived,
+        lateFeeWaivedReason: payment.lateFeeWaivedReason,
         carriedFromPayment: { connect: { id: paymentId } },
         notes: `Balance carried forward from payment ${paymentId}.`,
       },

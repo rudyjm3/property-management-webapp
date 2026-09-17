@@ -113,7 +113,18 @@ router.post('/:paymentId/initiate-ach', requireManagerAccess, async (req: Reques
     const payment = await paymentService.getPayment(orgId, paymentId);
 
     // If a PaymentIntent already exists, return the existing one (idempotent)
+    // — but only if it's actually an ACH intent. A card intent (initiated via
+    // initiate-card, possibly by the tenant) has payment_method_types: ['card']
+    // and can't collect a bank account, so silently handing it back here would
+    // strand any ACH-only caller (e.g. the mobile app).
     if (payment.stripePaymentIntentId) {
+      if (payment.method !== 'ach') {
+        throw new AppError(
+          409,
+          'PAYMENT_METHOD_MISMATCH',
+          `This payment already has a ${payment.method} PaymentIntent in progress. Cancel it before initiating ACH.`
+        );
+      }
       const { default: Stripe } = await import('stripe');
       const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!, { apiVersion: '2025-02-24.acacia' });
       const pi = await stripe.paymentIntents.retrieve(payment.stripePaymentIntentId);
@@ -164,7 +175,15 @@ router.post('/:paymentId/initiate-card', requireManagerAccess, requireAccounting
 
     const payment = await paymentService.getPayment(orgId, paymentId);
 
+    // Same method-mismatch guard as initiate-ach, in the other direction.
     if (payment.stripePaymentIntentId) {
+      if (payment.method !== 'card') {
+        throw new AppError(
+          409,
+          'PAYMENT_METHOD_MISMATCH',
+          `This payment already has a ${payment.method} PaymentIntent in progress. Cancel it before initiating a card payment.`
+        );
+      }
       const { default: Stripe } = await import('stripe');
       const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!, { apiVersion: '2025-02-24.acacia' });
       const pi = await stripe.paymentIntents.retrieve(payment.stripePaymentIntentId);

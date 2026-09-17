@@ -668,14 +668,17 @@ export async function getScheduleEExport(
   const end = new Date(filters.periodEnd);
   end.setHours(23, 59, 59, 999);
 
+  // Recognize each disbursement's management fee on a single date (createdAt)
+  // rather than matching against its OwnerStatement's period range — an
+  // overlap match would double- (or triple-) count a multi-month statement's
+  // fee across every export period it overlaps. Cancelled disbursements are
+  // excluded entirely since they were never actually charged.
   const disbursements = await prisma.disbursement.findMany({
     where: {
       organizationId,
+      status: { not: 'cancelled' },
       ...(filters.propertyId ? { propertyId: filters.propertyId } : {}),
-      ownerStatement: {
-        periodStart: { lte: end },
-        periodEnd: { gte: start },
-      },
+      createdAt: { gte: start, lte: end },
     },
     select: { propertyId: true, managementFeeAmount: true },
   });
