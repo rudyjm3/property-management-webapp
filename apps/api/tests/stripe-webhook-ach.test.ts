@@ -263,6 +263,157 @@ describe('Stripe Webhook — ACH smoke test', () => {
     });
   });
 
+  describe('charge.refunded', () => {
+    function buildRefundEvent(amountRefunded: number, previousAmountRefunded = 0): Stripe.Event {
+      return {
+        id: 'evt_test_' + Math.random().toString(36).slice(2, 10),
+        object: 'event',
+        api_version: '2025-02-24.acacia',
+        created: Math.floor(Date.now() / 1000),
+        livemode: false,
+        pending_webhooks: 1,
+        request: null,
+        type: 'charge.refunded',
+        data: {
+          object: {
+            id: 'ch_test_abc123',
+            object: 'charge',
+            payment_intent: 'pi_test_abc123',
+            amount_refunded: amountRefunded,
+          } as unknown as Stripe.Charge,
+          previous_attributes: { amount_refunded: previousAmountRefunded },
+        },
+      } as unknown as Stripe.Event;
+    }
+
+    it('marks the payment refunded and creates a ledger debit for a full refund', async () => {
+      const event = buildRefundEvent(150000);
+      constructEventMock.mockReturnValue(event);
+
+      (prisma.payment.findFirst as ReturnType<typeof vi.fn>).mockResolvedValue(mockPaymentWithLease);
+      (mockTx.payment.updateMany as ReturnType<typeof vi.fn>).mockResolvedValue({ count: 1 });
+      (mockTx.ledgerEntry.findUnique as ReturnType<typeof vi.fn>).mockResolvedValue(null);
+      (mockTx.ledgerEntry.findFirst as ReturnType<typeof vi.fn>).mockResolvedValue({ balanceAfter: 1500 });
+      (mockTx.ledgerEntry.create as ReturnType<typeof vi.fn>).mockResolvedValue({
+        id: 'ledger-refund', type: 'debit', amount: 1500, balanceAfter: 0,
+      });
+
+      const req = buildMockReq(event);
+      const res = buildMockRes();
+      await stripeWebhookHandler(req, res);
+      await new Promise((r) => setTimeout(r, 50));
+
+      expect(mockTx.payment.updateMany).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: expect.objectContaining({ id: 'payment-1', status: { not: 'refunded' } }),
+          data: expect.objectContaining({ status: 'refunded' }),
+        })
+      );
+      expect(mockTx.ledgerEntry.create).toHaveBeenCalledWith(
+        expect.objectContaining({ data: expect.objectContaining({ type: 'debit', amount: 1500 }) })
+      );
+    });
+
+    it('uses the incremental refund amount for a partial refund (amount_refunded is cumulative)', async () => {
+      // Second partial refund on a charge already partially refunded by $5
+      const event = buildRefundEvent(150000, 50000);
+      constructEventMock.mockReturnValue(event);
+
+      (prisma.payment.findFirst as ReturnType<typeof vi.fn>).mockResolvedValue(mockPaymentWithLease);
+      (mockTx.payment.updateMany as ReturnType<typeof vi.fn>).mockResolvedValue({ count: 1 });
+      (mockTx.ledgerEntry.findUnique as ReturnType<typeof vi.fn>).mockResolvedValue(null);
+      (mockTx.ledgerEntry.findFirst as ReturnType<typeof vi.fn>).mockResolvedValue({ balanceAfter: 1500 });
+      (mockTx.ledgerEntry.create as ReturnType<typeof vi.fn>).mockResolvedValue({
+        id: 'ledger-partial-refund', type: 'debit', amount: 1000, balanceAfter: 500,
+      });
+
+      const req = buildMockReq(event);
+      const res = buildMockRes();
+      await stripeWebhookHandler(req, res);
+      await new Promise((r) => setTimeout(r, 50));
+
+      // (150000 - 50000) / 100 = 1000 — the delta, not the cumulative total
+      expect(mockTx.ledgerEntry.create).toHaveBeenCalledWith(
+        expect.objectContaining({ data: expect.objectContaining({ amount: 1000 }) })
+      );
+    });
+
+    it('does nothing when no matching payment is found for the charge', async () => {
+      const event = buildRefundEvent(150000);
+      constructEventMock.mockReturnValue(event);
+      (prisma.payment.findFirst as ReturnType<typeof vi.fn>).mockResolvedValue(null);
+
+      const req = buildMockReq(event);
+      const res = buildMockRes();
+      await stripeWebhookHandler(req, res);
+      await new Promise((r) => setTimeout(r, 50));
+
+      expect(mockTx.ledgerEntry.create).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('refund.updated', () => {
+    function buildRefundUpdatedEvent(status: string, amount = 150000): Stripe.Event {
+      return {
+        id: 'evt_test_' + Math.random().toString(36).slice(2, 10),
+        object: 'event',
+        api_version: '2025-02-24.acacia',
+        created: Math.floor(Date.now() / 1000),
+        livemode: false,
+        pending_webhooks: 1,
+        request: null,
+        type: 'refund.updated',
+        data: {
+          object: {
+            id: 're_test_abc123',
+            object: 'refund',
+            payment_intent: 'pi_test_abc123',
+            status,
+            amount,
+          } as unknown as Stripe.Refund,
+        },
+      } as unknown as Stripe.Event;
+    }
+
+    it('marks the payment refunded and creates a ledger debit once the refund succeeds', async () => {
+      const event = buildRefundUpdatedEvent('succeeded');
+      constructEventMock.mockReturnValue(event);
+
+      (prisma.payment.findFirst as ReturnType<typeof vi.fn>).mockResolvedValue(mockPaymentWithLease);
+      (mockTx.payment.updateMany as ReturnType<typeof vi.fn>).mockResolvedValue({ count: 1 });
+      (mockTx.ledgerEntry.findUnique as ReturnType<typeof vi.fn>).mockResolvedValue(null);
+      (mockTx.ledgerEntry.findFirst as ReturnType<typeof vi.fn>).mockResolvedValue({ balanceAfter: 1500 });
+      (mockTx.ledgerEntry.create as ReturnType<typeof vi.fn>).mockResolvedValue({
+        id: 'ledger-refund-updated', type: 'debit', amount: 1500, balanceAfter: 0,
+      });
+
+      const req = buildMockReq(event);
+      const res = buildMockRes();
+      await stripeWebhookHandler(req, res);
+      await new Promise((r) => setTimeout(r, 50));
+
+      expect(mockTx.payment.updateMany).toHaveBeenCalledWith(
+        expect.objectContaining({ data: expect.objectContaining({ status: 'refunded' }) })
+      );
+      expect(mockTx.ledgerEntry.create).toHaveBeenCalledWith(
+        expect.objectContaining({ data: expect.objectContaining({ type: 'debit', amount: 1500 }) })
+      );
+    });
+
+    it('ignores a refund that has not succeeded yet (e.g. still pending)', async () => {
+      const event = buildRefundUpdatedEvent('pending');
+      constructEventMock.mockReturnValue(event);
+
+      const req = buildMockReq(event);
+      const res = buildMockRes();
+      await stripeWebhookHandler(req, res);
+      await new Promise((r) => setTimeout(r, 50));
+
+      expect(prisma.payment.findFirst).not.toHaveBeenCalled();
+      expect(mockTx.ledgerEntry.create).not.toHaveBeenCalled();
+    });
+  });
+
   describe('setup_intent.succeeded', () => {
     it('updates tenant autopay fields when setup completes', async () => {
       const setupEvent: Stripe.Event = {

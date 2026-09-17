@@ -4,6 +4,12 @@ import { useEffect, useState } from 'react';
 import { api } from '@/lib/api';
 import { useAuth } from '@/contexts/AuthContext';
 import SettingsShell from '@/components/settings/SettingsShell';
+import { MODULE_KEYS, ALL_MODULE_KEYS, type ModuleKey } from '@propflow/shared';
+
+const MODULE_LABELS: Record<ModuleKey, string> = {
+  [MODULE_KEYS.OWNER_PORTAL]: 'Owner Portal',
+  [MODULE_KEYS.REPORTING_ANALYTICS]: 'Reporting & Analytics',
+};
 
 const TIMEZONES = [
   'America/New_York',
@@ -36,6 +42,9 @@ export default function OrganizationSettingsPage() {
   const [rentDueDay, setRentDueDay] = useState(1);
   const [gracePeriodDays, setGracePeriodDays] = useState(5);
   const [lateFeeAmount, setLateFeeAmount] = useState(50);
+  const [activeModules, setActiveModules] = useState<ModuleKey[]>([]);
+  const [modulesSaving, setModulesSaving] = useState(false);
+  const [modulesError, setModulesError] = useState<string | null>(null);
 
   useEffect(() => {
     async function load() {
@@ -50,6 +59,7 @@ export default function OrganizationSettingsPage() {
         setRentDueDay(org.rentDueDay ?? 1);
         setGracePeriodDays(org.gracePeriodDays ?? 5);
         setLateFeeAmount(Number(org.lateFeeAmount) ?? 50);
+        setActiveModules((org.activeModules ?? []) as ModuleKey[]);
 
         if (org.logoUrl) {
           if (typeof org.logoUrl === 'string' && /^https?:\/\//i.test(org.logoUrl)) {
@@ -110,6 +120,24 @@ export default function OrganizationSettingsPage() {
       setError(err.message || 'Failed to save settings.');
     } finally {
       setSaving(false);
+    }
+  }
+
+  async function handleToggleModule(moduleKey: ModuleKey, enabled: boolean) {
+    const next = enabled
+      ? [...activeModules, moduleKey]
+      : activeModules.filter((m) => m !== moduleKey);
+
+    setModulesSaving(true);
+    setModulesError(null);
+    try {
+      await api.organizations.update({ activeModules: next });
+      await refreshProfile();
+      setActiveModules(next);
+    } catch (err: any) {
+      setModulesError(err.message || 'Failed to update modules.');
+    } finally {
+      setModulesSaving(false);
     }
   }
 
@@ -402,6 +430,54 @@ export default function OrganizationSettingsPage() {
               </button>
             </div>
           </form>
+        </div>
+      </div>
+
+      <div className="card" style={{ marginTop: '20px' }}>
+        <div className="card-body">
+          <h2 style={{ fontSize: '16px', fontWeight: 600, marginBottom: '8px' }}>Add-On Modules</h2>
+          <p style={{ fontSize: '13px', color: 'var(--color-text-muted)', marginBottom: '16px' }}>
+            Temporary on/off toggle ahead of module billing — enabling a module here makes it
+            immediately visible and usable for this organization.
+          </p>
+
+          {modulesError && (
+            <div
+              style={{
+                background: '#fef2f2',
+                border: '1px solid #fecaca',
+                borderRadius: '6px',
+                padding: '12px',
+                marginBottom: '16px',
+                color: '#dc2626',
+                fontSize: '14px',
+              }}
+            >
+              {modulesError}
+            </div>
+          )}
+
+          {ALL_MODULE_KEYS.map((moduleKey) => (
+            <label
+              key={moduleKey}
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: '10px',
+                padding: '10px 0',
+                fontSize: '14px',
+                cursor: modulesSaving ? 'default' : 'pointer',
+              }}
+            >
+              <input
+                type="checkbox"
+                checked={activeModules.includes(moduleKey)}
+                disabled={modulesSaving}
+                onChange={(e) => handleToggleModule(moduleKey, e.target.checked)}
+              />
+              {MODULE_LABELS[moduleKey]}
+            </label>
+          ))}
         </div>
       </div>
     </SettingsShell>

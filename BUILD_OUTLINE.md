@@ -169,6 +169,7 @@ Every manager-facing query must filter by `organization_id`. This is enforced at
 | `late_fee_amount`        | decimal   | **Required** | Default late fee — overridable per lease    |
 | `grace_period_days`      | integer   | **Required** | Days after due date before late fee applies |
 | `rent_due_day`           | integer   | **Required** | Day of month rent is due (e.g. 1)           |
+| `active_modules`         | string[]  | **Required** | Default `[]`. Add-on module keys the org has active — see §14 |
 | `created_at`             | timestamp | **Required** |                                             |
 
 ---
@@ -942,7 +943,7 @@ This appendix captures what is currently implemented in the repo beyond or diffe
 - Payment void now posts a real ledger reversal (update 09-16-2026): `voidPayment()` still sets `voidedAt`/`voidReason`/`status: 'voided'`, but now also nets whatever the payment already posted to the ledger (e.g. an ACH credit from the Stripe webhook) and creates a counterpart reversing entry in the same transaction, so the ledger balance is restored to what it would be had the payment never completed. No-ops for payments that never posted a ledger entry (cash/check/waived). Covered by `payment.service.test.ts` (ledger balance before/after). (see `payment.service.ts`, `ledger.service.ts`)
 - Mobile invite-code activation screen shipped (`apps/mobile/app/(auth)/activate.tsx`) and autopay toggle shipped in the mobile Payments tab (`AutopaySetupSheet.tsx`).
 - Online rental application form + e-signature flow shipped (`routes/apply.ts`, `routes/sign.ts`, `rental-application.service.ts`) — core of Module 1's leasing funnel. Background/credit check integration (TransUnion or similar) is not yet built; `screeningConsentAt`/`ssnFullEncrypted`/`govtIdNumber` remain dormant schema hooks.
-- Module 9 (Owner Portal / Financial Reporting & Owner Statements) and Module 11 (Reporting & Analytics) are now both fully built functionally (update 09-16-2026), well ahead of their "Low priority" roadmap position — see §7 note and `docs/reference/modules.md`. Module 9 ships `Owner`/`PropertyOwner`/`OwnerStatement` data and manager-facing routes (`routes/owners.ts`), plus a separate owner-facing auth path (`Owner.supabaseUserId`/`portalStatus`, `requireOwnerAuth` middleware) and a read-only owner portal web UI (`apps/web/app/owner-portal/*` — login, set-password, dashboard, properties, statements, reports) backed by `routes/owner-portal.ts`. Module 11 adds a configurable report builder (`POST /reports/builder`, column/filter selection over the existing report sources, with saved configs via `SavedReport`), vacancy-rate history with manual market-rate comparison (`VacancyHistory` model, `/reports/vacancy-history*`), and PDF export alongside the existing CSV export (`apps/web/lib/exportPdf.ts` via `jspdf`), on top of the fixed report endpoints. Neither is currently feature-flagged: there is still no `active_modules` field on `Organization` and no `ModuleGate` component, so what is built ships as always-on rather than paid/gated — that gating work remains open (see item 16 below).
+- Module 9 (Owner Portal / Financial Reporting & Owner Statements) and Module 11 (Reporting & Analytics) are now both fully built functionally (update 09-16-2026), well ahead of their "Low priority" roadmap position — see §7 note and `docs/reference/modules.md`. Module 9 ships `Owner`/`PropertyOwner`/`OwnerStatement` data and manager-facing routes (`routes/owners.ts`), plus a separate owner-facing auth path (`Owner.supabaseUserId`/`portalStatus`, `requireOwnerAuth` middleware) and a read-only owner portal web UI (`apps/web/app/owner-portal/*` — login, set-password, dashboard, properties, statements, reports) backed by `routes/owner-portal.ts`. Module 11 adds a configurable report builder (`POST /reports/builder`, column/filter selection over the existing report sources, with saved configs via `SavedReport`), vacancy-rate history with manual market-rate comparison (`VacancyHistory` model, `/reports/vacancy-history*`), and PDF export alongside the existing CSV export (`apps/web/lib/exportPdf.ts` via `jspdf`), on top of the fixed report endpoints. **Update (2026-09-17):** both are now feature-flagged — `Organization.activeModules`, the `requireModule(...)` API middleware, and the web `<ModuleGate>` component all exist and are wired to these two routes/pages — see item 16 below and `docs/reference/modules.md`. Activation is a manual toggle for now, not Stripe Subscription Item billing.
 
 ---
 
@@ -999,11 +1000,60 @@ _Last updated: 2026-09-16. Status reflects the `main` branch._
 | Tenant detail — manager message thread                                | ✅     | Thread list + compose + send implemented at `tenants/[id]/page.tsx:547`                              |
 | Tenant detail — move-out workflow                                     | ✅     | Move-out modal: date, deposit deductions, live return calc, terminates lease + creates deposit Payment |
 | Message file/photo attachments (web)                                  | ✅     | Shipped alongside mobile attachment support (05-30-2026)                                             |
-| ACH end-to-end flow validated (success + failure + refund)            | ⚠️     | Routes exist; webhook → ledger path still not smoke-tested in Stripe sandbox                          |
+| ACH end-to-end flow validated (success + failure + refund)            | ✅     | Smoke-tested 2026-09-17 against real Stripe test-mode API — see write-up below |
 | Financial controls (reconciliation, duplicate prevention, audit)      | ⚠️     | Payment void status-tracking (`voidPayment()`, `voidedAt`/`voidReason`) shipped, but it does not post a ledger reversal; reconciliation, duplicate-prevention, and true accounting reversal still not built |
 
 **Pilot blockers:** None — all pilot-blocking items are implemented.
-**Production gaps:** ACH end-to-end smoke test. Financial reconciliation, duplicate-payment prevention, and an actual ledger-reversal on void (status-only void support now exists).
+**Production gaps:** Financial reconciliation, duplicate-payment prevention, and an actual ledger-reversal on void (status-only void support now exists).
+
+**ACH smoke test write-up (2026-09-17):** Ran against Stripe's real test-mode
+API (not a live inbound webhook — see caveat below), driving the app's own
+`stripe.service.ts` and `webhooks/stripe.ts` code, against a real local
+Postgres:
+
+- **Connect account setup** — `stripeService.getOrCreateConnectAccount` and
+  `createAccountLink` genuinely exercised: created a real Express account
+  (`acct_...`) and a real hosted onboarding URL via the live API. Completing
+  onboarding itself (`charges_enabled`/`payouts_enabled` → true) requires
+  Stripe's hosted, human-driven onboarding UI for Express accounts — Stripe
+  rejects direct API writes of identity/business fields on Express accounts
+  with `StripePermissionError: oauth_not_supported` (confirmed empirically,
+  not assumed), so that step is inherently outside what any unattended
+  script — ours or Stripe's own tooling — can complete. This is a real
+  platform boundary, not a gap in this test.
+- **ACH payment initiation** — real `PaymentMethod`s created with Stripe's
+  documented test bank accounts (routing `110000000`) and confirmed with
+  `mandate_data` + micro-deposit verification (`amounts: [32, 45]`, Stripe's
+  test-mode instant-verify values). Account `000123456789` → PaymentIntent
+  reached `succeeded`; account `000111111113` → reached
+  `requires_payment_method` with a real `account_closed` decline. Because
+  the connected account above couldn't complete onboarding, these
+  PaymentIntents were created without `transfer_data.destination` (platform
+  charge, not a Connect destination charge) — confirmed separately that
+  attempting `transfer_data.destination` against an unactivated connected
+  account fails with `insufficient_capabilities_for_transfer`, which is the
+  correct, expected Stripe behavior.
+- **Webhook receipt → ledger update** — the real succeeded/failed
+  PaymentIntents (and a real `Refund` issued via `stripe.refunds.create`)
+  were wrapped in genuine Stripe event envelopes and delivered to the
+  app's actual `stripeWebhookHandler`, signed with
+  `Stripe.webhooks.generateTestHeaderString` so the handler's real HMAC
+  verification (`stripe.webhooks.constructEvent`) ran unmodified — this
+  is the one substitution: Stripe couldn't deliver the webhook to a public
+  endpoint from this sandboxed environment, so the event envelope was
+  relayed locally instead of over the wire, everything downstream of
+  signature verification is the real handler running unmodified. Verified
+  against the real local DB: `payment_intent.succeeded` → `Payment.status`
+  → `completed` + ledger credit; `payment_intent.payment_failed` →
+  `Payment.status` → `failed`; `charge.refunded` (issued on the successful
+  payment) → `Payment.status` → `refunded` + ledger debit. No bugs found —
+  all three scenarios passed on the first fully-wired run.
+- **Regression coverage** — `apps/api/tests/stripe-webhook-ach.test.ts`
+  already covered `payment_intent.succeeded`/`payment_intent.payment_failed`
+  and `setup_intent.succeeded`; this pass added mocked coverage for
+  `charge.refunded` (full + partial/incremental refund amount, and the
+  no-matching-payment case) and `refund.updated` (including ignoring a
+  refund that hasn't succeeded yet) — 48 tests passing across the API suite.
 
 ---
 
@@ -1062,7 +1112,7 @@ _Sourced from MVP review, 2026-05-26. Re-verified against code 2026-09-16 — it
 2. ~~Stripe webhook security audit + rate limiting~~ — **Rate limiting done** (`middleware/rate-limit.ts` on invite/apply/sign routes). A formal webhook/auth *security audit* has not been done — still open, see Cross-Cutting Status.
 3. ~~Error monitoring (Sentry)~~ — **Done.** Wired into API, mobile, and web.
 4. ~~Autopay UI toggle (mobile)~~ — **Done.** `AutopaySetupSheet.tsx`.
-5. **End-to-end ACH smoke test in Stripe sandbox** — still open. The webhook → ledger path exists but has never been smoke-tested. This is a financial system; untested money movement paths are a blocker.
+5. ~~End-to-end ACH smoke test in Stripe sandbox~~ — **Done (2026-09-17).** Success, failure, and refund all verified against real Stripe test-mode objects through the app's actual webhook handler — see §12's write-up. Connect onboarding *completion* (charges/payouts enabled) remains a Stripe-hosted, human-driven step by design — confirmed via a real `StripePermissionError` when attempting to bypass it via API — not something any automated test can complete.
 
 ### Next 60 days (MVP launch)
 
@@ -1074,7 +1124,7 @@ _Sourced from MVP review, 2026-05-26. Re-verified against code 2026-09-16 — it
 
 ### New since last pass (found in this review)
 
-16. **Module gating infrastructure** — Modules 9 (Owner Portal) and 11 (Reporting & Analytics) are now fully built functionally (see #12 and `docs/reference/modules.md`), but there is still no `active_modules` field on `Organization` and no `ModuleGate` component. What's built currently ships always-on rather than as paid/flagged add-ons — needed before selling modules as billed upsells.
+16. ~~Module gating infrastructure~~ — **Done (2026-09-17).** `Organization.activeModules`, the `requireModule(...)` API middleware, and the web `<ModuleGate>` component now exist and are wired to Modules 9 (Owner Portal) and 11 (Reporting & Analytics) — see #12 and `docs/reference/modules.md`. Activation is currently a manual toggle (Settings → Organization, or `PATCH /organizations/:orgId`), not Stripe Subscription Item billing — that wiring is still open and is the remaining step before selling these as paid upsells.
 17. **Background/credit check integration for Module 1** — the application + e-signature flow is built; the screening/credit-check step (TransUnion SmartMove or equivalent) against the existing `screeningConsentAt`/`ssnFullEncrypted`/`govtIdNumber` fields is not.
 18. **Formal security review** — a cross-org work-order scoping leak was found and fixed reactively (07-19-2026); no audit pass has been done to look for others across auth, file access, org isolation, and webhook HMAC verification.
 19. **Notification preferences + contact-manager shortcut (mobile Account tab)** — spec'd in §8 but not implemented.
@@ -1087,13 +1137,23 @@ _Sourced from MVP review, 2026-05-26. Re-verified against code 2026-09-16 — it
 14. **Vacancy listing syndication** — Module 8. Top-of-funnel capture from Zillow/Apartments.com.
 15. **AI maintenance triage** — differentiator; auto-categorizes and prioritizes work orders on submission.
 
-> **Bottom line (updated 2026-09-16):** The product has moved past most of its original MVP gap list — activation flow, autopay, Sentry, rate limiting, SMS, and attachments are all fully shipped, and two "Low priority" modules (Owner Portal, Reporting & Analytics) are now fully built functionally, ahead of schedule, including payment void's ledger reversal. What's left before a confident launch is narrower and more operational: the ACH smoke test, a real security review, module billing/gating (now the main gap for Modules 9 and 11, which ship unbilled), and finishing Module 1's screening step. The data model was already designed for all of this — execution continues to be the remaining work, not redesign.
+> **Bottom line (updated 2026-09-17):** The product has moved past most of its original MVP gap list — activation flow, autopay, Sentry, rate limiting, SMS, and attachments are all fully shipped, and two "Low priority" modules (Owner Portal, Reporting & Analytics) are now fully built functionally, ahead of schedule, including payment void's ledger reversal. Module gating infrastructure has also landed (`activeModules`, `requireModule`, `<ModuleGate>`), so Modules 9 and 11 are no longer unbilled free features — they're now behind a manual on/off toggle pending real Stripe billing. The ACH money-movement path has also now been smoke-tested end-to-end (success, failure, refund) against real Stripe test-mode objects, with no bugs found. What's left before a confident launch is narrower and more operational: a real security review, Stripe Subscription Item billing to replace the manual module toggle, and finishing Module 1's screening step. The data model was already designed for all of this — execution continues to be the remaining work, not redesign.
 
 ---
 
 ## 14. Add-On Module Documentation
 
-> Add-on modules are Phase 4+ features. They are outside base-product scope and will not be built until the pilot gate is cleared and early user feedback has been collected. Each module is feature-flagged at the API middleware layer via `organization.active_modules` and billed as additional Stripe Subscription Items. UI components are gated behind a `<ModuleGate module="...">` wrapper.
+> Add-on modules are Phase 4+ features. They are outside base-product scope and will not be built until the pilot gate is cleared and early user feedback has been collected. Each module is feature-flagged at the API middleware layer via `organization.activeModules` and billed as additional Stripe Subscription Items. UI components are gated behind a `<ModuleGate module="...">` wrapper.
+>
+> **Update (2026-09-17):** the gating mechanism itself now exists —
+> `Organization.activeModules` (String[]), the `requireModule(...)` API
+> middleware, and the web `<ModuleGate>` component — and is wired to Modules
+> 9 and 11, the two modules that had shipped functionality ahead of gating
+> (see their sections below and `docs/reference/modules.md`). Stripe
+> Subscription Item billing is still not wired; activation today is a manual
+> `activeModules` toggle (Settings → Organization → "Add-On Modules", or
+> `PATCH /organizations/:orgId`), open to any owner/manager. No other module
+> has functionality built yet, so no other module needs gating today.
 
 ---
 
@@ -1270,6 +1330,12 @@ _Sourced from MVP review, 2026-05-26. Re-verified against code 2026-09-16 — it
 - Distribution and disbursement records with PDF statements
 - Owner-level reporting: income, expenses, NOI by property
 
+**Status (2026-09-17):** Fully built and now module-gated — see
+`docs/reference/modules.md` and §12. `requireModule('owner_portal')` guards
+both the manager-facing `/owners` route and the owner-facing `/owner-portal`
+route; `<ModuleGate>` guards the web `/owners` page and nav entry. Not yet
+behind Stripe billing — activation is a manual `activeModules` toggle.
+
 **Dependencies:** Payments, Properties, Advanced Payments & Accounting module
 
 ---
@@ -1306,6 +1372,12 @@ _Sourced from MVP review, 2026-05-26. Re-verified against code 2026-09-16 — it
 - Rent roll report (standard format for lenders and accountants)
 - Vacancy rate history and market comparison
 - Export to CSV and PDF
+
+**Status (2026-09-17):** Fully built and now module-gated — see
+`docs/reference/modules.md` and §12. `requireModule('reporting_analytics')`
+guards `/reports`; `<ModuleGate>` guards the web `/reports` page and nav
+entry. Not yet behind Stripe billing — activation is a manual
+`activeModules` toggle.
 
 **Dependencies:** All base modules; enhanced by all add-on modules
 

@@ -25,9 +25,11 @@ the `owner` value in `UserRole`, which is a manager-side staff role).
 | `requireOwnerAuth` | Supabase JWT + looks up `Owner` by `supabaseUserId` (also flips `portalStatus` to `active` on first hit) | `req.owner: AuthOwner { ownerId, orgId, supabaseUserId }` | Owner portal routes (`/owner-portal/*`) — separate auth path from both `req.user` and `req.tenant` |
 | `requireOrg` | `req.params.orgId` matches `req.user.orgId` | — | Org isolation; always chained after `requireAuth` on `/organizations/:orgId/*` routes |
 | `requireRoles(allowedRoles: string[])` | `req.user.role` is in `allowedRoles` | — | Role gate; flat allowlist, e.g. `requireRoles(['owner', 'manager'])` |
+| `requireModule(moduleKey)` (`apps/api/src/middleware/module-gate.ts`) | `Organization.activeModules` (looked up fresh per request) includes `moduleKey` | — | Add-on module gate; resolves the org from whichever identity is present (`req.user`, `req.owner`, or `req.tenant`) so it can chain after any of the three auth middlewares |
 
-All six return `401 UNAUTHORIZED`/`INVALID_TOKEN`/`USER_NOT_FOUND` or
-`403 FORBIDDEN` in the shared `{ error: { code, message } }` shape on failure.
+All seven return `401 UNAUTHORIZED`/`INVALID_TOKEN`/`USER_NOT_FOUND` or
+`403 FORBIDDEN`/`MODULE_NOT_ACTIVE` in the shared `{ error: { code, message } }`
+shape on failure.
 
 ## Where role-gating is actually applied today
 
@@ -44,6 +46,12 @@ just because `index.ts` doesn't gate it. As of this writing:
 - **Every endpoint gated to `owner`/`manager`**: `leases.ts`, `payments.ts`,
   `owners.ts`, `reports.ts`, `ledger.ts`, `messages.ts`, `staff.ts`,
   `billing.ts`, `connect.ts`, `documents.ts`
+- **Also module-gated** (on top of role-gating): `owners.ts` requires
+  `owner_portal` in `activeModules`, `reports.ts` requires
+  `reporting_analytics`, both applied via `requireModule(...)` in
+  `index.ts`. The owner-facing `/owner-portal/*` routes (`requireOwnerAuth`)
+  are likewise gated behind `owner_portal`. See `modules.md` for the full
+  module-gating picture.
 - **Partially gated** (mutations require `owner`/`manager`, reads are open to
   any org role): `properties.ts`, `tenants.ts`, `units.ts`; `organizations.ts`
   gates only its settings-update and one settings-read endpoint (and is

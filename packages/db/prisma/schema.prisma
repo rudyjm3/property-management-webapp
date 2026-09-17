@@ -29,6 +29,9 @@ model Organization {
   lateFeeAmount        Decimal            @default(50) @map("late_fee_amount") @db.Decimal(10, 2)
   gracePeriodDays      Int                @default(5) @map("grace_period_days")
   rentDueDay           Int                @default(1) @map("rent_due_day")
+  // Add-on module gating — module keys the org has active (e.g. "owner_portal").
+  // No billing wiring yet; see packages/shared/src/constants/modules.ts for the key list.
+  activeModules        String[]           @default([]) @map("active_modules")
   createdAt            DateTime           @default(now()) @map("created_at")
   updatedAt            DateTime           @updatedAt @map("updated_at")
 

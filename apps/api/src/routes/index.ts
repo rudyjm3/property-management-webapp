@@ -1,5 +1,7 @@
 import { Router } from 'express';
 import { requireAuth, requireOrg, requireRoles, requireTenantAuth, requireOwnerAuth } from '../middleware/auth';
+import { requireModule } from '../middleware/module-gate';
+import { MODULE_KEYS } from '@propflow/shared';
 import authRoutes from './auth';
 import inviteRoutes from './invite';
 import organizationRoutes from './organizations';
@@ -62,16 +64,29 @@ router.use('/organizations/:orgId/billing', requireAuth, requireOrg, billingRout
 // Application links, application review, and manager lease signing
 router.use('/organizations/:orgId', requireAuth, requireOrg, requireRoles(['owner', 'manager']), applicationRoutes);
 
-// Owner management and owner statements
-router.use('/organizations/:orgId/owners', requireAuth, requireOrg, ownerRoutes);
+// Owner management and owner statements — Module 9, gated by activeModules
+router.use(
+  '/organizations/:orgId/owners',
+  requireAuth,
+  requireOrg,
+  requireModule(MODULE_KEYS.OWNER_PORTAL),
+  ownerRoutes
+);
 
-// Financial reports
-router.use('/organizations/:orgId/reports', requireAuth, requireOrg, reportRoutes);
+// Financial reports — Module 11, gated by activeModules
+router.use(
+  '/organizations/:orgId/reports',
+  requireAuth,
+  requireOrg,
+  requireModule(MODULE_KEYS.REPORTING_ANALYTICS),
+  reportRoutes
+);
 
 // Tenant portal routes — protected by tenant auth (separate from manager auth)
 router.use('/tenant', requireTenantAuth, tenantPortalRoutes);
 
-// Owner portal routes — protected by owner auth (separate from manager and tenant auth)
-router.use('/owner-portal', requireOwnerAuth, ownerPortalRoutes);
+// Owner portal routes — Module 9's owner-facing surface, protected by owner
+// auth and gated by activeModules (mirrors the manager-facing /owners gate)
+router.use('/owner-portal', requireOwnerAuth, requireModule(MODULE_KEYS.OWNER_PORTAL), ownerPortalRoutes);
 
 export default router;

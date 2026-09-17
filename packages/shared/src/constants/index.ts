@@ -148,6 +148,19 @@ export const LEDGER_ENTRY_TYPES = ['credit', 'debit'] as const;
 
 export const OWNER_STATEMENT_STATUSES = ['draft', 'sent'] as const;
 
+// ─── Add-On Modules ───────────────────────────────────────────────────────────
+
+// Keys stored in Organization.activeModules. Gates existing functionality that
+// has shipped ahead of its module's billing wiring (see docs/reference/modules.md).
+export const MODULE_KEYS = {
+  OWNER_PORTAL: 'owner_portal',
+  REPORTING_ANALYTICS: 'reporting_analytics',
+} as const;
+
+export type ModuleKey = (typeof MODULE_KEYS)[keyof typeof MODULE_KEYS];
+
+export const ALL_MODULE_KEYS = Object.values(MODULE_KEYS) as ModuleKey[];
+
 // ─── API ──────────────────────────────────────────────────────────────────────
 
 export const DEFAULT_PAGE_SIZE = 25;

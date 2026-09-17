@@ -5,8 +5,9 @@ import { usePathname } from 'next/navigation';
 import { useEffect, useState } from 'react';
 import { api } from '@/lib/api';
 import { useAuth } from '@/contexts/AuthContext';
+import { MODULE_KEYS, type ModuleKey } from '@propflow/shared';
 
-const allNavItems = [
+const allNavItems: { href: string; label: string; icon: string; module?: ModuleKey }[] = [
   { href: '/dashboard', label: 'Dashboard', icon: 'grid' },
   { href: '/properties', label: 'Properties', icon: 'building' },
   { href: '/tenants', label: 'Tenants', icon: 'users' },
@@ -16,13 +17,13 @@ const allNavItems = [
   { href: '/work-orders', label: 'Work Orders', icon: 'wrench' },
   { href: '/messages', label: 'Messages', icon: 'mail' },
   { href: '/documents', label: 'Documents', icon: 'folder' },
-  { href: '/owners', label: 'Owners', icon: 'owner' },
-  { href: '/reports', label: 'Reports', icon: 'chart' },
+  { href: '/owners', label: 'Owners', icon: 'owner', module: MODULE_KEYS.OWNER_PORTAL },
+  { href: '/reports', label: 'Reports', icon: 'chart', module: MODULE_KEYS.REPORTING_ANALYTICS },
   { href: '/notifications', label: 'Notifications', icon: 'bell' },
   { href: '/settings/organization', label: 'Settings', icon: 'settings' },
 ];
 
-const maintenanceNavItems = [
+const maintenanceNavItems: typeof allNavItems = [
   { href: '/dashboard', label: 'Dashboard', icon: 'grid' },
   { href: '/work-orders', label: 'Work Orders', icon: 'wrench' },
 ];
@@ -118,7 +119,10 @@ const icons: Record<string, React.ReactNode> = {
 export default function Sidebar() {
   const pathname = usePathname();
   const { profile, signOut } = useAuth();
-  const navItems = profile?.role === 'maintenance' ? maintenanceNavItems : allNavItems;
+  const activeModules = profile?.organization.activeModules ?? [];
+  const navItems = (profile?.role === 'maintenance' ? maintenanceNavItems : allNavItems).filter(
+    (item) => !item.module || activeModules.includes(item.module)
+  );
   const [unreadCount, setUnreadCount] = useState(0);
   const [pendingAppCount, setPendingAppCount] = useState(0);
 

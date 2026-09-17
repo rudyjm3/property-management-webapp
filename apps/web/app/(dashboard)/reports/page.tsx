@@ -10,6 +10,9 @@ import { OwnerStatements } from '@/components/reports/OwnerStatements';
 import { SpendByLocationReport } from '@/components/reports/SpendByLocationReport';
 import { ReportBuilder } from '@/components/reports/ReportBuilder';
 import { exportPdf } from '@/lib/exportPdf';
+import ModuleGate, { ModuleInactiveNotice } from '@/components/ModuleGate';
+import { MODULE_KEYS } from '@propflow/shared';
+import { useAuth } from '@/contexts/AuthContext';
 
 interface OwnerShare {
   ownerId: string;
@@ -54,13 +57,15 @@ interface PropertyOption {
 
 type Tab = 'financial' | 'trend' | 'spend' | 'rentroll' | 'vacancy' | 'statements' | 'builder';
 
-const TABS: { id: Tab; label: string }[] = [
+const TABS: { id: Tab; label: string; module?: 'owner_portal' }[] = [
   { id: 'financial', label: 'Financial Summary' },
   { id: 'trend', label: 'Revenue Trend' },
   { id: 'spend', label: 'Spend by Location' },
   { id: 'rentroll', label: 'Rent Roll' },
   { id: 'vacancy', label: 'Vacancy' },
-  { id: 'statements', label: 'Owner Statements' },
+  // Statements live behind the owner_portal module — this tab calls /owners
+  // and /owners/statements, both gated on owner_portal, not reporting_analytics.
+  { id: 'statements', label: 'Owner Statements', module: MODULE_KEYS.OWNER_PORTAL },
   { id: 'builder', label: 'Report Builder' },
 ];
 
@@ -79,6 +84,21 @@ function currentMonthRange(): { start: string; end: string } {
 }
 
 export default function ReportsPage() {
+  return (
+    <ModuleGate
+      module={MODULE_KEYS.REPORTING_ANALYTICS}
+      fallback={<ModuleInactiveNotice module={MODULE_KEYS.REPORTING_ANALYTICS} />}
+    >
+      <ReportsPageContent />
+    </ModuleGate>
+  );
+}
+
+function ReportsPageContent() {
+  const { profile } = useAuth();
+  const activeModules = profile?.organization.activeModules ?? [];
+  const visibleTabs = TABS.filter((tab) => !tab.module || activeModules.includes(tab.module));
+
   const [activeTab, setActiveTab] = useState<Tab>('financial');
   const [report, setReport] = useState<FinancialReport | null>(null);
   const [properties, setProperties] = useState<PropertyOption[]>([]);
@@ -98,6 +118,14 @@ export default function ReportsPage() {
       .catch(() => {})
       .finally(() => setPropertiesLoading(false));
   }, []);
+
+  // Defense in depth: if the active tab becomes hidden (e.g. owner_portal
+  // gets disabled mid-session), fall back to a tab that's still visible.
+  useEffect(() => {
+    if (!visibleTabs.some((tab) => tab.id === activeTab)) {
+      setActiveTab('financial');
+    }
+  }, [visibleTabs, activeTab]);
 
   async function loadReport() {
     if (!periodStart || !periodEnd) return;
@@ -274,7 +302,7 @@ export default function ReportsPage() {
 
       {/* Tab bar */}
       <div style={{ display: 'flex', gap: '0.25rem', marginTop: '1.5rem', borderBottom: '1px solid var(--color-border)', paddingBottom: '0' }}>
-        {TABS.map((tab) => (
+        {visibleTabs.map((tab) => (
           <button
             key={tab.id}
             onClick={() => setActiveTab(tab.id)}

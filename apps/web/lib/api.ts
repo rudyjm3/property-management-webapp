@@ -76,6 +76,7 @@ export const api = {
           rentDueDay: number;
           gracePeriodDays: number;
           lateFeeAmount: string;
+          activeModules: string[];
         };
       }>('/api/v1/auth/me'),
 
@@ -102,6 +103,7 @@ export const api = {
       rentDueDay?: number;
       gracePeriodDays?: number;
       lateFeeAmount?: number;
+      activeModules?: string[];
     }) =>
       apiFetch<any>(`/api/v1/organizations/${_orgId}`, {
         method: 'PATCH',

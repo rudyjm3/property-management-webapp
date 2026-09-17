@@ -35,6 +35,7 @@ router.get('/me', requireAuth, async (req: Request, res: Response, next: NextFun
             rentDueDay: true,
             gracePeriodDays: true,
             lateFeeAmount: true,
+            activeModules: true,
           },
         },
       },

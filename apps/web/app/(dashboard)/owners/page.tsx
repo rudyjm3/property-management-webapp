@@ -2,6 +2,8 @@
 
 import { useEffect, useState } from 'react';
 import { api } from '@/lib/api';
+import ModuleGate, { ModuleInactiveNotice } from '@/components/ModuleGate';
+import { MODULE_KEYS } from '@propflow/shared';
 
 interface PropertyOwnership {
   id: string;
@@ -34,6 +36,17 @@ interface PropertyOption {
 }
 
 export default function OwnersPage() {
+  return (
+    <ModuleGate
+      module={MODULE_KEYS.OWNER_PORTAL}
+      fallback={<ModuleInactiveNotice module={MODULE_KEYS.OWNER_PORTAL} />}
+    >
+      <OwnersPageContent />
+    </ModuleGate>
+  );
+}
+
+function OwnersPageContent() {
   const [owners, setOwners] = useState<Owner[]>([]);
   const [properties, setProperties] = useState<PropertyOption[]>([]);
   const [loading, setLoading] = useState(true);
