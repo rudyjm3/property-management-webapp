@@ -7,6 +7,7 @@ import type { ModuleKey } from '@propflow/shared';
 const MODULE_LABELS: Record<ModuleKey, string> = {
   owner_portal: 'Owner Portal',
   reporting_analytics: 'Reporting & Analytics',
+  advanced_tenant_onboarding: 'Advanced Tenant Onboarding',
 };
 
 interface ModuleGateProps {

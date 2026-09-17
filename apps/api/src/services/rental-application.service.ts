@@ -1,5 +1,6 @@
 import { prisma, Prisma, IncomeSource, RentalApplicationStatus } from '@propflow/db';
 import { randomUUID } from 'crypto';
+import { MODULE_KEYS } from '@propflow/shared';
 import { AppError } from '../middleware/error-handler';
 import {
   sendApplicationReceivedNotification,
@@ -7,6 +8,7 @@ import {
   sendApplicationApproved,
   sendApplicationDenied,
 } from './application-email.service';
+import { buildScreeningConsentUpdate, type ScreeningConsentInput } from './screening.service';
 
 const APP_URL = process.env.APP_URL ?? 'http://localhost:3000';
 
@@ -61,7 +63,7 @@ export async function getApplicationContext(token: string) {
               address: true,
               city: true,
               state: true,
-              organization: { select: { name: true } },
+              organization: { select: { name: true, activeModules: true } },
             },
           },
         },
@@ -75,6 +77,9 @@ export async function getApplicationContext(token: string) {
     id: app.id,
     status: app.status,
     alreadySubmitted: !!app.submittedAt,
+    screeningModuleActive: app.unit.property.organization.activeModules.includes(
+      MODULE_KEYS.ADVANCED_TENANT_ONBOARDING
+    ),
     unit: {
       unitNumber: app.unit.unitNumber,
       bedrooms: app.unit.bedrooms,
@@ -109,6 +114,7 @@ export async function submitApplication(
     emergencyContactName?: string | null;
     emergencyContactPhone?: string | null;
     consentGiven: true;
+    screening?: ScreeningConsentInput;
   },
   ip: string,
 ) {
@@ -127,6 +133,7 @@ export async function submitApplication(
               organization: {
                 select: {
                   name: true,
+                  activeModules: true,
                   users: {
                     where: { status: 'active', role: { in: ['owner', 'manager'] } },
                     select: { email: true },
@@ -142,6 +149,12 @@ export async function submitApplication(
 
   if (!app) throw new AppError(404, 'APPLICATION_NOT_FOUND', 'Application link not found.');
   if (app.submittedAt) throw new AppError(409, 'ALREADY_SUBMITTED', 'This application has already been submitted.');
+
+  const screeningUpdate = buildScreeningConsentUpdate(
+    app.unit.property.organization.activeModules,
+    data.screening,
+    ip
+  );
 
   const updated = await prisma.rentalApplication.update({
     where: { id: app.id },
@@ -166,6 +179,7 @@ export async function submitApplication(
       consentAt: new Date(),
       submittedAt: new Date(),
       status: 'pending',
+      ...screeningUpdate,
     },
     select: { id: true },
   });
@@ -310,7 +324,12 @@ export async function reviewApplication(
         emergencyContactPhone: app.emergencyContactPhone ?? null,
         vehicles: app.vehicles as Prisma.InputJsonValue ?? Prisma.JsonNull,
         pets: app.pets as Prisma.InputJsonValue ?? Prisma.JsonNull,
-        screeningConsentAt: app.consentAt ?? null,
+        // Screening (Module 1) — copy the already-encrypted values captured
+        // during the application; never decrypt/re-encrypt here.
+        screeningConsentAt: app.screeningConsentAt ?? null,
+        ssnFullEncrypted: app.ssnFullEncrypted ?? null,
+        govtIdType: app.govtIdType ?? null,
+        govtIdNumber: app.govtIdNumber ?? null,
       },
     });
 

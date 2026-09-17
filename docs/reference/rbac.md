@@ -48,10 +48,15 @@ just because `index.ts` doesn't gate it. As of this writing:
   `billing.ts`, `connect.ts`, `documents.ts`
 - **Also module-gated** (on top of role-gating): `owners.ts` requires
   `owner_portal` in `activeModules`, `reports.ts` requires
-  `reporting_analytics`, both applied via `requireModule(...)` in
-  `index.ts`. The owner-facing `/owner-portal/*` routes (`requireOwnerAuth`)
-  are likewise gated behind `owner_portal`. See `modules.md` for the full
-  module-gating picture.
+  `reporting_analytics`, both applied via `requireModule(...)` at the
+  router mount in `index.ts`. The owner-facing `/owner-portal/*` routes
+  (`requireOwnerAuth`) are likewise gated behind `owner_portal`.
+  `applications.ts`'s two screening endpoints
+  (`POST`/`GET .../applications/:id/screening`) require
+  `advanced_tenant_onboarding`, but via `requireModule(...)` applied to
+  just those routes rather than the whole router — the rest of
+  `applications.ts` (application links, review, e-sign) ships ungated as
+  base product. See `modules.md` for the full module-gating picture.
 - **Partially gated** (mutations require `owner`/`manager`, reads are open to
   any org role): `properties.ts`, `tenants.ts`, `units.ts`; `organizations.ts`
   gates only its settings-update and one settings-read endpoint (and is

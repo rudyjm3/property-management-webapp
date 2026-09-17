@@ -401,6 +401,13 @@ export const submitApplicationSchema = z.object({
   emergencyContactName: z.string().max(200).nullable().optional(),
   emergencyContactPhone: z.string().max(20).nullable().optional(),
   consentGiven: z.literal(true, { errorMap: () => ({ message: 'You must agree to the authorization statement.' }) }),
+  screening: z
+    .object({
+      ssnFull: z.string().regex(/^\d{3}-?\d{2}-?\d{4}$/, 'Enter a valid 9-digit SSN.'),
+      govtIdType: z.enum(GOVERNMENT_ID_TYPES),
+      govtIdNumber: z.string().min(1).max(50),
+    })
+    .optional(),
 });
 
 export const reviewApplicationSchema = z.object({

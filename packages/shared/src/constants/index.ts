@@ -155,6 +155,7 @@ export const OWNER_STATEMENT_STATUSES = ['draft', 'sent'] as const;
 export const MODULE_KEYS = {
   OWNER_PORTAL: 'owner_portal',
   REPORTING_ANALYTICS: 'reporting_analytics',
+  ADVANCED_TENANT_ONBOARDING: 'advanced_tenant_onboarding',
 } as const;
 
 export type ModuleKey = (typeof MODULE_KEYS)[keyof typeof MODULE_KEYS];

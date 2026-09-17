@@ -942,7 +942,7 @@ This appendix captures what is currently implemented in the repo beyond or diffe
 - SMS notifications via Twilio shipped, with automatic fallback to email when SMS is unconfigured; message file/photo attachments shipped on both web and mobile. (update 05-29-2026 / 05-30-2026)
 - Payment void now posts a real ledger reversal (update 09-16-2026): `voidPayment()` still sets `voidedAt`/`voidReason`/`status: 'voided'`, but now also nets whatever the payment already posted to the ledger (e.g. an ACH credit from the Stripe webhook) and creates a counterpart reversing entry in the same transaction, so the ledger balance is restored to what it would be had the payment never completed. No-ops for payments that never posted a ledger entry (cash/check/waived). Covered by `payment.service.test.ts` (ledger balance before/after). (see `payment.service.ts`, `ledger.service.ts`)
 - Mobile invite-code activation screen shipped (`apps/mobile/app/(auth)/activate.tsx`) and autopay toggle shipped in the mobile Payments tab (`AutopaySetupSheet.tsx`).
-- Online rental application form + e-signature flow shipped (`routes/apply.ts`, `routes/sign.ts`, `rental-application.service.ts`) — core of Module 1's leasing funnel. Background/credit check integration (TransUnion or similar) is not yet built; `screeningConsentAt`/`ssnFullEncrypted`/`govtIdNumber` remain dormant schema hooks.
+- Online rental application form + e-signature flow shipped (`routes/apply.ts`, `routes/sign.ts`, `rental-application.service.ts`) — core of Module 1's leasing funnel. **Update (2026-09-17):** the background/credit check step now also ships, gated behind `advanced_tenant_onboarding` in `Organization.activeModules`. The application form captures a dedicated screening consent + full SSN + govt ID (encrypted at rest via `encryption.service.ts`, AES-256-GCM) alongside the existing base consent; `screeningConsentAt`/`ssnFullEncrypted`/`govtIdNumber` are populated at that point instead of remaining dormant, then copied onto the `Tenant` record on approval. A new `ScreeningCheck` model records background/credit check runs (`POST`/`GET .../applications/:id/screening`), and the applications review page shows the result with an approve/deny flow that still drives the existing tenant+lease creation path. The TransUnion SmartMove provider call itself is mocked (`screening-provider.client.ts`) — no SmartMove credentials exist in any environment yet; swapping in the real API is isolated behind that one file. See `docs/reference/modules.md` and `docs/reference/schema.md`.
 - Module 9 (Owner Portal / Financial Reporting & Owner Statements) and Module 11 (Reporting & Analytics) are now both fully built functionally (update 09-16-2026), well ahead of their "Low priority" roadmap position — see §7 note and `docs/reference/modules.md`. Module 9 ships `Owner`/`PropertyOwner`/`OwnerStatement` data and manager-facing routes (`routes/owners.ts`), plus a separate owner-facing auth path (`Owner.supabaseUserId`/`portalStatus`, `requireOwnerAuth` middleware) and a read-only owner portal web UI (`apps/web/app/owner-portal/*` — login, set-password, dashboard, properties, statements, reports) backed by `routes/owner-portal.ts`. Module 11 adds a configurable report builder (`POST /reports/builder`, column/filter selection over the existing report sources, with saved configs via `SavedReport`), vacancy-rate history with manual market-rate comparison (`VacancyHistory` model, `/reports/vacancy-history*`), and PDF export alongside the existing CSV export (`apps/web/lib/exportPdf.ts` via `jspdf`), on top of the fixed report endpoints. **Update (2026-09-17):** both are now feature-flagged — `Organization.activeModules`, the `requireModule(...)` API middleware, and the web `<ModuleGate>` component all exist and are wired to these two routes/pages — see item 16 below and `docs/reference/modules.md`. Activation is a manual toggle for now, not Stripe Subscription Item billing.
 
 ---
@@ -1147,8 +1147,9 @@ _Sourced from MVP review, 2026-05-26. Re-verified against code 2026-09-16 — it
 >
 > **Update (2026-09-17):** the gating mechanism itself now exists —
 > `Organization.activeModules` (String[]), the `requireModule(...)` API
-> middleware, and the web `<ModuleGate>` component — and is wired to Modules
-> 9 and 11, the two modules that had shipped functionality ahead of gating
+> middleware, and the web `<ModuleGate>` component — and is wired to
+> Modules 9 and 11 (the two modules that had shipped functionality ahead of
+> gating) plus the screening step of Module 1, built in this same update
 > (see their sections below and `docs/reference/modules.md`). Stripe
 > Subscription Item billing is still not wired; activation today is a manual
 > `activeModules` toggle (Settings → Organization → "Add-On Modules", or
@@ -1172,9 +1173,47 @@ _Sourced from MVP review, 2026-05-26. Re-verified against code 2026-09-16 — it
 
 **Data hooks already in schema:**
 
-- `ssn_full_encrypted` (Tenant) — encrypted at rest, never logged
-- `screening_consent_at` (Tenant) — required before check is triggered
-- `govt_id_number` (Tenant) — stored encrypted
+- `ssn_full_encrypted` (Tenant, RentalApplication) — encrypted at rest, never logged
+- `screening_consent_at` (Tenant, RentalApplication) — required before check is triggered
+- `govt_id_number` (Tenant, RentalApplication) — stored encrypted
+
+**Status (2026-09-17):** the digital rental application and e-lease signing
+shipped ahead of the module (see §14 intro / §11 delta appendix) and remain
+ungated, since they're base-product functionality. The screening step —
+consent capture, encrypted SSN/govt ID capture, and a background/credit
+check — is now built and **gated behind `advanced_tenant_onboarding`** in
+`Organization.activeModules`:
+
+- Consent + SSN/govt ID are captured as an extra step in the same
+  `POST /apply/:token` submission (`ssnFullEncrypted`/`govtIdNumber`
+  encrypted via `encryption.service.ts`, AES-256-GCM — an application-level
+  stand-in for envelope/KMS encryption), only when the org has the module
+  active (`GET /apply/:token` now returns `screeningModuleActive` so the
+  form can show/hide the step).
+- `requireModule('advanced_tenant_onboarding')` gates
+  `POST`/`GET /organizations/:orgId/applications/:id/screening` — applied
+  per-route rather than at router mount, since the rest of
+  `applications.ts` (link generation, review, e-sign) ships ungated as base
+  product. See `docs/reference/modules.md` and `docs/reference/rbac.md`.
+- A new `ScreeningCheck` model (per-RentalApplication) records each check's
+  status/decision. Running a check requires `screeningConsentAt` to be set
+  first (`SCREENING_CONSENT_REQUIRED` otherwise).
+- The manager review page (`/applications/:id`) shows consent status, lets
+  a manager trigger a check, and displays the resulting status/decision
+  before they approve or deny — approval still drives the existing
+  tenant + draft-lease creation path, now also copying the encrypted
+  SSN/govt ID and consent timestamp onto the new `Tenant` record.
+- **The TransUnion SmartMove API call itself is mocked** —
+  `screening-provider.client.ts` defines a `ScreeningProviderClient`
+  interface; `MockTransUnionSmartMoveClient` (always used today, no
+  environment has SmartMove credentials) fabricates a `recommend` result
+  without any network call. `TransUnionSmartMoveClient` sketches the real
+  integration but its request/response shape is unverified against
+  TransUnion's actual API and needs confirmation once credentials exist.
+
+Not yet built: move-in inspection template, and any DocuSign/HelloSign
+integration (e-signing already ships via PropFlow's own in-house flow, not
+a third-party e-sign vendor).
 
 **Dependencies:** Lease management, Stripe, Resend, third-party screening API
 
