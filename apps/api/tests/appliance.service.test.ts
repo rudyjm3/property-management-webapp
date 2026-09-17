@@ -25,6 +25,8 @@ import {
   createAppliance,
   updateAppliance,
   deleteAppliance,
+  retireAppliance,
+  replaceAppliance,
 } from '../src/services/appliance.service';
 
 function yearsAgo(years: number): Date {
@@ -38,6 +40,7 @@ function mockTx(applianceCountAfter = 1) {
     $executeRaw: vi.fn().mockResolvedValue(undefined),
     appliance: {
       create: vi.fn().mockImplementation(({ data }: any) => Promise.resolve({ id: 'appliance-1', ...data })),
+      update: vi.fn().mockImplementation(({ where, data }: any) => Promise.resolve({ id: where.id, ...data })),
       delete: vi.fn().mockResolvedValue(undefined),
       count: vi.fn().mockResolvedValue(applianceCountAfter),
     },
@@ -201,7 +204,7 @@ describe('appliance.service createAppliance / deleteAppliance keep applianceCoun
     expect(tx.appliance.create).toHaveBeenCalledWith(
       expect.objectContaining({ data: expect.objectContaining({ unitId: 'unit-1', category: 'refrigerator', make: 'Samsung' }) })
     );
-    expect(tx.appliance.count).toHaveBeenCalledWith({ where: { unitId: 'unit-1' } });
+    expect(tx.appliance.count).toHaveBeenCalledWith({ where: { unitId: 'unit-1', status: 'active' } });
     expect(tx.unit.update).toHaveBeenCalledWith({
       where: { id: 'unit-1' },
       data: { applianceCount: 3 },
@@ -225,7 +228,7 @@ describe('appliance.service createAppliance / deleteAppliance keep applianceCoun
     await deleteAppliance('org-1', 'prop-1', 'unit-1', 'appliance-1');
 
     expect(tx.appliance.delete).toHaveBeenCalledWith({ where: { id: 'appliance-1' } });
-    expect(tx.appliance.count).toHaveBeenCalledWith({ where: { unitId: 'unit-1' } });
+    expect(tx.appliance.count).toHaveBeenCalledWith({ where: { unitId: 'unit-1', status: 'active' } });
     expect(tx.unit.update).toHaveBeenCalledWith({
       where: { id: 'unit-1' },
       data: { applianceCount: 0 },
@@ -283,5 +286,108 @@ describe('appliance.service updateAppliance', () => {
       where: { id: 'appliance-1' },
       data: { warrantyExpiresAt: null },
     });
+  });
+});
+
+describe('appliance.service retireAppliance', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    (prisma.unit.findFirst as any).mockResolvedValue({ id: 'unit-1' });
+  });
+
+  it('rejects retiring an appliance that does not belong to this unit', async () => {
+    (prisma.appliance.findFirst as any).mockResolvedValue(null);
+
+    await expect(retireAppliance('org-1', 'prop-1', 'unit-1', 'appliance-x')).rejects.toMatchObject({
+      code: 'APPLIANCE_NOT_FOUND',
+    });
+    expect(prisma.$transaction).not.toHaveBeenCalled();
+  });
+
+  it('rejects retiring an appliance that is already removed', async () => {
+    (prisma.appliance.findFirst as any).mockResolvedValue({ id: 'appliance-1', status: 'removed' });
+
+    await expect(retireAppliance('org-1', 'prop-1', 'unit-1', 'appliance-1')).rejects.toMatchObject({
+      code: 'APPLIANCE_ALREADY_REMOVED',
+    });
+    expect(prisma.$transaction).not.toHaveBeenCalled();
+  });
+
+  it('marks the appliance removed with the given date and recomputes the active count', async () => {
+    (prisma.appliance.findFirst as any).mockResolvedValue({ id: 'appliance-1', status: 'active' });
+    const tx = mockTx(0);
+
+    const result = await retireAppliance('org-1', 'prop-1', 'unit-1', 'appliance-1', '2026-06-01');
+
+    expect(tx.appliance.update).toHaveBeenCalledWith({
+      where: { id: 'appliance-1' },
+      data: { status: 'removed', removedAt: new Date('2026-06-01') },
+    });
+    expect(tx.appliance.count).toHaveBeenCalledWith({ where: { unitId: 'unit-1', status: 'active' } });
+    expect(tx.unit.update).toHaveBeenCalledWith({ where: { id: 'unit-1' }, data: { applianceCount: 0 } });
+    expect(result.status).toBe('removed');
+  });
+
+  it('defaults removedAt to today when none is given', async () => {
+    (prisma.appliance.findFirst as any).mockResolvedValue({ id: 'appliance-1', status: 'active' });
+    const tx = mockTx(0);
+
+    await retireAppliance('org-1', 'prop-1', 'unit-1', 'appliance-1');
+
+    const call = (tx.appliance.update as any).mock.calls[0][0];
+    expect(call.data.removedAt).toBeInstanceOf(Date);
+  });
+});
+
+describe('appliance.service replaceAppliance', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    (prisma.unit.findFirst as any).mockResolvedValue({ id: 'unit-1' });
+  });
+
+  it('rejects replacing an appliance that does not belong to this unit', async () => {
+    (prisma.appliance.findFirst as any).mockResolvedValue(null);
+
+    await expect(
+      replaceAppliance('org-1', 'prop-1', 'unit-1', 'appliance-x', { category: 'dishwasher' })
+    ).rejects.toMatchObject({ code: 'APPLIANCE_NOT_FOUND' });
+    expect(prisma.$transaction).not.toHaveBeenCalled();
+  });
+
+  it('rejects replacing an appliance that has already been retired or replaced', async () => {
+    (prisma.appliance.findFirst as any).mockResolvedValue({ id: 'appliance-1', status: 'removed' });
+
+    await expect(
+      replaceAppliance('org-1', 'prop-1', 'unit-1', 'appliance-1', { category: 'dishwasher' })
+    ).rejects.toMatchObject({ code: 'APPLIANCE_ALREADY_REMOVED' });
+    expect(prisma.$transaction).not.toHaveBeenCalled();
+  });
+
+  it('retires the old appliance and creates a new one linked via replacesApplianceId', async () => {
+    (prisma.appliance.findFirst as any).mockResolvedValue({ id: 'old-dishwasher', status: 'active' });
+    const tx = mockTx(1);
+
+    const result = await replaceAppliance('org-1', 'prop-1', 'unit-1', 'old-dishwasher', {
+      removedAt: '2026-06-01',
+      category: 'dishwasher',
+      make: 'Bosch',
+      model: 'SHEM63W55N',
+    });
+
+    expect(tx.appliance.update).toHaveBeenCalledWith({
+      where: { id: 'old-dishwasher' },
+      data: { status: 'removed', removedAt: new Date('2026-06-01') },
+    });
+    expect(tx.appliance.create).toHaveBeenCalledWith({
+      data: expect.objectContaining({
+        unitId: 'unit-1',
+        category: 'dishwasher',
+        make: 'Bosch',
+        model: 'SHEM63W55N',
+        replacesApplianceId: 'old-dishwasher',
+      }),
+    });
+    expect(tx.appliance.count).toHaveBeenCalledWith({ where: { unitId: 'unit-1', status: 'active' } });
+    expect(result.id).toBe('appliance-1');
   });
 });

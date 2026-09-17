@@ -1353,13 +1353,30 @@ see `docs/reference/modules.md` for the full gating detail. Summary:
 - **`Unit.applianceCount`** — no longer a dormant placeholder. It's
   recomputed (via `appliance.count()`, not an in-place increment/decrement —
   see `docs/reference/schema.md` for why) inside the same transaction as
-  every appliance create/delete, so it always reflects the live count
-  rather than being maintained by a separate reconciliation job.
+  every appliance create/delete/retire/replace, so it always reflects the
+  live count of currently-*active* appliances rather than being maintained
+  by a separate reconciliation job.
+- **Appliance replacement history** — shipped (2026-09-17). An appliance is
+  never silently overwritten or lost when it's swapped out: `Appliance.status`
+  (`active`/`removed`) plus `removedAt` let a manager either **retire** an
+  appliance (`POST .../appliances/:id/retire` — marked removed, no
+  replacement) or **replace** it (`POST .../appliances/:id/replace` — retires
+  the old one and creates a new one in one step, linked via the new
+  `Appliance.replacesApplianceId` self-relation). The unit detail page splits
+  appliances into a "Current Appliances" section and an "Appliance History"
+  section showing each retired appliance's install→removed date range and a
+  link to what replaced it (and vice versa). `DELETE` (hard delete) still
+  exists separately, for correcting a mistaken/duplicate record — it's not
+  the retirement path. `Unit.applianceCount` only counts active appliances,
+  so replacing one appliance for another leaves the count unchanged.
 - **Not built**: no S3-backed photo/document attachment specific to
   appliances (the module roadmap lists S3 as a dependency, but appliance
   records don't yet hook into the existing `Document` model the way units
-  and leases do), and no manufacturer-specific lifespan data or recall
-  lookups — the expected-lifespan table is a rough per-category heuristic.
+  and leases do), no manufacturer-specific lifespan data or recall lookups
+  (the expected-lifespan table is a rough per-category heuristic), and no
+  UI restriction preventing a hard `DELETE` of an appliance that already has
+  replacement history (deleting it just nulls out the `replacesApplianceId`
+  FK on whatever replaced it, per standard `ON DELETE SET NULL`).
 
 **Dependencies:** Unit management, S3
 

@@ -26,6 +26,8 @@ export const UNIT_STATUSES = ['vacant', 'occupied', 'notice', 'maintenance', 'un
 
 // ─── Appliance (Unit Intelligence & Appliance Registry) ────────────────────────
 
+export const APPLIANCE_STATUSES = ['active', 'removed'] as const;
+
 export const APPLIANCE_CATEGORIES = [
   'hvac',
   'water_heater',

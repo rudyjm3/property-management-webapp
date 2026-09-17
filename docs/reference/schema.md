@@ -64,11 +64,16 @@ Manager-side account (owner/manager/maintenance staff).
 Unit Intelligence & Appliance Registry module (gated).
 - `id, unitId(FK, cascade delete with its unit)`
 - `category: ApplianceCategory(hvac|water_heater|refrigerator|dishwasher|washer|dryer|oven_range|microwave|garbage_disposal|other)`, default `other`
+- `status: ApplianceStatus(active|removed)`, default `active` — an appliance is
+  never hard-deleted just for being replaced; it's marked `removed` and kept
+  for history. `DELETE` (hard delete, regardless of status) still exists for
+  correcting mistakes/duplicates.
 - `make?, model?, serialNumber?`
-- `purchaseDate?, installDate?, warrantyExpiresAt?` (all date-only)
+- `purchaseDate?, installDate?, warrantyExpiresAt?, removedAt?` (all date-only)
+- `replacesApplianceId? (FK to Appliance, unique, self-relation "ApplianceReplacement", ON DELETE SET NULL)` — the prior appliance this one replaced in the same slot (e.g. old dishwasher → new dishwasher). `@unique` enforces a one-to-one chain: an old appliance can be pointed to by at most one replacement. The reverse relation is `replacedBy`.
 - `notes?`
 - Has many: workOrders (via `WorkOrder.applianceId`, `ON DELETE SET NULL` — deleting an appliance keeps its work order history, just unlinks it)
-- Replacement-alert status and maintenance cost rollup are computed at read time in `appliance.service.ts`, not persisted columns — see `modules.md`
+- Replacement-alert status and maintenance cost rollup are computed at read time in `appliance.service.ts`, not persisted columns — see `modules.md`. `Unit.applianceCount` only counts `status: active` appliances.
 
 ## Tenant
 - `id, organizationId(FK), supabaseUserId?(unique)`

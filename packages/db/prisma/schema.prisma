@@ -238,24 +238,40 @@ enum UnitStatus {
 // ─── Appliance (Unit Intelligence & Appliance Registry) ────────────────────────
 
 model Appliance {
-  id                String             @id @default(uuid())
-  unitId            String             @map("unit_id")
-  category          ApplianceCategory  @default(other)
-  make              String?            @db.VarChar(100)
-  model             String?            @db.VarChar(100)
-  serialNumber      String?            @map("serial_number") @db.VarChar(100)
-  purchaseDate      DateTime?          @map("purchase_date") @db.Date
-  installDate       DateTime?          @map("install_date") @db.Date
-  warrantyExpiresAt DateTime?          @map("warranty_expires_at") @db.Date
-  notes             String?
-  createdAt         DateTime           @default(now()) @map("created_at")
-  updatedAt         DateTime           @updatedAt @map("updated_at")
+  id                  String            @id @default(uuid())
+  unitId              String            @map("unit_id")
+  category            ApplianceCategory @default(other)
+  status              ApplianceStatus   @default(active)
+  make                String?           @db.VarChar(100)
+  model               String?           @db.VarChar(100)
+  serialNumber        String?           @map("serial_number") @db.VarChar(100)
+  purchaseDate        DateTime?         @map("purchase_date") @db.Date
+  installDate         DateTime?         @map("install_date") @db.Date
+  warrantyExpiresAt   DateTime?         @map("warranty_expires_at") @db.Date
+  removedAt           DateTime?         @map("removed_at") @db.Date
+  // The prior appliance this one replaced in the same physical slot (e.g. the
+  // old dishwasher a new one was swapped in for) — forms a one-to-one
+  // replacement chain. Null if this appliance wasn't installed as a
+  // replacement. @unique enforces that an old appliance can be pointed to by
+  // at most one replacement.
+  replacesApplianceId String?           @unique @map("replaces_appliance_id")
+  notes               String?
+  createdAt           DateTime          @default(now()) @map("created_at")
+  updatedAt           DateTime          @updatedAt @map("updated_at")
 
-  unit       Unit        @relation(fields: [unitId], references: [id], onDelete: Cascade)
-  workOrders WorkOrder[]
+  unit             Unit        @relation(fields: [unitId], references: [id], onDelete: Cascade)
+  workOrders       WorkOrder[]
+  replacesAppliance Appliance? @relation("ApplianceReplacement", fields: [replacesApplianceId], references: [id], onDelete: SetNull)
+  replacedBy        Appliance? @relation("ApplianceReplacement")
 
   @@index([unitId])
+  @@index([unitId, status])
   @@map("appliances")
+}
+
+enum ApplianceStatus {
+  active
+  removed
 }
 
 // End-of-life threshold, in years, used to compute a replacement alert off

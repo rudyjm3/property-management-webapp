@@ -100,6 +100,26 @@ export const createApplianceSchema = z.object({
 
 export const updateApplianceSchema = createApplianceSchema.partial();
 
+// Retires an appliance (marks it removed) without replacing it.
+export const retireApplianceSchema = z.object({
+  removedAt: z.string().date().nullable().optional(),
+});
+
+// Retires the target appliance and creates a new one in its place, linked via
+// Appliance.replacesApplianceId. removedAt applies to the OLD appliance being
+// retired; the rest of the fields describe the NEW appliance.
+export const replaceApplianceSchema = z.object({
+  removedAt: z.string().date().nullable().optional(),
+  category: z.enum(APPLIANCE_CATEGORIES),
+  make: z.string().max(100).nullable().optional(),
+  model: z.string().max(100).nullable().optional(),
+  serialNumber: z.string().max(100).nullable().optional(),
+  purchaseDate: z.string().date().nullable().optional(),
+  installDate: z.string().date().nullable().optional(),
+  warrantyExpiresAt: z.string().date().nullable().optional(),
+  notes: z.string().max(2000).nullable().optional(),
+});
+
 // ─── Tenant ───────────────────────────────────────────────────────────────────
 
 export const createTenantSchema = z.object({

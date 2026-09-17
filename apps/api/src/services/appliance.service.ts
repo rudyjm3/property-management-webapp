@@ -16,9 +16,12 @@ import { AppError } from '../middleware/error-handler';
 // commit before it counts — a plain `SELECT ... FOR UPDATE` on the unit row
 // wouldn't help here since neither statement conflicts on the unit row
 // itself, only on the appliances table.
+//
+// Only counts currently-installed (active) appliances — a retired/replaced
+// appliance kept for history shouldn't inflate the unit's live count.
 async function syncApplianceCount(tx: Prisma.TransactionClient, unitId: string): Promise<void> {
   await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${unitId})::bigint)`;
-  const applianceCount = await tx.appliance.count({ where: { unitId } });
+  const applianceCount = await tx.appliance.count({ where: { unitId, status: 'active' } });
   await tx.unit.update({ where: { id: unitId }, data: { applianceCount } });
 }
 
@@ -91,6 +94,19 @@ function sumMaintenanceCost(workOrders: { totalCost: unknown }[]): number {
   return workOrders.reduce((sum, wo) => sum + Number((wo.totalCost as number | null) ?? 0), 0);
 }
 
+// Minimal shape for the replacement-chain links (replacesAppliance/replacedBy)
+// — just enough for the UI to label/link the other end of the chain without
+// pulling its own full work-order history.
+const replacementLinkSelect = {
+  id: true,
+  category: true,
+  make: true,
+  model: true,
+  status: true,
+  installDate: true,
+  removedAt: true,
+} as const;
+
 // ─── List ─────────────────────────────────────────────────────────────────────
 
 export async function listAppliances(organizationId: string, propertyId: string, unitId: string) {
@@ -98,7 +114,11 @@ export async function listAppliances(organizationId: string, propertyId: string,
 
   const appliances = await prisma.appliance.findMany({
     where: { unitId },
-    include: { workOrders: { select: { totalCost: true } } },
+    include: {
+      workOrders: { select: { totalCost: true } },
+      replacesAppliance: { select: replacementLinkSelect },
+      replacedBy: { select: replacementLinkSelect },
+    },
     orderBy: { createdAt: 'asc' },
   });
 
@@ -126,6 +146,8 @@ export async function getAppliance(
         select: maintenanceHistorySelect,
         orderBy: { createdAt: 'desc' },
       },
+      replacesAppliance: { select: replacementLinkSelect },
+      replacedBy: { select: replacementLinkSelect },
     },
   });
 
@@ -189,6 +211,100 @@ export async function createAppliance(
   });
 
   return decorate(appliance);
+}
+
+// ─── Retire ───────────────────────────────────────────────────────────────────
+// Marks an appliance removed without replacing it (e.g. a unit going without
+// a dishwasher). Kept as a row for maintenance-cost history — never deleted.
+
+export async function retireAppliance(
+  organizationId: string,
+  propertyId: string,
+  unitId: string,
+  applianceId: string,
+  removedAt?: string | null
+) {
+  await verifyUnit(organizationId, propertyId, unitId);
+
+  const existing = await prisma.appliance.findFirst({ where: { id: applianceId, unitId } });
+  if (!existing) {
+    throw new AppError(404, 'APPLIANCE_NOT_FOUND', 'Appliance not found on this unit.');
+  }
+  if (existing.status === 'removed') {
+    throw new AppError(400, 'APPLIANCE_ALREADY_REMOVED', 'This appliance has already been retired.');
+  }
+
+  const updated = await prisma.$transaction(async (tx) => {
+    const result = await tx.appliance.update({
+      where: { id: applianceId },
+      data: { status: 'removed', removedAt: toDateOrNull(removedAt) ?? new Date() },
+    });
+    await syncApplianceCount(tx, unitId);
+    return result;
+  });
+
+  return decorate(updated);
+}
+
+// ─── Replace ──────────────────────────────────────────────────────────────────
+// Retires the target appliance and creates a new one in its place (e.g.
+// swapping in a new dishwasher), linked via Appliance.replacesApplianceId so
+// the unit page can show a "replaced by" / "replaces" chain.
+
+interface ReplaceApplianceInput extends ApplianceInput {
+  removedAt?: string | null;
+}
+
+export async function replaceAppliance(
+  organizationId: string,
+  propertyId: string,
+  unitId: string,
+  applianceId: string,
+  data: ReplaceApplianceInput
+) {
+  await verifyUnit(organizationId, propertyId, unitId);
+
+  const existing = await prisma.appliance.findFirst({ where: { id: applianceId, unitId } });
+  if (!existing) {
+    throw new AppError(404, 'APPLIANCE_NOT_FOUND', 'Appliance not found on this unit.');
+  }
+  if (existing.status === 'removed') {
+    throw new AppError(
+      400,
+      'APPLIANCE_ALREADY_REMOVED',
+      'This appliance has already been retired or replaced.'
+    );
+  }
+
+  const created = await prisma.$transaction(async (tx) => {
+    await tx.appliance.update({
+      where: { id: applianceId },
+      data: { status: 'removed', removedAt: toDateOrNull(data.removedAt) ?? new Date() },
+    });
+
+    const newAppliance = await tx.appliance.create({
+      data: {
+        unitId,
+        category: data.category as ApplianceCategory,
+        make: data.make ?? null,
+        model: data.model ?? null,
+        serialNumber: data.serialNumber ?? null,
+        purchaseDate: toDateOrNull(data.purchaseDate) ?? null,
+        installDate: toDateOrNull(data.installDate) ?? null,
+        warrantyExpiresAt: toDateOrNull(data.warrantyExpiresAt) ?? null,
+        notes: data.notes ?? null,
+        replacesApplianceId: applianceId,
+      },
+    });
+
+    // Net active count is unchanged (one retired, one added) but this also
+    // keeps the count correct if it had drifted for any reason.
+    await syncApplianceCount(tx, unitId);
+
+    return newAppliance;
+  });
+
+  return decorate(created);
 }
 
 // ─── Update ───────────────────────────────────────────────────────────────────

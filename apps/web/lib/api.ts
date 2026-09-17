@@ -367,6 +367,18 @@ export const api = {
         `/api/v1/organizations/${_orgId}/properties/${propertyId}/units/${unitId}/appliances/${applianceId}`,
         { method: 'DELETE' }
       ),
+    // Marks an appliance removed without replacing it.
+    retire: (propertyId: string, unitId: string, applianceId: string, removedAt?: string | null) =>
+      apiFetch<any>(
+        `/api/v1/organizations/${_orgId}/properties/${propertyId}/units/${unitId}/appliances/${applianceId}/retire`,
+        { method: 'POST', body: JSON.stringify({ removedAt }) }
+      ),
+    // Retires the target appliance and creates a new one linked to it.
+    replace: (propertyId: string, unitId: string, applianceId: string, data: any) =>
+      apiFetch<any>(
+        `/api/v1/organizations/${_orgId}/properties/${propertyId}/units/${unitId}/appliances/${applianceId}/replace`,
+        { method: 'POST', body: JSON.stringify(data) }
+      ),
   },
   workOrders: {
     list: (params?: {

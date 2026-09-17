@@ -1,5 +1,5 @@
 import { Router, Request, Response, NextFunction } from 'express';
-import { createApplianceSchema, updateApplianceSchema } from '@propflow/shared';
+import { createApplianceSchema, updateApplianceSchema, retireApplianceSchema, replaceApplianceSchema } from '@propflow/shared';
 import { validate } from '../middleware/validate';
 import * as applianceService from '../services/appliance.service';
 import { requireRoles } from '../middleware/auth';
@@ -72,6 +72,51 @@ router.patch(
         req.body
       );
       res.json({ data: appliance });
+    } catch (err) {
+      next(err);
+    }
+  }
+);
+
+// POST /api/v1/organizations/:orgId/properties/:propertyId/units/:unitId/appliances/:applianceId/retire
+// Marks the appliance removed (no replacement) — kept as a row for history.
+router.post(
+  '/:applianceId/retire',
+  requireManagerAccess,
+  validate(retireApplianceSchema),
+  async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const appliance = await applianceService.retireAppliance(
+        req.params.orgId as string,
+        req.params.propertyId as string,
+        req.params.unitId as string,
+        req.params.applianceId as string,
+        req.body.removedAt
+      );
+      res.json({ data: appliance });
+    } catch (err) {
+      next(err);
+    }
+  }
+);
+
+// POST /api/v1/organizations/:orgId/properties/:propertyId/units/:unitId/appliances/:applianceId/replace
+// Retires the target appliance and creates a new one linked to it via
+// replacesApplianceId (e.g. swapping in a new dishwasher for the old one).
+router.post(
+  '/:applianceId/replace',
+  requireManagerAccess,
+  validate(replaceApplianceSchema),
+  async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const appliance = await applianceService.replaceAppliance(
+        req.params.orgId as string,
+        req.params.propertyId as string,
+        req.params.unitId as string,
+        req.params.applianceId as string,
+        req.body
+      );
+      res.status(201).json({ data: appliance });
     } catch (err) {
       next(err);
     }
