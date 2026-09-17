@@ -14,7 +14,7 @@ file directly for per-endpoint behavior.
 |---|---|---|
 | `/auth` | `routes/auth.ts` | none (registration/login) |
 | `/invite` | `routes/invite.ts` | none (rate-limited invite activation) |
-| `/apply` | `routes/apply.ts` | none (rate-limited public rental application form) |
+| `/apply` | `routes/apply.ts` | none (rate-limited public rental application form; also captures screening consent + encrypted SSN/govt ID when the org has `advanced_tenant_onboarding` active — checked in the service layer, not middleware, since there's no authenticated identity to gate on) |
 | `/sign` | `routes/sign.ts` | none (rate-limited public lease e-signing) |
 | `/organizations/:orgId/notifications/jobs` | `routes/notificationJobs.ts` | `CRON_SECRET` only, no user JWT |
 | `/organizations/:orgId` | `routes/organizations.ts` | none at mount (org settings; per-route checks inside) |
@@ -31,7 +31,7 @@ file directly for per-endpoint behavior.
 | `/organizations/:orgId/connect` | `routes/connect.ts` | `requireAuth`, `requireOrg` (Stripe Connect status/account-link/sync) |
 | `/organizations/:orgId/ledger` | `routes/ledger.ts` | `requireAuth`, `requireOrg` |
 | `/organizations/:orgId/billing` | `routes/billing.ts` | `requireAuth`, `requireOrg` |
-| `/organizations/:orgId` (application links, review, manager lease signing) | `routes/applications.ts` | `requireAuth`, `requireOrg`, `requireRoles(['owner','manager'])` |
+| `/organizations/:orgId` (application links, review, manager lease signing) | `routes/applications.ts` | `requireAuth`, `requireOrg`, `requireRoles(['owner','manager'])`, plus `requireModule('advanced_tenant_onboarding')` applied only to the `applications/:id/screening` GET/POST routes (rest of the router is ungated) |
 | `/organizations/:orgId/owners` | `routes/owners.ts` | `requireAuth`, `requireOrg`, `requireModule('owner_portal')` |
 | `/organizations/:orgId/reports` | `routes/reports.ts` | `requireAuth`, `requireOrg`, `requireModule('reporting_analytics')` (financial reports, report builder, vacancy history, saved reports) |
 | `/tenant` | `routes/tenants-portal.ts` | `requireTenantAuth` (separate identity from all routes above — see `rbac.md`) |

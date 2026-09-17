@@ -5,12 +5,13 @@ import { useParams, useRouter } from 'next/navigation';
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
 
-type Step = 'personal' | 'employment' | 'history' | 'household' | 'authorization';
+type Step = 'personal' | 'employment' | 'history' | 'household' | 'screening' | 'authorization';
 
 interface AppContext {
   id: string;
   status: string;
   alreadySubmitted: boolean;
+  screeningModuleActive: boolean;
   unit: {
     unitNumber: string;
     bedrooms: number;
@@ -28,11 +29,12 @@ interface AppContext {
 interface Pet { type: string; breed: string; weight: string; name: string }
 interface Vehicle { make: string; model: string; color: string; plate: string; state: string }
 
-const STEPS: { key: Step; label: string }[] = [
+const ALL_STEPS: { key: Step; label: string }[] = [
   { key: 'personal', label: 'Personal Info' },
   { key: 'employment', label: 'Employment' },
   { key: 'history', label: 'Rental History' },
   { key: 'household', label: 'Household' },
+  { key: 'screening', label: 'Screening' },
   { key: 'authorization', label: 'Authorization' },
 ];
 
@@ -68,7 +70,13 @@ export default function ApplyPage() {
   const [pets, setPets] = useState<Pet[]>([]);
   const [vehicles, setVehicles] = useState<Vehicle[]>([]);
 
-  // Step 5
+  // Step 5 — Screening (only shown when the org has Module 1 active)
+  const [screeningConsentGiven, setScreeningConsentGiven] = useState(false);
+  const [ssnFull, setSsnFull] = useState('');
+  const [govtIdType, setGovtIdType] = useState('');
+  const [govtIdNumber, setGovtIdNumber] = useState('');
+
+  // Step 6
   const [emergencyContactName, setEmergencyContactName] = useState('');
   const [emergencyContactPhone, setEmergencyContactPhone] = useState('');
   const [consentGiven, setConsentGiven] = useState(false);
@@ -88,7 +96,13 @@ export default function ApplyPage() {
       .finally(() => setLoading(false));
   }, [token, router]);
 
+  const STEPS = context?.screeningModuleActive
+    ? ALL_STEPS
+    : ALL_STEPS.filter((s) => s.key !== 'screening');
   const stepIndex = STEPS.findIndex((s) => s.key === step);
+  const ssnValid = /^\d{3}-?\d{2}-?\d{4}$/.test(ssnFull.trim());
+  const screeningStepComplete =
+    screeningConsentGiven && ssnValid && !!govtIdType && govtIdNumber.trim().length > 0;
 
   function goNext() {
     const idx = STEPS.findIndex((s) => s.key === step);
@@ -114,6 +128,10 @@ export default function ApplyPage() {
   async function handleSubmit() {
     if (!consentGiven) { setSubmitError('You must agree to the authorization statement to submit.'); return; }
     if (!signatureName.trim()) { setSubmitError('Please type your full legal name as your electronic signature.'); return; }
+    if (context?.screeningModuleActive && !screeningStepComplete) {
+      setSubmitError('Please complete the screening consent step before submitting.');
+      return;
+    }
 
     setSubmitting(true);
     setSubmitError('');
@@ -136,6 +154,15 @@ export default function ApplyPage() {
         emergencyContactPhone: emergencyContactPhone || null,
         consentGiven: true,
       };
+
+      if (context?.screeningModuleActive) {
+        payload.screening = {
+          consentGiven: true,
+          ssnFull: ssnFull.trim(),
+          govtIdType,
+          govtIdNumber: govtIdNumber.trim(),
+        };
+      }
 
       const res = await fetch(`${API_URL}/api/v1/apply/${token}`, {
         method: 'POST',
@@ -342,6 +369,54 @@ export default function ApplyPage() {
             </div>
           )}
 
+          {step === 'screening' && (
+            <div>
+              <h2 style={{ margin: '0 0 20px', fontSize: '17px', fontWeight: 600 }}>Background & Credit Screening</h2>
+              <p style={{ margin: '0 0 16px', fontSize: '13px', color: '#6b7280', lineHeight: '1.6' }}>
+                {context.organizationName} requires a background and credit check as part of this application.
+                Your Social Security Number and government ID are encrypted and used only to run this check.
+              </p>
+              <div className="form-row">
+                <div className="form-group">
+                  <label>Social Security Number *</label>
+                  <input
+                    className="form-control"
+                    placeholder="123-45-6789"
+                    value={ssnFull}
+                    onChange={(e) => setSsnFull(e.target.value)}
+                    maxLength={11}
+                  />
+                </div>
+                <div className="form-group">
+                  <label>Government ID Type *</label>
+                  <select className="form-control" value={govtIdType} onChange={(e) => setGovtIdType(e.target.value)}>
+                    <option value="">Select…</option>
+                    <option value="drivers_license">Driver&apos;s License</option>
+                    <option value="state_id">State ID</option>
+                    <option value="passport">Passport</option>
+                  </select>
+                </div>
+              </div>
+              <div className="form-group">
+                <label>Government ID Number *</label>
+                <input className="form-control" value={govtIdNumber} onChange={(e) => setGovtIdNumber(e.target.value)} />
+              </div>
+
+              <div style={{ marginTop: '16px' }}>
+                <label style={{ display: 'flex', alignItems: 'flex-start', gap: '10px', cursor: 'pointer', fontSize: '14px' }}>
+                  <input
+                    type="checkbox"
+                    checked={screeningConsentGiven}
+                    onChange={(e) => setScreeningConsentGiven(e.target.checked)}
+                    style={{ marginTop: '3px', width: '16px', height: '16px', flexShrink: 0 }}
+                  />
+                  I consent to {context.organizationName} running a background and credit check through its
+                  screening provider as part of this application.
+                </label>
+              </div>
+            </div>
+          )}
+
           {step === 'authorization' && (
             <div>
               <h2 style={{ margin: '0 0 20px', fontSize: '17px', fontWeight: 600 }}>Emergency Contact & Authorization</h2>
@@ -405,7 +480,10 @@ export default function ApplyPage() {
                 type="button"
                 className="btn btn-primary"
                 onClick={goNext}
-                disabled={step === 'personal' && (!applicantName.trim() || !applicantEmail.trim())}
+                disabled={
+                  (step === 'personal' && (!applicantName.trim() || !applicantEmail.trim())) ||
+                  (step === 'screening' && !screeningStepComplete)
+                }
               >
                 Continue
               </button>

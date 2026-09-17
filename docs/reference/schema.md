@@ -1,6 +1,6 @@
 # Schema Reference
 
-Source of truth: `packages/db/prisma/schema.prisma` (20 models, PostgreSQL).
+Source of truth: `packages/db/prisma/schema.prisma` (21 models, PostgreSQL).
 Regenerate this doc by hand when the schema changes — it is a compressed
 index, not a replacement for the Prisma file.
 
@@ -16,11 +16,12 @@ Tenant-root entity; everything scopes to `organizationId`.
 - Stripe Connect (payouts): `stripeAccountId?`, `stripeAccountStatus: not_connected|pending|active|restricted`, `stripeAccountDetailsSubmitted`
 - Rent defaults: `lateFeeAmount`, `gracePeriodDays`, `rentDueDay`
 - Module gating: `activeModules: String[]` (default `[]`) — module keys the org
-  has active (`owner_portal`, `reporting_analytics`); see `modules.md`. No
-  Stripe Subscription Item billing wiring yet — set today via
+  has active (`owner_portal`, `reporting_analytics`,
+  `advanced_tenant_onboarding`); see `modules.md`. No Stripe Subscription
+  Item billing wiring yet — set today via
   `PATCH /organizations/:orgId { activeModules }` (owner/manager only) or the
   seed script's demo org default.
-- Has many: users, properties, tenants, vendors, messages, documents, notifications, ledgerEntries, rentalApplications, owners, ownerStatements
+- Has many: users, properties, tenants, vendors, messages, documents, notifications, ledgerEntries, rentalApplications, screeningChecks, owners, ownerStatements
 
 ## User
 Manager-side account (owner/manager/maintenance staff).
@@ -52,7 +53,7 @@ Manager-side account (owner/manager/maintenance staff).
 ## Tenant
 - `id, organizationId(FK), supabaseUserId?(unique)`
 - Identity: `email, name, fullLegalName?, preferredName?, dateOfBirth?, phone?, phoneSecondary?, preferredContact?: PreferredContact(email|sms|call)`
-- Screening block `[all deferred: Advanced Tenant Onboarding]`: `ssnLast4?, ssnFullEncrypted?, govtIdType?: GovernmentIdType(drivers_license|state_id|passport), govtIdNumber?, screeningConsentAt?`
+- Screening block `[Advanced Tenant Onboarding]`: `ssnLast4?, ssnFullEncrypted?, govtIdType?: GovernmentIdType(drivers_license|state_id|passport), govtIdNumber?, screeningConsentAt?` — populated (copied from the approved `RentalApplication`) when the org has `advanced_tenant_onboarding` active; `ssnFullEncrypted`/`govtIdNumber` are AES-256-GCM ciphertext (`encryption.service.ts`), never plaintext
 - Address history: `currentAddress?, previousAddress?`
 - Employment: `employerName?, employerPhone?, monthlyGrossIncome?, incomeSource?: IncomeSource(employment|self_employed|benefits|other)`
 - Emergency contacts: `emergencyContactName?/Phone?` + contact1/contact2 relationship+email/phone fields
@@ -70,7 +71,16 @@ Public application-form submission before a Tenant record exists.
 - `status: RentalApplicationStatus(pending|under_review|approved|denied|withdrawn)`
 - Applicant info mirrors Tenant's identity/employment/household fields (`applicantName/Email/Phone`, `monthlyGrossIncome?`, `occupantCount`, `pets?/vehicles?: Json`)
 - Consent: `consentGiven, consentIp?, consentAt?`
+- Screening `[Advanced Tenant Onboarding]`: `screeningConsentAt?, screeningConsentIp?, ssnFullEncrypted?, govtIdType?: GovernmentIdType, govtIdNumber?` — captured in the same `POST /apply/:token` submission as the rest of the application, only when the org has `advanced_tenant_onboarding` active; `ssnFullEncrypted`/`govtIdNumber` are ciphertext. Copied onto the created `Tenant` on approval. Has many `screeningChecks`
 - Review: `reviewNotes?, reviewedAt?, reviewedByUserId?, createdTenantId?` (links to the Tenant created on approval)
+
+## ScreeningCheck
+Background/credit check run against a `RentalApplication` (Advanced Tenant Onboarding module, gated). Never stores raw SSN/govt ID — those live only as ciphertext on `RentalApplication`/`Tenant`.
+- `id, organizationId(FK), rentalApplicationId(FK)`
+- `provider: ScreeningProvider(transunion_smartmove)`, `status: ScreeningStatus(pending|in_progress|completed|failed)`, `decision?: ScreeningDecision(recommend|caution|decline)`
+- `providerReferenceId?, reportUrl?, errorMessage?`
+- `requestedByUserId, requestedAt, completedAt?`
+- Provider call is currently mocked (`screening-provider.client.ts`) — no TransUnion SmartMove credentials in any environment yet
 
 ## Lease
 - `id, unitId(FK)`

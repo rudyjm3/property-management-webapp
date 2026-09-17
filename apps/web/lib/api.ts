@@ -584,6 +584,14 @@ export const api = {
     pendingCount: () =>
       apiFetch<{ count: number }>(`/api/v1/organizations/${_orgId}/applications?status=pending&limit=1`)
         .then((r: any) => (r.data?.length ?? 0)),
+
+    runScreening: (id: string) =>
+      apiFetch<any>(`/api/v1/organizations/${_orgId}/applications/${id}/screening`, {
+        method: 'POST',
+      }),
+
+    getScreening: (id: string) =>
+      apiFetch<any>(`/api/v1/organizations/${_orgId}/applications/${id}/screening`),
   },
 
   owners: {

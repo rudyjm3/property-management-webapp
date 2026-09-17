@@ -9,6 +9,7 @@ import { MODULE_KEYS, ALL_MODULE_KEYS, type ModuleKey } from '@propflow/shared';
 const MODULE_LABELS: Record<ModuleKey, string> = {
   [MODULE_KEYS.OWNER_PORTAL]: 'Owner Portal',
   [MODULE_KEYS.REPORTING_ANALYTICS]: 'Reporting & Analytics',
+  [MODULE_KEYS.ADVANCED_TENANT_ONBOARDING]: 'Advanced Tenant Onboarding',
 };
 
 const TIMEZONES = [

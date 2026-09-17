@@ -13,36 +13,55 @@ and gate the UI via a `<ModuleGate module="...">` wrapper.
 **As of 2026-09-17, that gating infrastructure now exists** — see "Module
 gating infrastructure" below — and is wired to the two modules that had
 shipped ahead of it, Module 9 (Owner Portal) and Module 11 (Reporting &
-Analytics). No other module has functionality built yet, so no other module
-needs gating today. Full Stripe Subscription Item billing is still not
-wired — see the "How activation works today" section for the interim
-mechanism. What exists beyond gating is (a) base schema columns kept
-nullable so a module's eventual launch doesn't require a breaking migration,
-and (b) in a few cases, base-product functionality that overlaps with what a
-module will later extend.
+Analytics), plus the screening step of Module 1 (Advanced Tenant
+Onboarding), built in this same update. No other module has functionality
+built yet, so no other module needs gating today. Full Stripe Subscription
+Item billing is still not wired — see the "How activation works today"
+section for the interim mechanism. What exists beyond gating is (a) base
+schema columns kept nullable so a module's eventual launch doesn't require a
+breaking migration, and (b) in a few cases, base-product functionality that
+overlaps with what a module will later extend.
 
 ## Module gating infrastructure
 
 - **Schema**: `Organization.activeModules` — `String[]`, default `[]`
   (`packages/db/prisma/migrations/20260917041729_add_organization_active_modules`).
   Holds module keys, defined in `packages/shared/src/constants/index.ts` as
-  `MODULE_KEYS` (`owner_portal`, `reporting_analytics`) / `ALL_MODULE_KEYS`.
+  `MODULE_KEYS` (`owner_portal`, `reporting_analytics`,
+  `advanced_tenant_onboarding`) / `ALL_MODULE_KEYS`.
 - **API middleware**: `requireModule(moduleKey)`
   (`apps/api/src/middleware/module-gate.ts`) — looks up the requesting org's
   `activeModules` fresh per request and returns `403 MODULE_NOT_ACTIVE` if
   the key isn't present. Resolves the org from whichever auth identity is on
   the request (`req.user`, `req.owner`, or `req.tenant`), so it chains after
-  any of the three auth middlewares. Applied in `apps/api/src/routes/index.ts`
-  to `/organizations/:orgId/owners` and `/organizations/:orgId/reports`
-  (manager-facing, on top of their existing `requireRoles(['owner',
-  'manager'])`) and to `/owner-portal` (owner-facing, on top of
-  `requireOwnerAuth`).
+  any of the three auth middlewares. Applied two ways depending on whether
+  the whole router needs gating or just part of it:
+  - **Router-mount gating**: in `apps/api/src/routes/index.ts`, to
+    `/organizations/:orgId/owners` and `/organizations/:orgId/reports`
+    (manager-facing, on top of their existing `requireRoles(['owner',
+    'manager'])`) and to `/owner-portal` (owner-facing, on top of
+    `requireOwnerAuth`).
+  - **Per-route gating**: in `apps/api/src/routes/applications.ts`, to just
+    the screening endpoints (`POST`/`GET .../applications/:id/screening`)
+    — the rest of that router (application links, review, e-sign) ships
+    ungated as base product, so the gate is applied to those two routes
+    directly rather than at the router mount.
+  The public, unauthenticated screening-consent capture on
+  `POST /apply/:token` (no `req.user`/`req.owner`/`req.tenant` to resolve an
+  org from) is instead checked directly in
+  `screening.service.buildScreeningConsentUpdate`, which looks up the org's
+  `activeModules` itself and throws the same `403 MODULE_NOT_ACTIVE` shape.
 - **Web UI**: `<ModuleGate module="...">` (`apps/web/components/ModuleGate.tsx`)
   reads `activeModules` off the org in `AuthContext` (populated by
   `GET /auth/me`) and renders `children` only if the module is active,
   otherwise a `fallback` (defaults to nothing rendered). Wraps the `/owners`
   and `/reports` manager pages, and the `Sidebar` nav items for both are
-  filtered out entirely when their module isn't active.
+  filtered out entirely when their module isn't active. The screening step
+  doesn't have its own page to wrap — it's a card inside the existing
+  `/applications/:id` review page, shown/hidden by checking
+  `activeModules` directly — and the public application form
+  (`/apply/[token]`) shows/hides its screening step based on
+  `screeningModuleActive` returned by `GET /apply/:token`.
 - **How activation works today**: no Stripe Subscription Item billing yet.
   Instead, `PATCH /organizations/:orgId` accepts an `activeModules` array
   (validated against `ALL_MODULE_KEYS`), settable by any `owner`/`manager` —
@@ -55,11 +74,13 @@ module will later extend.
 
 ## Schema fields already present, dormant until their module ships
 
+Module 1's `ssnFullEncrypted`/`screeningConsentAt`/`govtIdType`/`govtIdNumber`
+on `Tenant` (and the equivalent fields added to `RentalApplication`) are no
+longer dormant — they're populated whenever `advanced_tenant_onboarding` is
+active, see the module table below and `schema.md`.
+
 | Column | Table | Module | Notes |
 |---|---|---|---|
-| `ssnFullEncrypted` | Tenant | Advanced Tenant Onboarding | Encrypted at rest, never logged/exposed |
-| `screeningConsentAt` | Tenant | Advanced Tenant Onboarding | Legally required before running any background/credit check |
-| `govtIdNumber` | Tenant | Advanced Tenant Onboarding | Store encrypted |
 | `taxParcelId` | Property | Advanced Payments & Accounting | Needed for Schedule E / tax reporting |
 | `applianceCount` | Unit | Unit Intelligence & Appliance Registry | Maintained by module, surfaced on unit detail |
 | `lastInspectionAt` | Unit | Inspections & Compliance | Timestamp of most recent inspection, any type |
@@ -69,7 +90,7 @@ module will later extend.
 
 | # | Module | Price | Priority | Schema hooks already in place | Depends on |
 |---|---|---|---|---|---|
-| 1 | Advanced Tenant Onboarding | $25–40/mo | High | `ssnFullEncrypted`, `screeningConsentAt`, `govtIdNumber`, `govtIdType` (Tenant) — **application form + e-signature already shipped** (`routes/apply.ts`, `routes/sign.ts`, `rental-application.service.ts`); background/credit check integration not yet built | Lease Mgmt, Stripe, Resend, 3rd-party screening API |
+| 1 | Advanced Tenant Onboarding | $25–40/mo | High | `ssnFullEncrypted`, `screeningConsentAt`, `govtIdNumber`, `govtIdType` (Tenant + RentalApplication) — application form + e-signature ship ungated as base product (`routes/apply.ts`, `routes/sign.ts`, `rental-application.service.ts`); **screening step gated + shipped (2026-09-17)**: consent + encrypted SSN/govt ID capture on the application form, a `ScreeningCheck` model, manager trigger/review UI (`applications/:id`), and approve/deny driving the existing tenant+lease path. `requireModule('advanced_tenant_onboarding')` on the screening endpoints only (rest of `applications.ts` stays ungated). **TransUnion SmartMove call is mocked** (`screening-provider.client.ts`) — no credentials in any environment | Lease Mgmt, Stripe, Resend, 3rd-party screening API |
 | 2 | Unit Intelligence & Appliance Registry | $20–35/mo | High | `applianceCount` (Unit) | Unit Mgmt, S3 |
 | 3 | Grounds & Property Maintenance | $25–40/mo | Medium | none dedicated — reuses WorkOrder + Vendor | Work Orders, Vendor |
 | 4 | Advanced Payments & Accounting | $30–50/mo | Medium | `taxParcelId` (Property) | Stripe, Payment Ledger, Owner Portal (for disbursements) |
@@ -116,3 +137,15 @@ subscription check. Verify against `BUILD_OUTLINE.md` §11/§12
 (Implementation Delta Appendix / Phase-by-Phase Status) for the latest state
 before assuming anything here is current — this doc can drift from the
 build outline's own delta tracking.
+
+**Module 1 (Advanced Tenant Onboarding)** is different from 9/11 in that
+its *base* functionality (the digital rental application and e-signature
+flow) shipped ahead of the module too, but stays deliberately **ungated** —
+it's treated as base-product leasing functionality, not part of the paid
+add-on. Only the screening step added 2026-09-17 (consent capture,
+encrypted SSN/govt ID, the background/credit check, and its manager
+review UI) is gated behind `advanced_tenant_onboarding`, and only at the
+route level for the two screening endpoints rather than at the router
+mount — see "Module gating infrastructure" above. The background/credit
+check provider call is mocked; see the module table above and
+`BUILD_OUTLINE.md` §14 Module 1 for what's real vs. simulated.

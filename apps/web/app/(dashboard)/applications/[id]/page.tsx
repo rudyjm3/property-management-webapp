@@ -4,6 +4,27 @@ import { useEffect, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { api } from '@/lib/api';
+import { useAuth } from '@/contexts/AuthContext';
+import { MODULE_KEYS } from '@propflow/shared';
+
+const SCREENING_STATUS_LABELS: Record<string, string> = {
+  pending: 'Pending',
+  in_progress: 'In Progress',
+  completed: 'Completed',
+  failed: 'Failed',
+};
+
+const SCREENING_DECISION_LABELS: Record<string, string> = {
+  recommend: 'Recommend',
+  caution: 'Caution',
+  decline: 'Decline',
+};
+
+const SCREENING_DECISION_BADGE: Record<string, string> = {
+  recommend: 'badge-occupied',
+  caution: 'badge-notice',
+  decline: 'badge-danger',
+};
 
 const STATUS_LABELS: Record<string, string> = {
   pending: 'Pending',
@@ -29,10 +50,19 @@ function fmt(date: string | null | undefined) {
 export default function ApplicationDetailPage() {
   const { id } = useParams<{ id: string }>();
   const router = useRouter();
+  const { profile } = useAuth();
+  const screeningModuleActive =
+    profile?.organization.activeModules?.includes(MODULE_KEYS.ADVANCED_TENANT_ONBOARDING) ?? false;
 
   const [app, setApp] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
+
+  // Screening
+  const [screening, setScreening] = useState<any>(null);
+  const [screeningLoading, setScreeningLoading] = useState(false);
+  const [runningCheck, setRunningCheck] = useState(false);
+  const [screeningError, setScreeningError] = useState('');
 
   // Approve modal
   const [showApproveModal, setShowApproveModal] = useState(false);
@@ -67,7 +97,34 @@ export default function ApplicationDetailPage() {
     }
   }
 
+  async function loadScreening() {
+    if (!screeningModuleActive) return;
+    setScreeningLoading(true);
+    try {
+      const result = await api.applications.getScreening(id);
+      setScreening(result);
+    } catch {
+      // Non-fatal — the screening card just shows its error state below.
+    } finally {
+      setScreeningLoading(false);
+    }
+  }
+
   useEffect(() => { load(); }, [id]);
+  useEffect(() => { loadScreening(); }, [id, screeningModuleActive]);
+
+  async function handleRunScreeningCheck() {
+    setRunningCheck(true);
+    setScreeningError('');
+    try {
+      await api.applications.runScreening(id);
+      await loadScreening();
+    } catch (err: any) {
+      setScreeningError(err.message || 'Failed to run screening check.');
+    } finally {
+      setRunningCheck(false);
+    }
+  }
 
   async function handleApprove() {
     if (!leaseStartDate || !leaseEndDate || !rentAmount) {
@@ -212,6 +269,77 @@ export default function ApplicationDetailPage() {
               <div className="detail-item"><span className="detail-label">Consent Date</span><span className="detail-value">{fmt(app.consentAt)}</span></div>
             </div>
           </div>
+
+          {/* Screening — Module 1 (Advanced Tenant Onboarding) */}
+          {screeningModuleActive && (
+            <div className="card">
+              <h2 style={{ margin: '0 0 16px', fontSize: '15px', fontWeight: 600 }}>Background & Credit Screening</h2>
+              {screeningLoading && !screening ? (
+                <p style={{ color: '#6b7280', fontSize: '14px' }}>Loading…</p>
+              ) : !app.screeningConsentAt ? (
+                <p style={{ color: '#6b7280', fontSize: '14px' }}>
+                  The applicant has not consented to a background/credit check yet.
+                </p>
+              ) : (
+                <>
+                  <div className="detail-grid">
+                    <div className="detail-item">
+                      <span className="detail-label">Screening Consent</span>
+                      <span className="detail-value">{fmt(app.screeningConsentAt)}</span>
+                    </div>
+                    {screening?.check && (
+                      <>
+                        <div className="detail-item">
+                          <span className="detail-label">Check Status</span>
+                          <span className="detail-value">{SCREENING_STATUS_LABELS[screening.check.status] ?? screening.check.status}</span>
+                        </div>
+                        {screening.check.decision && (
+                          <div className="detail-item">
+                            <span className="detail-label">Decision</span>
+                            <span className={`badge ${SCREENING_DECISION_BADGE[screening.check.decision] ?? 'badge'}`}>
+                              {SCREENING_DECISION_LABELS[screening.check.decision] ?? screening.check.decision}
+                            </span>
+                          </div>
+                        )}
+                        <div className="detail-item">
+                          <span className="detail-label">Requested</span>
+                          <span className="detail-value">{fmt(screening.check.requestedAt)}</span>
+                        </div>
+                        {screening.check.completedAt && (
+                          <div className="detail-item">
+                            <span className="detail-label">Completed</span>
+                            <span className="detail-value">{fmt(screening.check.completedAt)}</span>
+                          </div>
+                        )}
+                        {screening.check.errorMessage && (
+                          <div className="detail-item" style={{ gridColumn: '1 / -1' }}>
+                            <span className="detail-label">Error</span>
+                            <span className="detail-value" style={{ color: '#dc2626' }}>{screening.check.errorMessage}</span>
+                          </div>
+                        )}
+                      </>
+                    )}
+                  </div>
+
+                  <p style={{ margin: '12px 0', fontSize: '12px', color: '#9ca3af' }}>
+                    Screening provider integration is currently mocked pending TransUnion SmartMove API
+                    credentials — results above are simulated, not a real background check.
+                  </p>
+
+                  <button
+                    className="btn btn-secondary btn-sm"
+                    onClick={handleRunScreeningCheck}
+                    disabled={runningCheck}
+                  >
+                    {runningCheck ? 'Running…' : screening?.check ? 'Run Check Again' : 'Run Background & Credit Check'}
+                  </button>
+                  {screeningError && (
+                    <p style={{ color: '#dc2626', fontSize: '13px', margin: '8px 0 0' }}>{screeningError}</p>
+                  )}
+                </>
+              )}
+            </div>
+          )}
         </div>
 
         {/* Right — Timeline */}

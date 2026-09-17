@@ -48,6 +48,7 @@ model Organization {
   ownerStatements     OwnerStatement[]
   vacancyHistory      VacancyHistory[]
   savedReports        SavedReport[]
+  screeningChecks     ScreeningCheck[]
 
   @@map("organizations")
 }
@@ -327,6 +328,16 @@ model RentalApplication {
   consentGiven         Boolean            @default(false) @map("consent_given")
   consentIp            String?            @map("consent_ip") @db.VarChar(45)
   consentAt            DateTime?          @map("consent_at")
+  // Screening — Advanced Tenant Onboarding module (gated); captured here
+  // before a Tenant record exists, then copied onto Tenant's own dormant
+  // screening fields when the application is approved. ssnFullEncrypted and
+  // govtIdNumber are ciphertext at rest (see encryption.service.ts) — never
+  // plaintext, never logged.
+  screeningConsentAt     DateTime?        @map("screening_consent_at")
+  screeningConsentIp     String?          @map("screening_consent_ip") @db.VarChar(45)
+  ssnFullEncrypted       String?          @map("ssn_full_encrypted")
+  govtIdType             GovernmentIdType? @map("govt_id_type")
+  govtIdNumber           String?          @map("govt_id_number")
   // Review
   reviewNotes          String?            @map("review_notes")
   reviewedAt           DateTime?          @map("reviewed_at")
@@ -336,13 +347,62 @@ model RentalApplication {
   createdAt            DateTime           @default(now()) @map("created_at")
   updatedAt            DateTime           @updatedAt @map("updated_at")
 
-  organization Organization @relation(fields: [organizationId], references: [id])
-  unit         Unit         @relation(fields: [unitId], references: [id])
+  organization    Organization      @relation(fields: [organizationId], references: [id])
+  unit            Unit              @relation(fields: [unitId], references: [id])
+  screeningChecks ScreeningCheck[]
 
   @@index([organizationId])
   @@index([unitId])
   @@index([token])
   @@map("rental_applications")
+}
+
+// ─── Screening (Advanced Tenant Onboarding module) ────────────────────────────
+// Background/credit check runs against a RentalApplication, gated behind
+// `advanced_tenant_onboarding` in Organization.activeModules. The provider
+// call itself is abstracted behind ScreeningProviderClient
+// (screening-provider.client.ts) — as of this writing that client is a mock
+// pending real TransUnion SmartMove API credentials. Never store raw
+// SSN/govt ID here; those live only as ciphertext on RentalApplication/Tenant.
+model ScreeningCheck {
+  id                  String              @id @default(uuid())
+  organizationId      String              @map("organization_id")
+  rentalApplicationId String              @map("rental_application_id")
+  provider            ScreeningProvider   @default(transunion_smartmove)
+  status              ScreeningStatus     @default(pending)
+  decision            ScreeningDecision?
+  providerReferenceId String?             @map("provider_reference_id")
+  reportUrl           String?             @map("report_url")
+  errorMessage        String?             @map("error_message")
+  requestedByUserId   String              @map("requested_by_user_id")
+  requestedAt         DateTime            @default(now()) @map("requested_at")
+  completedAt         DateTime?           @map("completed_at")
+  createdAt           DateTime            @default(now()) @map("created_at")
+  updatedAt           DateTime            @updatedAt @map("updated_at")
+
+  organization      Organization       @relation(fields: [organizationId], references: [id])
+  rentalApplication RentalApplication  @relation(fields: [rentalApplicationId], references: [id])
+
+  @@index([organizationId])
+  @@index([rentalApplicationId])
+  @@map("screening_checks")
+}
+
+enum ScreeningProvider {
+  transunion_smartmove
+}
+
+enum ScreeningStatus {
+  pending
+  in_progress
+  completed
+  failed
+}
+
+enum ScreeningDecision {
+  recommend
+  caution
+  decline
 }
 
 enum RentalApplicationStatus {
