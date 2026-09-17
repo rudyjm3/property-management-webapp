@@ -110,6 +110,17 @@ function buildDescription(
 
 // ─── Create ACH PaymentIntent ─────────────────────────────────────────────────
 
+// Maps our PaymentMethod values to the Stripe payment_method_types the
+// PaymentIntent should accept. Card is gated behind the Advanced Payments &
+// Accounting module (Module 4) at the route layer — this mapping itself is
+// method-agnostic so the webhook completion logic (payment_intent.succeeded)
+// needs no changes to support card on top of the existing ACH flow.
+type IntentMethod = 'ach' | 'card';
+
+function stripeMethodTypesFor(method: IntentMethod): string[] {
+  return method === 'card' ? ['card'] : ['us_bank_account'];
+}
+
 export interface CreatePaymentIntentOptions {
   leaseId: string;
   paymentId: string;
@@ -119,20 +130,22 @@ export interface CreatePaymentIntentOptions {
   amount: number; // dollars — converted to cents internally
   stripeAccountId: string;
   description?: string;
+  method?: IntentMethod; // defaults to 'ach' for backward compatibility
 }
 
 export async function createPaymentIntent(
   opts: CreatePaymentIntentOptions
 ): Promise<Stripe.PaymentIntent> {
   const stripe = getStripe();
+  const method = opts.method ?? 'ach';
 
-  // Creates the server-side PaymentIntent. The tenant must then supply their bank
-  // account via Stripe.js / Financial Connections on the client to move the PI out
-  // of `requires_payment_method` and trigger the ACH debit.
+  // Creates the server-side PaymentIntent. The tenant must then supply their
+  // bank account or card details via Stripe.js on the client to move the PI
+  // out of `requires_payment_method` and trigger the debit/charge.
   return stripe.paymentIntents.create({
     amount: Math.round(opts.amount * 100),
     currency: 'usd',
-    payment_method_types: ['us_bank_account'],
+    payment_method_types: stripeMethodTypesFor(method),
     transfer_data: { destination: opts.stripeAccountId },
     description: opts.description ?? buildDescription('Rent', opts.unitNumber, opts.propertyName, opts.tenantName),
     metadata: {
@@ -143,7 +156,7 @@ export async function createPaymentIntent(
   });
 }
 
-// ─── Create combined ACH PaymentIntent for multiple line items ────────────────
+// ─── Create combined PaymentIntent for multiple line items ───────────────────
 
 export interface CreateMultiPaymentIntentOptions {
   leaseId: string;
@@ -154,17 +167,19 @@ export interface CreateMultiPaymentIntentOptions {
   amount: number; // total dollars — converted to cents internally
   stripeAccountId: string;
   description?: string;
+  method?: IntentMethod; // defaults to 'ach' for backward compatibility
 }
 
 export async function createMultiPaymentIntent(
   opts: CreateMultiPaymentIntentOptions
 ): Promise<Stripe.PaymentIntent> {
   const stripe = getStripe();
+  const method = opts.method ?? 'ach';
 
   return stripe.paymentIntents.create({
     amount: Math.round(opts.amount * 100),
     currency: 'usd',
-    payment_method_types: ['us_bank_account'],
+    payment_method_types: stripeMethodTypesFor(method),
     transfer_data: { destination: opts.stripeAccountId },
     description: opts.description ?? buildDescription('Payment', opts.unitNumber, opts.propertyName, opts.tenantName),
     metadata: {

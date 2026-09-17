@@ -13,14 +13,15 @@ and gate the UI via a `<ModuleGate module="...">` wrapper.
 **As of 2026-09-17, that gating infrastructure now exists** — see "Module
 gating infrastructure" below — and is wired to the two modules that had
 shipped ahead of it, Module 9 (Owner Portal) and Module 11 (Reporting &
-Analytics), plus the screening step of Module 1 (Advanced Tenant
-Onboarding), built in this same update. No other module has functionality
-built yet, so no other module needs gating today. Full Stripe Subscription
-Item billing is still not wired — see the "How activation works today"
-section for the interim mechanism. What exists beyond gating is (a) base
-schema columns kept nullable so a module's eventual launch doesn't require a
-breaking migration, and (b) in a few cases, base-product functionality that
-overlaps with what a module will later extend.
+Analytics), the screening step of Module 1 (Advanced Tenant Onboarding), and
+now Module 4 (Advanced Payments & Accounting), all built across this and
+the prior update. No other module has functionality built yet, so no other
+module needs gating today. Full Stripe Subscription Item billing is still
+not wired — see the "How activation works today" section for the interim
+mechanism. What exists beyond gating is (a) base schema columns kept
+nullable so a module's eventual launch doesn't require a breaking
+migration, and (b) in a few cases, base-product functionality that overlaps
+with what a module will later extend.
 
 ## Module gating infrastructure
 
@@ -28,7 +29,8 @@ overlaps with what a module will later extend.
   (`packages/db/prisma/migrations/20260917041729_add_organization_active_modules`).
   Holds module keys, defined in `packages/shared/src/constants/index.ts` as
   `MODULE_KEYS` (`owner_portal`, `reporting_analytics`,
-  `advanced_tenant_onboarding`) / `ALL_MODULE_KEYS`.
+  `advanced_tenant_onboarding`, `advanced_payments_accounting`) /
+  `ALL_MODULE_KEYS`.
 - **API middleware**: `requireModule(moduleKey)`
   (`apps/api/src/middleware/module-gate.ts`) — looks up the requesting org's
   `activeModules` fresh per request and returns `403 MODULE_NOT_ACTIVE` if
@@ -45,7 +47,20 @@ overlaps with what a module will later extend.
     the screening endpoints (`POST`/`GET .../applications/:id/screening`)
     — the rest of that router (application links, review, e-sign) ships
     ungated as base product, so the gate is applied to those two routes
-    directly rather than at the router mount.
+    directly rather than at the router mount. Module 4 (Advanced Payments &
+    Accounting) uses the same per-route pattern in four places, since each
+    lives inside a router that otherwise ships ungated or gated by a
+    different module: `apps/api/src/routes/payments.ts`
+    (`POST .../payments/:paymentId/initiate-card` and
+    `.../record-partial`), `apps/api/src/routes/tenants-portal.ts`
+    (`POST /tenant/payments/initiate-card`), `apps/api/src/routes/leases.ts`
+    (`GET`/`POST .../leases/:leaseId/security-deposit-disposition`), and
+    `apps/api/src/routes/owners.ts` (the three `.../disbursements` routes —
+    stacked on top of that router's own `owner_portal` mount-level gate, so
+    disbursements need both modules active) and
+    `apps/api/src/routes/reports.ts` (`GET
+    .../reports/schedule-e-export` — likewise stacked on top of that
+    router's `reporting_analytics` mount-level gate).
   The public, unauthenticated screening-consent capture on
   `POST /apply/:token` (no `req.user`/`req.owner`/`req.tenant` to resolve an
   org from) is instead checked directly in
@@ -61,7 +76,16 @@ overlaps with what a module will later extend.
   `/applications/:id` review page, shown/hidden by checking
   `activeModules` directly — and the public application form
   (`/apply/[token]`) shows/hides its screening step based on
-  `screeningModuleActive` returned by `GET /apply/:token`.
+  `screeningModuleActive` returned by `GET /apply/:token`. Module 4 has no
+  standalone page either — its UI is wrapped into existing pages:
+  `<ModuleGate>` around the "Initiate Card"/"Record Partial" buttons on
+  `/payments`, around the "Disburse" action and modal in the Owner
+  Statements table (inside `/reports`, statements tab), around the
+  `SecurityDepositDisposition` card on the lease detail page, around the
+  new "Schedule E Export" tab on `/reports` (whose own tab-visibility check
+  additionally requires `reporting_analytics`, since the page itself is
+  gated on that module), and around the management-fee-default field under
+  Settings → Organization.
 - **How activation works today**: no Stripe Subscription Item billing yet.
   Instead, `PATCH /organizations/:orgId` accepts an `activeModules` array
   (validated against `ALL_MODULE_KEYS`), settable by any `owner`/`manager` —
@@ -69,8 +93,9 @@ overlaps with what a module will later extend.
   the web app. This is a placeholder switch to make gating testable, not a
   billing decision; it should move behind an actual paid-subscription check
   once module billing ships. The seed script's demo org
-  (`packages/db/prisma/seed.ts`) defaults both modules to active so local
-  dev/demo environments see the gated features without an extra step.
+  (`packages/db/prisma/seed.ts`) defaults all four gated modules to active
+  so local dev/demo environments see the gated features without an extra
+  step.
 
 ## Schema fields already present, dormant until their module ships
 
@@ -93,7 +118,7 @@ active, see the module table below and `schema.md`.
 | 1 | Advanced Tenant Onboarding | $25–40/mo | High | `ssnFullEncrypted`, `screeningConsentAt`, `govtIdNumber`, `govtIdType` (Tenant + RentalApplication) — application form + e-signature ship ungated as base product (`routes/apply.ts`, `routes/sign.ts`, `rental-application.service.ts`); **screening step gated + shipped (2026-09-17)**: consent + encrypted SSN/govt ID capture on the application form, a `ScreeningCheck` model, manager trigger/review UI (`applications/:id`), and approve/deny driving the existing tenant+lease path. `requireModule('advanced_tenant_onboarding')` on the screening endpoints only (rest of `applications.ts` stays ungated). **TransUnion SmartMove call is mocked** (`screening-provider.client.ts`) — no credentials in any environment | Lease Mgmt, Stripe, Resend, 3rd-party screening API |
 | 2 | Unit Intelligence & Appliance Registry | $20–35/mo | High | `applianceCount` (Unit) | Unit Mgmt, S3 |
 | 3 | Grounds & Property Maintenance | $25–40/mo | Medium | none dedicated — reuses WorkOrder + Vendor | Work Orders, Vendor |
-| 4 | Advanced Payments & Accounting | $30–50/mo | Medium | `taxParcelId` (Property) | Stripe, Payment Ledger, Owner Portal (for disbursements) |
+| 4 | Advanced Payments & Accounting | $30–50/mo | Medium | `taxParcelId` (Property) — used by the Schedule E export. **Gated + shipped (2026-09-17)**: card payments alongside ACH (`initiate-card` on both manager and tenant payment routes); partial payment recording with balance carry-forward, *manager-recorded payments only* (`Payment.record-partial`) — no partial support in the self-service ACH/card checkout flow; a `SecurityDepositDisposition` model formalizing the deposit-vs-deductions math the move-out workflow already computes (reconciled against itemized deductions, **not** against move-in/move-out inspection records — Module 6 doesn't exist); a `Disbursement` model computing a configurable management-fee deduction against an `OwnerStatement.distributionAmount` — **bookkeeping only, no payout wiring** since Owner Portal has no owner bank-account capture; a Schedule E data export (`GET /reports/schedule-e-export`) gated behind both `advanced_payments_accounting` and `reporting_analytics`. P&L by property is **not** duplicated here — see the "Notes on base-product overlap" section below for why it stays under Module 11. `requireModule('advanced_payments_accounting')` applied per-route across `payments.ts`, `tenants-portal.ts`, `leases.ts`, `owners.ts`, and `reports.ts` — see "Module gating infrastructure" above | Stripe, Payment Ledger, Owner Portal (for disbursements) |
 | 5 | Vendor & Contractor Management | $20–30/mo | Medium | `w9OnFile` (Vendor) | Work Orders |
 | 6 | Inspections & Compliance | $25–40/mo | Medium | `lastInspectionAt` (Unit) | Unit Mgmt, S3 |
 | 7 | Lease Renewal (full negotiation flow) | $15–25/mo | Medium | none dedicated — base one-click renewal via `Lease.renewalOfLeaseId` already ships | Lease Mgmt, Messaging |
@@ -115,6 +140,18 @@ product, per `BUILD_OUTLINE.md` §14:
   manager↔tenant messaging (`Message` model, `routes/messages.ts`) already
   ships. The module adds bulk/broadcast, automation, SMS, and community
   features.
+- **Module 4 (Advanced Payments & Accounting) vs. Module 11 (Reporting &
+  Analytics) — profit & loss by property**: `BUILD_OUTLINE.md` §14 lists
+  "P&L reporting by property" under Module 4, but `GET
+  /reports/financial-summary` already computes exactly that (income,
+  expenses, NOI, and owner-share breakdown, per property) and has shipped
+  under Module 11 since 2026-09-16. Building a second P&L report under
+  Module 4 would just duplicate it. Decision: P&L by property **stays under
+  Module 11's gate** — an org with `reporting_analytics` active but not
+  `advanced_payments_accounting` still sees full P&L by property. Module 4
+  only adds the tax-specific extension on top: the Schedule E export, which
+  is gated behind both modules since it reuses the financial-summary
+  computation *and* is itself an accounting-specific feature.
 
 **Module 9 (Owner Portal) and Module 11 (Reporting & Analytics)** are now
 both fully built functionally, ahead of their "Low priority" roadmap
@@ -149,3 +186,15 @@ route level for the two screening endpoints rather than at the router
 mount — see "Module gating infrastructure" above. The background/credit
 check provider call is mocked; see the module table above and
 `BUILD_OUTLINE.md` §14 Module 1 for what's real vs. simulated.
+
+**Module 4 (Advanced Payments & Accounting)** is unlike 1/9/11 in that none
+of its functionality predates the module — card payments, partial payment
+recording, security deposit disposition, disbursements, and the Schedule E
+export were all built and gated in the same 2026-09-17 change, entirely
+behind `requireModule('advanced_payments_accounting')` at the route level
+(never at a router mount, since every router it touches is either base
+product or already gated by a different module). See the module table
+above and `BUILD_OUTLINE.md` §14 Module 4 for exactly what shipped vs. what
+didn't (notably: no partial payments through the self-service checkout
+flow, no inspection-based deposit reconciliation, and no actual owner
+payout wiring behind disbursements).

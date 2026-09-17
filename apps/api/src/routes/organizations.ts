@@ -31,6 +31,7 @@ router.patch(
         gracePeriodDays,
         lateFeeAmount,
         activeModules,
+        defaultManagementFeePct,
       } = req.body as {
         name?: string;
         phone?: string;
@@ -43,6 +44,7 @@ router.patch(
         gracePeriodDays?: number;
         lateFeeAmount?: number;
         activeModules?: ModuleKey[];
+        defaultManagementFeePct?: number;
       };
 
       if (planTier !== undefined && !PLAN_TIERS.includes(planTier)) {
@@ -87,6 +89,7 @@ router.patch(
           ...(gracePeriodDays !== undefined && { gracePeriodDays }),
           ...(lateFeeAmount !== undefined && { lateFeeAmount }),
           ...(activeModules !== undefined && { activeModules: [...new Set(activeModules)] }),
+          ...(defaultManagementFeePct !== undefined && { defaultManagementFeePct }),
         },
         select: {
           id: true,
@@ -108,6 +111,7 @@ router.patch(
           stripeAccountId: true,
           stripeAccountStatus: true,
           activeModules: true,
+          defaultManagementFeePct: true,
         },
       });
 
@@ -152,6 +156,7 @@ router.get(
           stripeAccountId: true,
           stripeAccountStatus: true,
           activeModules: true,
+          defaultManagementFeePct: true,
         },
       });
 

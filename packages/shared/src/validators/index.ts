@@ -22,6 +22,7 @@ import {
   LEDGER_ENTRY_TYPES,
   RENTAL_APPLICATION_STATUSES,
   OWNER_STATEMENT_STATUSES,
+  DISBURSEMENT_STATUSES,
 } from '../constants';
 
 // ─── Organization ─────────────────────────────────────────────────────────────
@@ -259,6 +260,22 @@ export const listPaymentsFiltersSchema = z.object({
   limit: z.coerce.number().int().min(1).max(100).default(50),
 });
 
+// ─── Partial Payment (Advanced Payments & Accounting / Module 4) ─────────────
+// Manager-recorded partial payment: only for manually-recorded methods
+// (cash/check/money_order/card/other) — online ACH/card checkout always
+// collects the full amount due, so this does not apply there.
+
+export const recordPartialPaymentSchema = z.object({
+  amountPaid: z.number().positive(),
+  method: z.enum(PAYMENT_METHODS).default('other'),
+  checkNumber: z.string().max(50).nullable().optional(),
+  referenceNote: z.string().max(500).nullable().optional(),
+  paidAt: z.string().datetime().nullable().optional(),
+  notes: z.string().max(2000).nullable().optional(),
+});
+
+export type RecordPartialPaymentInput = z.infer<typeof recordPartialPaymentSchema>;
+
 // ─── Work Order ───────────────────────────────────────────────────────────────
 
 export const createWorkOrderSchema = z
@@ -484,6 +501,28 @@ export const updateOwnerStatementSchema = z.object({
   notes: z.string().max(2000).nullable().optional(),
 });
 
+// ─── Disbursement (Advanced Payments & Accounting / Module 4) ───────────────
+// A bookkeeping record only — no payout wiring to the owner's bank account.
+
+export const createDisbursementSchema = z.object({
+  managementFeePct: z.number().min(0).max(100).optional(),
+  referenceNote: z.string().max(500).nullable().optional(),
+});
+
+export const updateDisbursementSchema = z.object({
+  status: z.enum(DISBURSEMENT_STATUSES),
+  referenceNote: z.string().max(500).nullable().optional(),
+});
+
+// ─── Security Deposit Disposition (Advanced Payments & Accounting / Module 4) ─
+// Formalizes the deposit-vs-deductions reconciliation the move-out workflow
+// already computes into a persisted, auditable record.
+
+export const createSecurityDepositDispositionSchema = z.object({
+  moveInConditionNotes: z.string().max(2000).nullable().optional(),
+  moveOutConditionNotes: z.string().max(2000).nullable().optional(),
+});
+
 // ─── Financial Report ─────────────────────────────────────────────────────────
 
 export const financialSummaryFiltersSchema = z.object({
@@ -491,6 +530,10 @@ export const financialSummaryFiltersSchema = z.object({
   periodEnd: z.string().date(),
   propertyId: z.string().uuid().optional(),
 });
+
+// Schedule E export (Advanced Payments & Accounting / Module 4) — reuses the
+// same period/property filters as the financial summary it's built on.
+export const scheduleEExportFiltersSchema = financialSummaryFiltersSchema;
 
 export const revenueTrendFiltersSchema = z.object({
   periodStart: z.string().date(),

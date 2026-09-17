@@ -1,6 +1,6 @@
 # Schema Reference
 
-Source of truth: `packages/db/prisma/schema.prisma` (21 models, PostgreSQL).
+Source of truth: `packages/db/prisma/schema.prisma` (23 models, PostgreSQL).
 Regenerate this doc by hand when the schema changes — it is a compressed
 index, not a replacement for the Prisma file.
 
@@ -17,11 +17,14 @@ Tenant-root entity; everything scopes to `organizationId`.
 - Rent defaults: `lateFeeAmount`, `gracePeriodDays`, `rentDueDay`
 - Module gating: `activeModules: String[]` (default `[]`) — module keys the org
   has active (`owner_portal`, `reporting_analytics`,
-  `advanced_tenant_onboarding`); see `modules.md`. No Stripe Subscription
-  Item billing wiring yet — set today via
+  `advanced_tenant_onboarding`, `advanced_payments_accounting`); see
+  `modules.md`. No Stripe Subscription Item billing wiring yet — set today via
   `PATCH /organizations/:orgId { activeModules }` (owner/manager only) or the
   seed script's demo org default.
-- Has many: users, properties, tenants, vendors, messages, documents, notifications, ledgerEntries, rentalApplications, screeningChecks, owners, ownerStatements
+- `defaultManagementFeePct: Decimal` (default `10.00`) `[Advanced Payments &
+  Accounting]` — org-wide default management-fee percentage applied when a
+  `Disbursement` is created; overridable per-disbursement.
+- Has many: users, properties, tenants, vendors, messages, documents, notifications, ledgerEntries, rentalApplications, screeningChecks, owners, ownerStatements, disbursements, securityDepositDispositions
 
 ## User
 Manager-side account (owner/manager/maintenance staff).
@@ -92,7 +95,7 @@ Background/credit check run against a `RentalApplication` (Advanced Tenant Onboa
 - E-signing: `documentUrl?, esignatureStatus: EsignatureStatus(pending|partially_signed|completed), tenantSignedAt?/managerSignedAt?, signingToken?(unique), tenant/managerSignatureName+Ip`
 - Renewal chain: `renewalOfLeaseId?` (self-relation `LeaseRenewals`)
 - `deletedAt?` (soft delete)
-- Has many: participants (LeaseParticipant), payments
+- Has many: participants (LeaseParticipant), payments; has one: securityDepositDisposition `[Advanced Payments & Accounting]`
 
 ## LeaseParticipant
 Join table: which Tenants are on a Lease.
@@ -106,13 +109,38 @@ Join table: which Tenants are on a Lease.
 - `stripePaymentIntentId?, checkNumber?, referenceNote?`
 - `dueDate, periodStart?, periodEnd?, paidAt?, voidedAt?/voidReason?`
 - `isLate, lateFeeApplied, lateFeeWaived?, lateFeeWaivedReason?`
+- Partial payment carry-forward `[Advanced Payments & Accounting]`:
+  `originalAmount?` (the amount due before a partial payment reduced
+  `amount` to what was actually received), `carriedFromPaymentId?`
+  (self-relation `PaymentCarryForward` — points a carry-forward payment back
+  at the original it was split from). Only populated for manually-recorded
+  partial payments (`POST .../payments/:paymentId/record-partial`); the
+  self-service ACH/card checkout flow always collects the full amount.
 - `deletedAt?` (soft delete)
-- Has many: ledgerEntries
+- Has many: ledgerEntries, carriedForwardPayments (self-relation)
 
 ## LedgerEntry
 Append-only balance ledger per org.
 - `id, organizationId(FK), paymentId?(FK), type: LedgerEntryType(credit|debit), amount, balanceAfter, description`
 - `stripeEventId?(unique)` — idempotency key for Stripe webhook-driven entries
+
+## SecurityDepositDisposition
+Advanced Payments & Accounting module. Formalizes the deposit-vs-deductions
+math the move-out workflow (`Lease.securityDeposit*`) already computes into
+a persisted, auditable record.
+- `id, organizationId(FK), leaseId(FK, unique — one disposition per lease)`
+- `depositAmount, totalDeductions, returnAmount, status: SecurityDepositStatus` (same enum as `Lease.securityDepositStatus`)
+- `deductions: Json` (copied from `Lease.securityDepositDeductions`)
+- `moveInConditionNotes?, moveOutConditionNotes?` — manager-entered free text; **not** linked to actual inspection records, since the Inspections & Compliance module (Module 6) doesn't exist yet
+- `reconciledByUserId, reconciledAt`
+
+## Disbursement
+Advanced Payments & Accounting module. A bookkeeping record only — no payout
+wiring to the owner's bank account (Owner Portal doesn't capture owner bank
+details).
+- `id, organizationId(FK), ownerStatementId(FK), ownerId(FK), propertyId(FK)`
+- `grossAmount` (copied from `OwnerStatement.distributionAmount`), `managementFeePct, managementFeeAmount, netDisbursementAmount`
+- `status: DisbursementStatus(pending|completed|cancelled)`, `referenceNote?, disbursedAt?`
 
 ## WorkOrder
 - `id` — nullable FKs to `unitId?, propertyId?, tenantId?, assignedToUserId?, submittedByUserId?, vendorId?` (property-level orders have no unit)
@@ -161,6 +189,7 @@ Join table: ownership share of a Property.
 - `id, organizationId(FK), propertyId(FK), ownerId(FK)`
 - `periodStart, periodEnd, totalIncome, totalExpenses, netOperatingIncome, distributionAmount`
 - `status: OwnerStatementStatus(draft|sent)`
+- Has many: disbursements `[Advanced Payments & Accounting]`
 
 ## Notification
 In-app notification feed per User.

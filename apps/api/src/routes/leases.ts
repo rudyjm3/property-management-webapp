@@ -1,12 +1,24 @@
 import { Router, Request, Response, NextFunction } from 'express';
-import { createLeaseSchema, updateLeaseSchema, renewLeaseSchema, moveOutSchema } from '@propflow/shared';
+import {
+  createLeaseSchema,
+  updateLeaseSchema,
+  renewLeaseSchema,
+  moveOutSchema,
+  createSecurityDepositDispositionSchema,
+  MODULE_KEYS,
+} from '@propflow/shared';
 import { validate } from '../middleware/validate';
 import * as leaseService from '../services/lease.service';
 import { requireRoles } from '../middleware/auth';
+import { requireModule } from '../middleware/module-gate';
 
 const router = Router({ mergeParams: true });
 
 const requireManagerAccess = requireRoles(['owner', 'manager']);
+// Security deposit reconciliation is an Advanced Payments & Accounting
+// (Module 4) feature layered on top of the base move-out workflow, which
+// stays ungated — gated per-route rather than at the router mount.
+const requireAccountingModule = requireModule(MODULE_KEYS.ADVANCED_PAYMENTS_ACCOUNTING);
 
 // GET /api/v1/organizations/:orgId/leases
 router.get('/', requireManagerAccess, async (req: Request, res: Response, next: NextFunction) => {
@@ -78,6 +90,38 @@ router.post('/:leaseId/move-out', requireManagerAccess, validate(moveOutSchema),
       req.body
     );
     res.json({ data: lease });
+  } catch (err) {
+    next(err);
+  }
+});
+
+// GET /api/v1/organizations/:orgId/leases/:leaseId/security-deposit-disposition
+// Advanced Payments & Accounting (Module 4).
+router.get('/:leaseId/security-deposit-disposition', requireManagerAccess, requireAccountingModule, async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const disposition = await leaseService.getSecurityDepositDisposition(
+      req.params.orgId as string,
+      req.params.leaseId as string
+    );
+    res.json({ data: disposition });
+  } catch (err) {
+    next(err);
+  }
+});
+
+// POST /api/v1/organizations/:orgId/leases/:leaseId/security-deposit-disposition
+// Advanced Payments & Accounting (Module 4) — reconciles the deposit against
+// the itemized deductions the move-out workflow already captured, and
+// produces a persisted disposition record.
+router.post('/:leaseId/security-deposit-disposition', requireManagerAccess, requireAccountingModule, validate(createSecurityDepositDispositionSchema), async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const disposition = await leaseService.reconcileSecurityDeposit(
+      req.params.orgId as string,
+      req.params.leaseId as string,
+      req.user!.userId,
+      req.body
+    );
+    res.status(201).json({ data: disposition });
   } catch (err) {
     next(err);
   }

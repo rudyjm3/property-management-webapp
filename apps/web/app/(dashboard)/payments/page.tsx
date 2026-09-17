@@ -4,6 +4,8 @@ import { useEffect, useState, useCallback } from 'react';
 import { useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import { api } from '@/lib/api';
+import { useAuth } from '@/contexts/AuthContext';
+import { MODULE_KEYS } from '@propflow/shared';
 
 interface Payment {
   id: string;
@@ -98,6 +100,10 @@ function formatDate(dateStr: string | null | undefined): string {
 
 export default function PaymentsPage() {
   const searchParams = useSearchParams();
+  const { profile } = useAuth();
+  const accountingModuleActive = Boolean(
+    profile?.organization.activeModules?.includes(MODULE_KEYS.ADVANCED_PAYMENTS_ACCOUNTING)
+  );
   const [payments, setPayments] = useState<Payment[]>([]);
   const [loading, setLoading] = useState(true);
   const [filterStatus, setFilterStatus] = useState(searchParams.get('status') ?? '');
@@ -135,6 +141,25 @@ export default function PaymentsPage() {
     paymentIntentId: string;
     status: string;
   } | null>(null);
+
+  // Card modal state (Advanced Payments & Accounting / Module 4)
+  const [cardPayment, setCardPayment] = useState<Payment | null>(null);
+  const [cardLoading, setCardLoading] = useState(false);
+  const [cardError, setCardError] = useState('');
+  const [cardResult, setCardResult] = useState<{
+    clientSecret: string;
+    paymentIntentId: string;
+    status: string;
+  } | null>(null);
+
+  // Record Partial Payment modal state (Advanced Payments & Accounting / Module 4)
+  const [partialPayment, setPartialPayment] = useState<Payment | null>(null);
+  const [partialAmountPaid, setPartialAmountPaid] = useState('');
+  const [partialMethod, setPartialMethod] = useState('cash');
+  const [partialReferenceNote, setPartialReferenceNote] = useState('');
+  const [partialSubmitting, setPartialSubmitting] = useState(false);
+  const [partialError, setPartialError] = useState('');
+  const [partialResult, setPartialResult] = useState<{ carriedForwardAmount: number } | null>(null);
 
   // Mark Paid modal state
   const [markPaidPayment, setMarkPaidPayment] = useState<Payment | null>(null);
@@ -331,6 +356,66 @@ export default function PaymentsPage() {
       await loadPayments();
     } catch (err: any) {
       alert(err.message || 'Failed to cancel ACH');
+    }
+  }
+
+  // ── Card modal (Advanced Payments & Accounting / Module 4) ─────────────────
+
+  function openCardModal(payment: Payment) {
+    setCardPayment(payment);
+    setCardError('');
+    setCardResult(null);
+  }
+
+  async function handleInitiateCard() {
+    if (!cardPayment) return;
+    setCardLoading(true);
+    setCardError('');
+    try {
+      const result = await api.payments.initiateCard(cardPayment.id);
+      setCardResult(result);
+      await loadPayments();
+    } catch (err: any) {
+      setCardError(err.message || 'Failed to initiate card payment');
+    } finally {
+      setCardLoading(false);
+    }
+  }
+
+  // ── Record Partial Payment modal (Advanced Payments & Accounting / Module 4) ─
+
+  function openPartialModal(payment: Payment) {
+    setPartialPayment(payment);
+    setPartialAmountPaid('');
+    setPartialMethod('cash');
+    setPartialReferenceNote('');
+    setPartialError('');
+    setPartialResult(null);
+  }
+
+  function closePartialModal() {
+    setPartialPayment(null);
+    setPartialError('');
+    setPartialResult(null);
+  }
+
+  async function handleRecordPartial(e: React.FormEvent) {
+    e.preventDefault();
+    if (!partialPayment) return;
+    setPartialSubmitting(true);
+    setPartialError('');
+    try {
+      const result = await api.payments.recordPartial(partialPayment.id, {
+        amountPaid: parseFloat(partialAmountPaid),
+        method: partialMethod,
+        referenceNote: partialReferenceNote || null,
+      });
+      setPartialResult({ carriedForwardAmount: Number(result.carriedForwardPayment.amount) });
+      await loadPayments();
+    } catch (err: any) {
+      setPartialError(err.message || 'Failed to record partial payment');
+    } finally {
+      setPartialSubmitting(false);
     }
   }
 
@@ -900,6 +985,27 @@ export default function PaymentsPage() {
                                 Initiate ACH
                               </button>
                             )}
+                          {payment.status === 'pending' &&
+                            connectStatus === 'active' &&
+                            accountingModuleActive &&
+                            !payment.stripePaymentIntentId && (
+                              <button
+                                className="btn btn-sm btn-secondary"
+                                onClick={() => openCardModal(payment)}
+                              >
+                                Initiate Card
+                              </button>
+                            )}
+                          {payment.status === 'pending' &&
+                            accountingModuleActive &&
+                            !payment.stripePaymentIntentId && (
+                              <button
+                                className="btn btn-sm btn-secondary"
+                                onClick={() => openPartialModal(payment)}
+                              >
+                                Record Partial
+                              </button>
+                            )}
                           {payment.status === 'pending' && payment.stripePaymentIntentId && (
                             <button
                               className="btn btn-sm btn-secondary"
@@ -1116,6 +1222,160 @@ export default function PaymentsPage() {
                 </button>
               )}
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* Card Payment Modal (Advanced Payments & Accounting / Module 4) */}
+      {cardPayment && (
+        <div className="modal-overlay" onClick={() => setCardPayment(null)}>
+          <div className="modal" onClick={(e) => e.stopPropagation()} style={{ maxWidth: '460px' }}>
+            <div className="modal-header">
+              <h2>Initiate Card Payment</h2>
+              <button className="btn btn-sm btn-secondary" onClick={() => setCardPayment(null)}>
+                X
+              </button>
+            </div>
+            <div className="modal-body">
+              {cardError && (
+                <div style={{ color: 'var(--color-danger)', marginBottom: '12px', fontSize: '14px' }}>
+                  {cardError}
+                </div>
+              )}
+              {cardResult ? (
+                <div>
+                  <p style={{ color: 'var(--color-success, #16a34a)', marginBottom: '8px', fontWeight: 600 }}>
+                    Card PaymentIntent created
+                  </p>
+                  <p style={{ fontSize: '14px', marginBottom: '4px' }}>
+                    <strong>{cardPayment.tenant.name}</strong> &mdash; Unit{' '}
+                    {cardPayment.lease.unit.unitNumber}, {cardPayment.lease.unit.property.name}
+                  </p>
+                  <p style={{ fontSize: '14px', marginBottom: '12px' }}>
+                    {TYPE_LABELS[cardPayment.type] ?? cardPayment.type} &middot;{' '}
+                    <strong>${Number(cardPayment.amount).toLocaleString()}</strong> &middot; Status:{' '}
+                    <strong>{cardResult.status}</strong>
+                  </p>
+                  <p style={{ fontSize: '13px', color: 'var(--color-text-muted)' }}>
+                    The tenant must still complete card entry via Stripe.js on their side
+                    to confirm the charge.
+                  </p>
+                  <p style={{ fontSize: '11px', color: 'var(--color-text-muted)', marginTop: '8px' }}>
+                    Ref: {cardResult.paymentIntentId}
+                  </p>
+                </div>
+              ) : (
+                <div>
+                  <p>This will create a card-payment PaymentIntent for:</p>
+                  <ul style={{ margin: '12px 0', paddingLeft: '20px', fontSize: '14px', lineHeight: '1.8' }}>
+                    <li><strong>{cardPayment.tenant.name}</strong></li>
+                    <li>Amount: <strong>${Number(cardPayment.amount).toLocaleString()}</strong></li>
+                    <li>Type: <strong>{TYPE_LABELS[cardPayment.type] ?? cardPayment.type}</strong></li>
+                  </ul>
+                  <p style={{ fontSize: '13px', color: 'var(--color-text-muted)' }}>
+                    Funds will be transferred to your connected Stripe bank account after the card
+                    charge settles.
+                  </p>
+                </div>
+              )}
+            </div>
+            <div className="modal-footer">
+              <button type="button" className="btn btn-secondary" onClick={() => setCardPayment(null)}>
+                {cardResult ? 'Close' : 'Cancel'}
+              </button>
+              {!cardResult && (
+                <button
+                  type="button"
+                  className="btn btn-primary"
+                  disabled={cardLoading}
+                  onClick={handleInitiateCard}
+                >
+                  {cardLoading ? 'Creating…' : 'Confirm Card'}
+                </button>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Record Partial Payment Modal (Advanced Payments & Accounting / Module 4) */}
+      {partialPayment && (
+        <div className="modal-overlay" onClick={closePartialModal}>
+          <div className="modal" onClick={(e) => e.stopPropagation()} style={{ maxWidth: '440px' }}>
+            <div className="modal-header">
+              <h2>Record Partial Payment</h2>
+              <button className="btn btn-sm btn-secondary" onClick={closePartialModal}>X</button>
+            </div>
+            {partialResult ? (
+              <>
+                <div className="modal-body">
+                  <p style={{ color: 'var(--color-success, #16a34a)', marginBottom: '8px', fontWeight: 600 }}>
+                    Partial payment recorded
+                  </p>
+                  <p style={{ fontSize: '14px' }}>
+                    The remaining <strong>${partialResult.carriedForwardAmount.toLocaleString()}</strong> balance
+                    has been carried forward as a new pending payment.
+                  </p>
+                </div>
+                <div className="modal-footer">
+                  <button type="button" className="btn btn-primary" onClick={closePartialModal}>Close</button>
+                </div>
+              </>
+            ) : (
+              <form onSubmit={handleRecordPartial}>
+                <div className="modal-body">
+                  <p style={{ marginBottom: '16px', fontSize: '14px' }}>
+                    Amount due: <strong>${Number(partialPayment.amount).toLocaleString()}</strong> for{' '}
+                    <strong>{partialPayment.tenant.name}</strong>. The remainder will be carried
+                    forward as a new pending payment.
+                  </p>
+                  {partialError && (
+                    <div style={{ color: 'var(--color-danger)', marginBottom: '12px', fontSize: '14px' }}>
+                      {partialError}
+                    </div>
+                  )}
+                  <div className="form-row">
+                    <div className="form-group">
+                      <label>Amount paid ($)</label>
+                      <input
+                        type="number"
+                        min="0.01"
+                        step="0.01"
+                        max={Number(partialPayment.amount) - 0.01}
+                        required
+                        value={partialAmountPaid}
+                        onChange={(e) => setPartialAmountPaid(e.target.value)}
+                      />
+                    </div>
+                    <div className="form-group">
+                      <label>Payment Method</label>
+                      <select value={partialMethod} onChange={(e) => setPartialMethod(e.target.value)}>
+                        <option value="cash">Cash</option>
+                        <option value="check">Check</option>
+                        <option value="money_order">Money Order</option>
+                        <option value="card">Card</option>
+                        <option value="other">Other</option>
+                      </select>
+                    </div>
+                  </div>
+                  <div className="form-group">
+                    <label>Reference / Note (optional)</label>
+                    <input
+                      type="text"
+                      placeholder="e.g. partial payment received in office"
+                      value={partialReferenceNote}
+                      onChange={(e) => setPartialReferenceNote(e.target.value)}
+                    />
+                  </div>
+                </div>
+                <div className="modal-footer">
+                  <button type="button" className="btn btn-secondary" onClick={closePartialModal}>Cancel</button>
+                  <button type="submit" className="btn btn-primary" disabled={partialSubmitting}>
+                    {partialSubmitting ? 'Saving…' : 'Record Partial Payment'}
+                  </button>
+                </div>
+              </form>
+            )}
           </div>
         </div>
       )}

@@ -385,3 +385,78 @@ export async function deleteOwnerStatement(organizationId: string, statementId: 
   await getOwnerStatement(organizationId, statementId);
   await prisma.ownerStatement.delete({ where: { id: statementId } });
 }
+
+// ─── Disbursements (Advanced Payments & Accounting / Module 4) ──────────────
+// A bookkeeping record only — computes a management-fee deduction against an
+// OwnerStatement's distributionAmount and persists the result. There is no
+// payout wiring to the owner's bank account: Owner Portal doesn't capture
+// owner bank details, so `status` just tracks whether the manager has sent
+// the money outside the app.
+
+export async function listDisbursements(organizationId: string, ownerStatementId: string) {
+  await getOwnerStatement(organizationId, ownerStatementId);
+  return prisma.disbursement.findMany({
+    where: { organizationId, ownerStatementId },
+    orderBy: { createdAt: 'desc' },
+  });
+}
+
+export async function createDisbursement(
+  organizationId: string,
+  ownerStatementId: string,
+  data: { managementFeePct?: number; referenceNote?: string | null }
+) {
+  const statement = await getOwnerStatement(organizationId, ownerStatementId);
+
+  const org = await prisma.organization.findUniqueOrThrow({
+    where: { id: organizationId },
+    select: { defaultManagementFeePct: true },
+  });
+
+  const grossAmount = Number(statement.distributionAmount);
+  const managementFeePct = data.managementFeePct ?? Number(org.defaultManagementFeePct);
+  const managementFeeAmount = Math.round(grossAmount * managementFeePct) / 100;
+  const netDisbursementAmount = Math.round((grossAmount - managementFeeAmount) * 100) / 100;
+
+  return prisma.disbursement.create({
+    data: {
+      organizationId,
+      ownerStatementId,
+      ownerId: statement.ownerId,
+      propertyId: statement.propertyId,
+      grossAmount,
+      managementFeePct,
+      managementFeeAmount,
+      netDisbursementAmount,
+      referenceNote: data.referenceNote ?? null,
+    },
+    include: {
+      owner: { select: { id: true, name: true, email: true } },
+      property: { select: { id: true, name: true } },
+    },
+  });
+}
+
+export async function updateDisbursement(
+  organizationId: string,
+  disbursementId: string,
+  data: { status: 'pending' | 'completed' | 'cancelled'; referenceNote?: string | null }
+) {
+  const existing = await prisma.disbursement.findFirst({
+    where: { id: disbursementId, organizationId },
+  });
+  if (!existing) throw new AppError(404, 'DISBURSEMENT_NOT_FOUND', 'Disbursement not found.');
+
+  return prisma.disbursement.update({
+    where: { id: disbursementId },
+    data: {
+      status: data.status,
+      referenceNote: data.referenceNote ?? existing.referenceNote,
+      disbursedAt: data.status === 'completed' ? new Date() : existing.disbursedAt,
+    },
+    include: {
+      owner: { select: { id: true, name: true, email: true } },
+      property: { select: { id: true, name: true } },
+    },
+  });
+}

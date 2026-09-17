@@ -4,12 +4,14 @@ import { useEffect, useState } from 'react';
 import { api } from '@/lib/api';
 import { useAuth } from '@/contexts/AuthContext';
 import SettingsShell from '@/components/settings/SettingsShell';
+import ModuleGate from '@/components/ModuleGate';
 import { MODULE_KEYS, ALL_MODULE_KEYS, type ModuleKey } from '@propflow/shared';
 
 const MODULE_LABELS: Record<ModuleKey, string> = {
   [MODULE_KEYS.OWNER_PORTAL]: 'Owner Portal',
   [MODULE_KEYS.REPORTING_ANALYTICS]: 'Reporting & Analytics',
   [MODULE_KEYS.ADVANCED_TENANT_ONBOARDING]: 'Advanced Tenant Onboarding',
+  [MODULE_KEYS.ADVANCED_PAYMENTS_ACCOUNTING]: 'Advanced Payments & Accounting',
 };
 
 const TIMEZONES = [
@@ -46,6 +48,10 @@ export default function OrganizationSettingsPage() {
   const [activeModules, setActiveModules] = useState<ModuleKey[]>([]);
   const [modulesSaving, setModulesSaving] = useState(false);
   const [modulesError, setModulesError] = useState<string | null>(null);
+  const [defaultManagementFeePct, setDefaultManagementFeePct] = useState(10);
+  const [feeSaving, setFeeSaving] = useState(false);
+  const [feeError, setFeeError] = useState<string | null>(null);
+  const [feeSaved, setFeeSaved] = useState(false);
 
   useEffect(() => {
     async function load() {
@@ -61,6 +67,7 @@ export default function OrganizationSettingsPage() {
         setGracePeriodDays(org.gracePeriodDays ?? 5);
         setLateFeeAmount(Number(org.lateFeeAmount) ?? 50);
         setActiveModules((org.activeModules ?? []) as ModuleKey[]);
+        setDefaultManagementFeePct(Number(org.defaultManagementFeePct ?? 10));
 
         if (org.logoUrl) {
           if (typeof org.logoUrl === 'string' && /^https?:\/\//i.test(org.logoUrl)) {
@@ -139,6 +146,23 @@ export default function OrganizationSettingsPage() {
       setModulesError(err.message || 'Failed to update modules.');
     } finally {
       setModulesSaving(false);
+    }
+  }
+
+  async function handleSaveManagementFee(e: React.FormEvent) {
+    e.preventDefault();
+    setFeeSaving(true);
+    setFeeError(null);
+    setFeeSaved(false);
+    try {
+      await api.organizations.update({ defaultManagementFeePct });
+      await refreshProfile();
+      setFeeSaved(true);
+      setTimeout(() => setFeeSaved(false), 3000);
+    } catch (err: any) {
+      setFeeError(err.message || 'Failed to save management fee default.');
+    } finally {
+      setFeeSaving(false);
     }
   }
 
@@ -481,6 +505,72 @@ export default function OrganizationSettingsPage() {
           ))}
         </div>
       </div>
+
+      <ModuleGate module={MODULE_KEYS.ADVANCED_PAYMENTS_ACCOUNTING}>
+        <div className="card" style={{ marginTop: '20px' }}>
+          <div className="card-body">
+            <h2 style={{ fontSize: '16px', fontWeight: 600, marginBottom: '8px' }}>
+              Owner Disbursements
+            </h2>
+            <p style={{ fontSize: '13px', color: 'var(--color-text-muted)', marginBottom: '16px' }}>
+              Default management fee percentage deducted from an owner&apos;s gross distribution
+              when a disbursement is created. Overridable per-disbursement.
+            </p>
+
+            {feeError && (
+              <div
+                style={{
+                  background: '#fef2f2',
+                  border: '1px solid #fecaca',
+                  borderRadius: '6px',
+                  padding: '12px',
+                  marginBottom: '16px',
+                  color: '#dc2626',
+                  fontSize: '14px',
+                }}
+              >
+                {feeError}
+              </div>
+            )}
+            {feeSaved && (
+              <div
+                style={{
+                  background: '#f0fdf4',
+                  border: '1px solid #86efac',
+                  borderRadius: '6px',
+                  padding: '12px',
+                  marginBottom: '16px',
+                  color: '#16a34a',
+                  fontSize: '14px',
+                }}
+              >
+                Management fee default saved.
+              </div>
+            )}
+
+            <form onSubmit={handleSaveManagementFee}>
+              <div className="form-row">
+                <div className="form-group">
+                  <label>Default management fee (%)</label>
+                  <input
+                    type="number"
+                    step="0.01"
+                    min="0"
+                    max="100"
+                    value={defaultManagementFeePct}
+                    onChange={(e) => setDefaultManagementFeePct(Number(e.target.value))}
+                  />
+                </div>
+              </div>
+              <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: '8px' }}>
+                <button type="submit" className="btn btn-primary" disabled={feeSaving}>
+                  {feeSaving ? 'Saving...' : 'Save'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      </ModuleGate>
     </SettingsShell>
   );
 }

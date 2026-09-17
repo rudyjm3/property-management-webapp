@@ -20,8 +20,8 @@ file directly for per-endpoint behavior.
 | `/organizations/:orgId` | `routes/organizations.ts` | none at mount (org settings; per-route checks inside) |
 | `/organizations/:orgId/properties` | `routes/properties.ts` (nests `/:propertyId/units` → `routes/units.ts`) | `requireAuth`, `requireOrg` |
 | `/organizations/:orgId/tenants` | `routes/tenants.ts` | `requireAuth`, `requireOrg` |
-| `/organizations/:orgId/leases` | `routes/leases.ts` | `requireAuth`, `requireOrg` |
-| `/organizations/:orgId/payments` | `routes/payments.ts` | `requireAuth`, `requireOrg` |
+| `/organizations/:orgId/leases` | `routes/leases.ts` | `requireAuth`, `requireOrg`, plus `requireModule('advanced_payments_accounting')` applied only to the `GET`/`POST .../leases/:leaseId/security-deposit-disposition` routes (rest of the router is ungated) |
+| `/organizations/:orgId/payments` | `routes/payments.ts` | `requireAuth`, `requireOrg`, plus `requireModule('advanced_payments_accounting')` applied only to `POST .../payments/:paymentId/initiate-card` and `.../record-partial` (rest of the router, including ACH, is ungated) |
 | `/organizations/:orgId/documents` | `routes/documents.ts` | `requireAuth`, `requireOrg` |
 | `/organizations/:orgId/notifications` | `routes/notifications.ts` | `requireAuth`, `requireOrg` |
 | `/organizations/:orgId/work-orders` | `routes/workOrders.ts` | `requireAuth`, `requireOrg` |
@@ -32,9 +32,9 @@ file directly for per-endpoint behavior.
 | `/organizations/:orgId/ledger` | `routes/ledger.ts` | `requireAuth`, `requireOrg` |
 | `/organizations/:orgId/billing` | `routes/billing.ts` | `requireAuth`, `requireOrg` |
 | `/organizations/:orgId` (application links, review, manager lease signing) | `routes/applications.ts` | `requireAuth`, `requireOrg`, `requireRoles(['owner','manager'])`, plus `requireModule('advanced_tenant_onboarding')` applied only to the `applications/:id/screening` GET/POST routes (rest of the router is ungated) |
-| `/organizations/:orgId/owners` | `routes/owners.ts` | `requireAuth`, `requireOrg`, `requireModule('owner_portal')` |
-| `/organizations/:orgId/reports` | `routes/reports.ts` | `requireAuth`, `requireOrg`, `requireModule('reporting_analytics')` (financial reports, report builder, vacancy history, saved reports) |
-| `/tenant` | `routes/tenants-portal.ts` | `requireTenantAuth` (separate identity from all routes above — see `rbac.md`) |
+| `/organizations/:orgId/owners` | `routes/owners.ts` | `requireAuth`, `requireOrg`, `requireModule('owner_portal')`, plus `requireModule('advanced_payments_accounting')` stacked on just the three `.../disbursements` routes (disbursements need both modules active) |
+| `/organizations/:orgId/reports` | `routes/reports.ts` | `requireAuth`, `requireOrg`, `requireModule('reporting_analytics')` (financial reports, report builder, vacancy history, saved reports), plus `requireModule('advanced_payments_accounting')` stacked on just `GET .../reports/schedule-e-export` (needs both modules active) |
+| `/tenant` | `routes/tenants-portal.ts` | `requireTenantAuth` (separate identity from all routes above — see `rbac.md`), plus `requireModule('advanced_payments_accounting')` applied only to `POST /tenant/payments/initiate-card` |
 | `/owner-portal` | `routes/owner-portal.ts` | `requireOwnerAuth`, `requireModule('owner_portal')` (separate identity from all routes above — see `rbac.md`) |
 
 ## Not mounted through `index.ts`

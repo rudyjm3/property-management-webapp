@@ -2,6 +2,8 @@
 
 import { useEffect, useState } from 'react';
 import { api } from '@/lib/api';
+import ModuleGate from '@/components/ModuleGate';
+import { MODULE_KEYS } from '@propflow/shared';
 
 interface Props {
   propertyId?: string;
@@ -28,6 +30,14 @@ export function OwnerStatements({ propertyId, properties = [] }: Props) {
   });
   const [financials, setFinancials] = useState<any>(null);
   const [loadingFinancials, setLoadingFinancials] = useState(false);
+
+  // Disbursements (Advanced Payments & Accounting / Module 4)
+  const [disbursementStatement, setDisbursementStatement] = useState<any>(null);
+  const [disbursements, setDisbursements] = useState<any[]>([]);
+  const [disbursementsLoading, setDisbursementsLoading] = useState(false);
+  const [disbursementFeePct, setDisbursementFeePct] = useState('');
+  const [disbursing, setDisbursing] = useState(false);
+  const [disbursementError, setDisbursementError] = useState('');
 
   const load = () => {
     setLoading(true);
@@ -94,6 +104,45 @@ export function OwnerStatements({ propertyId, properties = [] }: Props) {
     load();
   }
 
+  function openDisbursements(statement: any) {
+    setDisbursementStatement(statement);
+    setDisbursementFeePct('');
+    setDisbursementError('');
+    setDisbursementsLoading(true);
+    api.ownerStatements
+      .listDisbursements(statement.id)
+      .then((data: any) => setDisbursements(Array.isArray(data) ? data : []))
+      .catch((e: Error) => setDisbursementError(e.message))
+      .finally(() => setDisbursementsLoading(false));
+  }
+
+  function closeDisbursements() {
+    setDisbursementStatement(null);
+    setDisbursements([]);
+  }
+
+  async function handleCreateDisbursement() {
+    if (!disbursementStatement) return;
+    setDisbursing(true);
+    setDisbursementError('');
+    try {
+      const created = await api.ownerStatements.createDisbursement(disbursementStatement.id, {
+        managementFeePct: disbursementFeePct ? Number(disbursementFeePct) : undefined,
+      });
+      setDisbursements((prev) => [created, ...prev]);
+      setDisbursementFeePct('');
+    } catch (e: any) {
+      setDisbursementError(e.message || 'Failed to create disbursement');
+    } finally {
+      setDisbursing(false);
+    }
+  }
+
+  async function markDisbursementCompleted(id: string) {
+    const updated = await api.ownerStatements.updateDisbursement(id, { status: 'completed' });
+    setDisbursements((prev) => prev.map((d) => (d.id === id ? updated : d)));
+  }
+
   if (loading) return <div className="py-16 text-center text-sm text-gray-500">Loading statements…</div>;
   if (error) return <div className="py-16 text-center text-sm text-red-500">{error}</div>;
 
@@ -117,6 +166,7 @@ export function OwnerStatements({ propertyId, properties = [] }: Props) {
               {['Owner', 'Property', 'Period', 'Income', 'Expenses', 'NOI', 'Distribution', 'Status', ''].map((h) => (
                 <th key={h} className="px-4 py-2.5 text-left font-medium">{h}</th>
               ))}
+              <th className="px-4 py-2.5 text-left font-medium">Disbursement</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-gray-100 bg-white">
@@ -145,6 +195,16 @@ export function OwnerStatements({ propertyId, properties = [] }: Props) {
                       Mark Sent
                     </button>
                   )}
+                </td>
+                <td className="px-4 py-2.5">
+                  <ModuleGate module={MODULE_KEYS.ADVANCED_PAYMENTS_ACCOUNTING}>
+                    <button
+                      onClick={() => openDisbursements(s)}
+                      className="text-xs text-indigo-600 hover:underline"
+                    >
+                      Disburse
+                    </button>
+                  </ModuleGate>
                 </td>
               </tr>
             ))}
@@ -244,6 +304,94 @@ export function OwnerStatements({ propertyId, properties = [] }: Props) {
                 className="text-sm bg-indigo-600 text-white rounded-md px-3 py-1.5 hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 {generating ? 'Generating…' : 'Generate'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Disbursements modal (Advanced Payments & Accounting / Module 4) */}
+      {disbursementStatement && (
+        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50">
+          <div className="bg-white rounded-xl shadow-xl p-6 w-full max-w-md space-y-4">
+            <h2 className="text-lg font-semibold text-gray-900">
+              Disbursements — {disbursementStatement.owner?.name ?? 'Owner'}
+            </h2>
+            <p className="text-xs text-gray-500">
+              Gross distribution: {fmt(Number(disbursementStatement.distributionAmount))}. A
+              disbursement is a bookkeeping record only — it does not transfer funds to the
+              owner&apos;s bank account.
+            </p>
+
+            {disbursementError && <p className="text-xs text-red-500">{disbursementError}</p>}
+
+            {disbursementsLoading ? (
+              <p className="text-xs text-gray-400">Loading…</p>
+            ) : (
+              <div className="space-y-2 max-h-48 overflow-y-auto">
+                {disbursements.length === 0 && (
+                  <p className="text-xs text-gray-400">No disbursements yet.</p>
+                )}
+                {disbursements.map((d: any) => (
+                  <div key={d.id} className="border border-gray-200 rounded-md p-2 text-xs space-y-1">
+                    <div className="flex justify-between">
+                      <span>Gross</span><span>{fmt(Number(d.grossAmount))}</span>
+                    </div>
+                    <div className="flex justify-between text-gray-500">
+                      <span>Management fee ({Number(d.managementFeePct)}%)</span>
+                      <span>-{fmt(Number(d.managementFeeAmount))}</span>
+                    </div>
+                    <div className="flex justify-between font-medium">
+                      <span>Net disbursement</span><span>{fmt(Number(d.netDisbursementAmount))}</span>
+                    </div>
+                    <div className="flex justify-between items-center">
+                      <span className={`inline-block rounded-full px-2 py-0.5 text-xs font-medium capitalize ${d.status === 'completed' ? 'bg-green-100 text-green-800' : d.status === 'cancelled' ? 'bg-gray-100 text-gray-600' : 'bg-yellow-100 text-yellow-700'}`}>
+                        {d.status}
+                      </span>
+                      {d.status === 'pending' && (
+                        <button
+                          onClick={() => markDisbursementCompleted(d.id)}
+                          className="text-indigo-600 hover:underline"
+                        >
+                          Mark Completed
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            <div className="flex items-end gap-2 pt-2 border-t border-gray-100">
+              <div className="flex-1">
+                <label className="block text-xs font-medium text-gray-600 mb-1">
+                  Management fee % (blank = org default)
+                </label>
+                <input
+                  type="number"
+                  min="0"
+                  max="100"
+                  step="0.01"
+                  value={disbursementFeePct}
+                  onChange={(e) => setDisbursementFeePct(e.target.value)}
+                  className="w-full border border-gray-300 rounded-md text-sm px-3 py-1.5"
+                />
+              </div>
+              <button
+                onClick={handleCreateDisbursement}
+                disabled={disbursing}
+                className="text-sm bg-indigo-600 text-white rounded-md px-3 py-1.5 hover:bg-indigo-700 disabled:opacity-50"
+              >
+                {disbursing ? 'Creating…' : 'New Disbursement'}
+              </button>
+            </div>
+
+            <div className="flex justify-end pt-1">
+              <button
+                onClick={closeDisbursements}
+                className="text-sm border border-gray-300 rounded-md px-3 py-1.5 hover:bg-gray-50"
+              >
+                Close
               </button>
             </div>
           </div>

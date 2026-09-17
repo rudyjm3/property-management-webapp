@@ -5,6 +5,7 @@ import { useParams, useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import { api } from '@/lib/api';
 import DocumentPanel from '@/components/DocumentPanel';
+import SecurityDepositDisposition from '@/components/SecurityDepositDisposition';
 
 function localDateStr() {
   const d = new Date();
@@ -1207,6 +1208,11 @@ export default function LeaseDetailPage() {
           </div>
         </div>
       )}
+
+      <SecurityDepositDisposition
+        leaseId={leaseId}
+        canReconcile={lease.status === 'terminated' && Boolean(lease.moveOutDate)}
+      />
 
       <DocumentPanel entityType="lease" entityId={leaseId} />
     </>

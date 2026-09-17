@@ -338,10 +338,11 @@ export async function getTenantDocumentDownloadUrl(tenantId: string, documentId:
 
 // ─── Initiate Payment ─────────────────────────────────────────────────────────
 
-export async function initiateTenantPayment(
+async function initiateTenantPaymentWithMethod(
   tenantId: string,
   orgId: string,
-  paymentId: string
+  paymentId: string,
+  method: 'ach' | 'card'
 ) {
   // Sync Stripe Connect status and get fresh org
   const org = await prisma.organization.findUniqueOrThrow({ where: { id: orgId } });
@@ -389,7 +390,7 @@ export async function initiateTenantPayment(
   }
 
   if (payment.status !== 'pending') {
-    throw new AppError(400, 'PAYMENT_NOT_PENDING', 'Only pending payments can be initiated via ACH.');
+    throw new AppError(400, 'PAYMENT_NOT_PENDING', `Only pending payments can be initiated via ${method}.`);
   }
 
   const pi = await stripeService.createPaymentIntent({
@@ -400,14 +401,34 @@ export async function initiateTenantPayment(
     propertyName: payment.lease.unit.property.name,
     amount: Number(payment.amount),
     stripeAccountId: freshOrg.stripeAccountId!,
+    method,
   });
 
   await prisma.payment.update({
     where: { id: paymentId },
-    data: { stripePaymentIntentId: pi.id, method: 'ach' },
+    data: { stripePaymentIntentId: pi.id, method },
   });
 
   return { clientSecret: pi.client_secret!, paymentIntentId: pi.id, status: pi.status };
+}
+
+export async function initiateTenantPayment(
+  tenantId: string,
+  orgId: string,
+  paymentId: string
+) {
+  return initiateTenantPaymentWithMethod(tenantId, orgId, paymentId, 'ach');
+}
+
+// Advanced Payments & Accounting (Module 4) — card payments alongside ACH.
+// The route layer gates this behind requireModule(ADVANCED_PAYMENTS_ACCOUNTING);
+// this function trusts that check has already run.
+export async function initiateTenantCardPayment(
+  tenantId: string,
+  orgId: string,
+  paymentId: string
+) {
+  return initiateTenantPaymentWithMethod(tenantId, orgId, paymentId, 'card');
 }
 
 // ─── Initiate Multi-Payment (combined ACH for rent + late fees) ───────────────
