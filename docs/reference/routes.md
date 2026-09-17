@@ -32,10 +32,10 @@ file directly for per-endpoint behavior.
 | `/organizations/:orgId/ledger` | `routes/ledger.ts` | `requireAuth`, `requireOrg` |
 | `/organizations/:orgId/billing` | `routes/billing.ts` | `requireAuth`, `requireOrg` |
 | `/organizations/:orgId` (application links, review, manager lease signing) | `routes/applications.ts` | `requireAuth`, `requireOrg`, `requireRoles(['owner','manager'])` |
-| `/organizations/:orgId/owners` | `routes/owners.ts` | `requireAuth`, `requireOrg` |
-| `/organizations/:orgId/reports` | `routes/reports.ts` | `requireAuth`, `requireOrg` (financial reports, report builder, vacancy history, saved reports) |
+| `/organizations/:orgId/owners` | `routes/owners.ts` | `requireAuth`, `requireOrg`, `requireModule('owner_portal')` |
+| `/organizations/:orgId/reports` | `routes/reports.ts` | `requireAuth`, `requireOrg`, `requireModule('reporting_analytics')` (financial reports, report builder, vacancy history, saved reports) |
 | `/tenant` | `routes/tenants-portal.ts` | `requireTenantAuth` (separate identity from all routes above — see `rbac.md`) |
-| `/owner-portal` | `routes/owner-portal.ts` | `requireOwnerAuth` (separate identity from all routes above — see `rbac.md`) |
+| `/owner-portal` | `routes/owner-portal.ts` | `requireOwnerAuth`, `requireModule('owner_portal')` (separate identity from all routes above — see `rbac.md`) |
 
 ## Not mounted through `index.ts`
 

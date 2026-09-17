@@ -15,6 +15,11 @@ Tenant-root entity; everything scopes to `organizationId`.
 - Stripe billing: `stripeCustomerId?`, `stripeSubscriptionId?`
 - Stripe Connect (payouts): `stripeAccountId?`, `stripeAccountStatus: not_connected|pending|active|restricted`, `stripeAccountDetailsSubmitted`
 - Rent defaults: `lateFeeAmount`, `gracePeriodDays`, `rentDueDay`
+- Module gating: `activeModules: String[]` (default `[]`) — module keys the org
+  has active (`owner_portal`, `reporting_analytics`); see `modules.md`. No
+  Stripe Subscription Item billing wiring yet — set today via
+  `PATCH /organizations/:orgId { activeModules }` (owner/manager only) or the
+  seed script's demo org default.
 - Has many: users, properties, tenants, vendors, messages, documents, notifications, ledgerEntries, rentalApplications, owners, ownerStatements
 
 ## User

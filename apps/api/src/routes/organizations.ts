@@ -1,6 +1,7 @@
 import { Router, Request, Response, NextFunction } from 'express';
 import { prisma } from '@propflow/db';
 import { requireAuth, requireOrg, requireRoles } from '../middleware/auth';
+import { ALL_MODULE_KEYS, type ModuleKey } from '@propflow/shared';
 
 const router = Router({ mergeParams: true });
 const requireSettingsAccess = requireRoles(['owner', 'manager']);
@@ -29,6 +30,7 @@ router.patch(
         rentDueDay,
         gracePeriodDays,
         lateFeeAmount,
+        activeModules,
       } = req.body as {
         name?: string;
         phone?: string;
@@ -40,6 +42,7 @@ router.patch(
         rentDueDay?: number;
         gracePeriodDays?: number;
         lateFeeAmount?: number;
+        activeModules?: ModuleKey[];
       };
 
       if (planTier !== undefined && !PLAN_TIERS.includes(planTier)) {
@@ -50,6 +53,24 @@ router.patch(
           },
         });
         return;
+      }
+
+      // Temporary on/off mechanism ahead of Stripe Subscription Item billing:
+      // any owner/manager can toggle their org's active modules directly. Once
+      // module billing ships, this should move behind a paid-subscription check.
+      if (activeModules !== undefined) {
+        if (
+          !Array.isArray(activeModules) ||
+          activeModules.some((key) => !ALL_MODULE_KEYS.includes(key))
+        ) {
+          res.status(400).json({
+            error: {
+              code: 'INVALID_MODULE_KEY',
+              message: `activeModules must only contain: ${ALL_MODULE_KEYS.join(', ')}.`,
+            },
+          });
+          return;
+        }
       }
 
       const org = await prisma.organization.update({
@@ -65,6 +86,7 @@ router.patch(
           ...(rentDueDay !== undefined && { rentDueDay }),
           ...(gracePeriodDays !== undefined && { gracePeriodDays }),
           ...(lateFeeAmount !== undefined && { lateFeeAmount }),
+          ...(activeModules !== undefined && { activeModules: [...new Set(activeModules)] }),
         },
         select: {
           id: true,
@@ -85,6 +107,7 @@ router.patch(
           stripeSubscriptionId: true,
           stripeAccountId: true,
           stripeAccountStatus: true,
+          activeModules: true,
         },
       });
 
@@ -128,6 +151,7 @@ router.get(
           stripeSubscriptionId: true,
           stripeAccountId: true,
           stripeAccountStatus: true,
+          activeModules: true,
         },
       });
 

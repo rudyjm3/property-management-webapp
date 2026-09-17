@@ -42,6 +42,9 @@ async function main() {
       lateFeeAmount: 50,
       gracePeriodDays: 5,
       rentDueDay: 1,
+      // Module keys mirror @propflow/shared's MODULE_KEYS — kept as literals
+      // here since packages/db doesn't otherwise depend on @propflow/shared.
+      activeModules: ['owner_portal', 'reporting_analytics'],
     },
   });
 

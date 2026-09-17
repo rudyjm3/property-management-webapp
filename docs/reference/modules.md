@@ -6,20 +6,52 @@ Documentation" plus the module-flagged comments in
 the roadmap changes — treat `BUILD_OUTLINE.md` as the narrative source of
 truth and this file as the compressed cross-reference.
 
-Modules are Phase 4+. Per `BUILD_OUTLINE.md` §14, the *plan* is to
-feature-flag them via an `organization.active_modules` field at the API
-middleware layer and gate the UI via a `<ModuleGate module="...">` wrapper —
-but **none of that gating infrastructure exists in the repo yet**: there is
-no `active_modules` field on `Organization`, no module-gating middleware, and
-no `ModuleGate` component. Treat those as roadmap requirements, not
-implemented controls. This matters more than it did when this doc was first
-written: as of 2026-09-16, Modules 9 and 11 (see table below) are now fully
-built functionally but still ship without any gating in front of them, so
-they run as always-on, unbilled functionality rather than paid add-ons. What
-exists today beyond that is (a) base schema columns kept nullable so a
-module's eventual launch doesn't require a breaking migration, and (b) in a
-few cases, base-product functionality that overlaps with what a module will
-later extend.
+Modules are Phase 4+. Per `BUILD_OUTLINE.md` §14, the plan is to feature-flag
+them via an `organization.activeModules` field at the API middleware layer
+and gate the UI via a `<ModuleGate module="...">` wrapper.
+
+**As of 2026-09-17, that gating infrastructure now exists** — see "Module
+gating infrastructure" below — and is wired to the two modules that had
+shipped ahead of it, Module 9 (Owner Portal) and Module 11 (Reporting &
+Analytics). No other module has functionality built yet, so no other module
+needs gating today. Full Stripe Subscription Item billing is still not
+wired — see the "How activation works today" section for the interim
+mechanism. What exists beyond gating is (a) base schema columns kept
+nullable so a module's eventual launch doesn't require a breaking migration,
+and (b) in a few cases, base-product functionality that overlaps with what a
+module will later extend.
+
+## Module gating infrastructure
+
+- **Schema**: `Organization.activeModules` — `String[]`, default `[]`
+  (`packages/db/prisma/migrations/20260917041729_add_organization_active_modules`).
+  Holds module keys, defined in `packages/shared/src/constants/index.ts` as
+  `MODULE_KEYS` (`owner_portal`, `reporting_analytics`) / `ALL_MODULE_KEYS`.
+- **API middleware**: `requireModule(moduleKey)`
+  (`apps/api/src/middleware/module-gate.ts`) — looks up the requesting org's
+  `activeModules` fresh per request and returns `403 MODULE_NOT_ACTIVE` if
+  the key isn't present. Resolves the org from whichever auth identity is on
+  the request (`req.user`, `req.owner`, or `req.tenant`), so it chains after
+  any of the three auth middlewares. Applied in `apps/api/src/routes/index.ts`
+  to `/organizations/:orgId/owners` and `/organizations/:orgId/reports`
+  (manager-facing, on top of their existing `requireRoles(['owner',
+  'manager'])`) and to `/owner-portal` (owner-facing, on top of
+  `requireOwnerAuth`).
+- **Web UI**: `<ModuleGate module="...">` (`apps/web/components/ModuleGate.tsx`)
+  reads `activeModules` off the org in `AuthContext` (populated by
+  `GET /auth/me`) and renders `children` only if the module is active,
+  otherwise a `fallback` (defaults to nothing rendered). Wraps the `/owners`
+  and `/reports` manager pages, and the `Sidebar` nav items for both are
+  filtered out entirely when their module isn't active.
+- **How activation works today**: no Stripe Subscription Item billing yet.
+  Instead, `PATCH /organizations/:orgId` accepts an `activeModules` array
+  (validated against `ALL_MODULE_KEYS`), settable by any `owner`/`manager` —
+  exposed as checkboxes under Settings → Organization → "Add-On Modules" in
+  the web app. This is a placeholder switch to make gating testable, not a
+  billing decision; it should move behind an actual paid-subscription check
+  once module billing ships. The seed script's demo org
+  (`packages/db/prisma/seed.ts`) defaults both modules to active so local
+  dev/demo environments see the gated features without an extra step.
 
 ## Schema fields already present, dormant until their module ships
 
@@ -45,9 +77,9 @@ later extend.
 | 6 | Inspections & Compliance | $25–40/mo | Medium | `lastInspectionAt` (Unit) | Unit Mgmt, S3 |
 | 7 | Lease Renewal (full negotiation flow) | $15–25/mo | Medium | none dedicated — base one-click renewal via `Lease.renewalOfLeaseId` already ships | Lease Mgmt, Messaging |
 | 8 | Eviction Management | $30–50/mo | Medium | none dedicated — will use `Property.state` for jurisdiction lookup | Lease Mgmt, property jurisdiction data |
-| 9 | Owner Portal | $25–40/mo | Low | **Fully shipped** (2026-09-16): manager-facing `Owner`/`PropertyOwner`/`OwnerStatement` models + `routes/owners.ts` (merged 2026-05-31), plus a separate owner-facing auth path — `Owner.supabaseUserId`/`portalStatus`/`portalInvitedAt`, `requireOwnerAuth` middleware, `routes/owner-portal.ts` mounted at `/owner-portal` (see `schema.md`, `rbac.md`, `routes.md`) — and a read-only owner web portal (`apps/web/app/owner-portal/*`: login, set-password, dashboard, properties, statements, reports) mirroring the tenant-portal pattern. Not gated by module flag — see gating note above. | Payments, Properties |
+| 9 | Owner Portal | $25–40/mo | Low | **Fully shipped** (2026-09-16): manager-facing `Owner`/`PropertyOwner`/`OwnerStatement` models + `routes/owners.ts` (merged 2026-05-31), plus a separate owner-facing auth path — `Owner.supabaseUserId`/`portalStatus`/`portalInvitedAt`, `requireOwnerAuth` middleware, `routes/owner-portal.ts` mounted at `/owner-portal` (see `schema.md`, `rbac.md`, `routes.md`) — and a read-only owner web portal (`apps/web/app/owner-portal/*`: login, set-password, dashboard, properties, statements, reports) mirroring the tenant-portal pattern. **Gated as of 2026-09-17** — `requireModule('owner_portal')` on both `/owners` and `/owner-portal`, `<ModuleGate>` on the web `/owners` page and its nav item. | Payments, Properties |
 | 10 | Communications & Resident Engagement | $20–30/mo | Low | none dedicated — base one-to-one Message thread already ships | Messaging, Notifications, Twilio |
-| 11 | Reporting & Analytics | $25–40/mo | Low | **Fully shipped** (2026-09-16): `routes/reports.ts` provides fixed reports (financial summary/trend, rent roll, spend-by-location, vacancy snapshot) with CSV export (merged 2026-05-31), plus a configurable report builder (`POST /reports/builder`, column/filter selection over the same report sources, with saved configs via the `SavedReport` model and `GET/POST/DELETE /reports/saved`), vacancy-rate history with manual market-rate comparison (`VacancyHistory` model, `GET /reports/vacancy-history`, `POST /reports/vacancy-history/snapshot`), and PDF export alongside CSV (`apps/web/lib/exportPdf.ts`, via `jspdf`) on both the fixed financial-summary report and the report builder. Not gated by module flag — see gating note above. | All modules |
+| 11 | Reporting & Analytics | $25–40/mo | Low | **Fully shipped** (2026-09-16): `routes/reports.ts` provides fixed reports (financial summary/trend, rent roll, spend-by-location, vacancy snapshot) with CSV export (merged 2026-05-31), plus a configurable report builder (`POST /reports/builder`, column/filter selection over the same report sources, with saved configs via the `SavedReport` model and `GET/POST/DELETE /reports/saved`), vacancy-rate history with manual market-rate comparison (`VacancyHistory` model, `GET /reports/vacancy-history`, `POST /reports/vacancy-history/snapshot`), and PDF export alongside CSV (`apps/web/lib/exportPdf.ts`, via `jspdf`) on both the fixed financial-summary report and the report builder. **Gated as of 2026-09-17** — `requireModule('reporting_analytics')` on `/reports`, `<ModuleGate>` on the web `/reports` page and its nav item. | All modules |
 
 ## Notes on base-product overlap
 
@@ -74,10 +106,13 @@ remain the manager-facing API routes gated by `requireRoles(['owner',
 with its own read-only routes and a dedicated web UI
 (`apps/web/app/owner-portal/*`) for login, statements, properties, and
 reports. Module 11's report builder, vacancy history, and PDF export are
-likewise built — see the module table above for the specific
-routes/models. Neither is behind module *billing* gating (no
-`active_modules`/`ModuleGate` exists at all yet — see the note at the top of
-this file), so what is built runs as free, always-on functionality. Verify
-against `BUILD_OUTLINE.md` §11/§12 (Implementation Delta Appendix /
-Phase-by-Phase Status) for the latest state before assuming anything here is
-gated — this doc can drift from the build outline's own delta tracking.
+likewise built — see the module table above for the specific routes/models.
+
+**As of 2026-09-17, both are behind module gating** — see "Module gating
+infrastructure" above for the mechanism. They are not yet behind Stripe
+Subscription Item *billing*: activation is currently a manual
+`activeModules` toggle (settings UI or direct API call), not a paid
+subscription check. Verify against `BUILD_OUTLINE.md` §11/§12
+(Implementation Delta Appendix / Phase-by-Phase Status) for the latest state
+before assuming anything here is current — this doc can drift from the
+build outline's own delta tracking.

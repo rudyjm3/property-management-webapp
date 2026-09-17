@@ -19,6 +19,7 @@ interface AuthProfile {
     rentDueDay: number;
     gracePeriodDays: number;
     lateFeeAmount: string;
+    activeModules: string[];
   };
 }
 

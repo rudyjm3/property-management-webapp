@@ -10,6 +10,8 @@ import { OwnerStatements } from '@/components/reports/OwnerStatements';
 import { SpendByLocationReport } from '@/components/reports/SpendByLocationReport';
 import { ReportBuilder } from '@/components/reports/ReportBuilder';
 import { exportPdf } from '@/lib/exportPdf';
+import ModuleGate, { ModuleInactiveNotice } from '@/components/ModuleGate';
+import { MODULE_KEYS } from '@propflow/shared';
 
 interface OwnerShare {
   ownerId: string;
@@ -79,6 +81,17 @@ function currentMonthRange(): { start: string; end: string } {
 }
 
 export default function ReportsPage() {
+  return (
+    <ModuleGate
+      module={MODULE_KEYS.REPORTING_ANALYTICS}
+      fallback={<ModuleInactiveNotice module={MODULE_KEYS.REPORTING_ANALYTICS} />}
+    >
+      <ReportsPageContent />
+    </ModuleGate>
+  );
+}
+
+function ReportsPageContent() {
   const [activeTab, setActiveTab] = useState<Tab>('financial');
   const [report, setReport] = useState<FinancialReport | null>(null);
   const [properties, setProperties] = useState<PropertyOption[]>([]);
