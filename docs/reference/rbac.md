@@ -10,9 +10,10 @@ middleware or roles change.
 "owner > manager > maintenance" ranking baked into the middleware. Every
 role-gated route explicitly lists which roles it allows via `requireRoles([...])`.
 
-There is a separate, non-`UserRole` actor: the **Tenant**, authenticated
-through its own middleware and request field (see below), never through
-`UserRole`.
+There are two separate, non-`UserRole` actors, each authenticated through
+their own middleware and request field (see below), never through
+`UserRole`: the **Tenant** and the **Owner** (owner portal — distinct from
+the `owner` value in `UserRole`, which is a manager-side staff role).
 
 ## Middleware functions (`apps/api/src/middleware/auth.ts`)
 
@@ -21,10 +22,11 @@ through its own middleware and request field (see below), never through
 | `requireSupabaseAuth` | Supabase JWT only, no DB lookup | `req.user` with only `supabaseUserId` set | Pre-onboarding endpoints (e.g. `/auth/register`) where no `User` row exists yet |
 | `requireAuth` | Supabase JWT + looks up `User` by `supabaseUserId` | `req.user: AuthUser { userId, orgId, role, supabaseUserId }` | All manager-side org-scoped routes |
 | `requireTenantAuth` | Supabase JWT + looks up `Tenant` by `supabaseUserId` (also flips `portalStatus` to `active` on first hit) | `req.tenant: AuthTenant { tenantId, orgId, supabaseUserId }` | Tenant portal routes (`/tenant/*`) — completely separate auth path from `req.user` |
+| `requireOwnerAuth` | Supabase JWT + looks up `Owner` by `supabaseUserId` (also flips `portalStatus` to `active` on first hit) | `req.owner: AuthOwner { ownerId, orgId, supabaseUserId }` | Owner portal routes (`/owner-portal/*`) — separate auth path from both `req.user` and `req.tenant` |
 | `requireOrg` | `req.params.orgId` matches `req.user.orgId` | — | Org isolation; always chained after `requireAuth` on `/organizations/:orgId/*` routes |
 | `requireRoles(allowedRoles: string[])` | `req.user.role` is in `allowedRoles` | — | Role gate; flat allowlist, e.g. `requireRoles(['owner', 'manager'])` |
 
-All five return `401 UNAUTHORIZED`/`INVALID_TOKEN`/`USER_NOT_FOUND` or
+All six return `401 UNAUTHORIZED`/`INVALID_TOKEN`/`USER_NOT_FOUND` or
 `403 FORBIDDEN` in the shared `{ error: { code, message } }` shape on failure.
 
 ## Where role-gating is actually applied today
@@ -57,12 +59,20 @@ notifications; nearly everything else requires `owner` or `manager`. This
 list can drift — always check the specific route file (`routes.md` has the
 mount-point index) rather than assuming from this summary alone.
 
-## Two distinct auth identities — don't confuse them
+## Three distinct auth identities — don't confuse them
 
 - **Manager-side**: `requireAuth` → `req.user` → keyed off `User.role`
   (`UserRole`). Used for owner/manager/maintenance staff.
 - **Tenant-side**: `requireTenantAuth` → `req.tenant` → no role field at all;
   a tenant is a tenant. Used only under the `/tenant` route prefix.
+- **Owner-portal-side**: `requireOwnerAuth` → `req.owner` → no role field at
+  all; keyed off the `Owner` model, not `User`. Used only under the
+  `/owner-portal` route prefix. Every `owner-portal.service.ts` query is
+  additionally scoped by `ownerId` (via the `PropertyOwner` join and
+  `OwnerStatement.ownerId`) so an owner only ever sees their own properties
+  and statements — never another owner's, even within the same org — and
+  only statements a manager has marked `sent` (never `draft`).
 
-A handler that reads `req.user.role` on a tenant-portal route (or vice versa)
-is a bug — the two middleware chains are never combined on the same route.
+A handler that reads `req.user.role` on a tenant-portal or owner-portal
+route (or vice versa) is a bug — these three middleware chains are never
+combined on the same route.

@@ -157,4 +157,14 @@ router.delete('/:ownerId', requireManagerAccess, async (req: Request, res: Respo
   }
 });
 
+// POST /api/v1/organizations/:orgId/owners/:ownerId/invite-portal
+router.post('/:ownerId/invite-portal', requireManagerAccess, async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const result = await ownerService.inviteOwnerPortal(req.params.orgId as string, req.params.ownerId as string);
+    res.json({ data: result });
+  } catch (err) {
+    next(err);
+  }
+});
+
 export default router;

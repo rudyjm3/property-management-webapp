@@ -457,3 +457,24 @@ export async function sendStaffInviteEmail(to: string, name: string, inviteUrl: 
     html: baseLayout('Staff Invitation', body),
   });
 }
+
+// ─── Owner Portal Invite ──────────────────────────────────────────────────────
+
+export async function sendOwnerPortalInviteEmail(to: string, name: string, inviteUrl: string) {
+  const body = `
+    <h1>Your owner portal is ready</h1>
+    <p>Hi ${name},</p>
+    <p>Your property manager has set up owner portal access for you on PropFlow. Click the button below to set your password and view your properties, statements, and reports.</p>
+    <p><a href="${inviteUrl}" class="btn">Set Up Owner Portal</a></p>
+    <div class="warning-box">
+      <p>This invitation link expires in 24 hours. If you did not expect this invitation, you can safely ignore this email.</p>
+    </div>
+  `;
+
+  return resend.emails.send({
+    from: FROM,
+    to,
+    subject: 'Your PropFlow owner portal is ready',
+    html: baseLayout('Owner Portal Invitation', body),
+  });
+}

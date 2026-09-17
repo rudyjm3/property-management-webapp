@@ -611,6 +611,11 @@ export const api = {
         `/api/v1/organizations/${_orgId}/owners/properties/${propertyId}/owners/${ownerId}`,
         { method: 'DELETE' }
       ),
+    invitePortal: (id: string) =>
+      apiFetch<{ id: string; email: string; portalStatus: string; portalInvitedAt: string }>(
+        `/api/v1/organizations/${_orgId}/owners/${id}/invite-portal`,
+        { method: 'POST' }
+      ),
   },
 
   ownerStatements: {
@@ -677,6 +682,34 @@ export const api = {
       query.set('periodEnd', params.periodEnd);
       if (params.propertyId) query.set('propertyId', params.propertyId);
       return apiFetch<any>(`/api/v1/organizations/${_orgId}/reports/spend-by-location?${query.toString()}`);
+    },
+    vacancyHistory: (params?: { propertyId?: string; periodStart?: string; periodEnd?: string }) => {
+      const query = new URLSearchParams();
+      if (params?.propertyId) query.set('propertyId', params.propertyId);
+      if (params?.periodStart) query.set('periodStart', params.periodStart);
+      if (params?.periodEnd) query.set('periodEnd', params.periodEnd);
+      const qs = query.toString();
+      return apiFetch<any[]>(`/api/v1/organizations/${_orgId}/reports/vacancy-history${qs ? `?${qs}` : ''}`);
+    },
+    recordVacancySnapshot: (data?: { propertyId?: string; marketVacancyRatePct?: number }) =>
+      apiFetch<any[]>(`/api/v1/organizations/${_orgId}/reports/vacancy-history/snapshot`, {
+        method: 'POST',
+        body: JSON.stringify(data ?? {}),
+      }),
+    runBuilder: (data: { source: string; columns?: string[]; filters?: Record<string, unknown> }) =>
+      apiFetch<{ source: string; availableColumns: string[]; columns: string[]; rows: Record<string, unknown>[] }>(
+        `/api/v1/organizations/${_orgId}/reports/builder`,
+        { method: 'POST', body: JSON.stringify(data) }
+      ),
+    savedReports: {
+      list: () => apiFetch<any[]>(`/api/v1/organizations/${_orgId}/reports/saved`),
+      create: (data: { name: string; source: string; columns: string[]; filters: Record<string, unknown> }) =>
+        apiFetch<any>(`/api/v1/organizations/${_orgId}/reports/saved`, {
+          method: 'POST',
+          body: JSON.stringify(data),
+        }),
+      delete: (id: string) =>
+        apiFetch<void>(`/api/v1/organizations/${_orgId}/reports/saved/${id}`, { method: 'DELETE' }),
     },
   },
 };

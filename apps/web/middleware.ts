@@ -6,6 +6,14 @@ const PUBLIC_PATHS = ['/login', '/signup', '/forgot-password', '/reset-password'
 export async function middleware(request: NextRequest) {
   const { pathname, searchParams } = request.nextUrl;
 
+  // Owner portal has its own auth identity (Owner, not User) and does its own
+  // session check client-side in app/owner-portal/layout.tsx — this
+  // manager-auth middleware would otherwise redirect a signed-out owner to
+  // the manager /login page, or bounce a signed-in owner to /dashboard.
+  if (pathname.startsWith('/owner-portal')) {
+    return NextResponse.next();
+  }
+
   // Create a response we can modify (needed for Supabase cookie refresh)
   let response = NextResponse.next({
     request: { headers: request.headers },

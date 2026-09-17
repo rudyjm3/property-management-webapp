@@ -1,5 +1,6 @@
 import { prisma, UnitStatus } from '@propflow/db';
 import { WORK_ORDER_LOCATION_TYPES } from '@propflow/shared';
+import { AppError } from '../middleware/error-handler';
 
 function monthsBetween(start: Date, end: Date): string[] {
   const months: string[] = [];
@@ -510,4 +511,261 @@ export async function getSpendByLocation(
     locations,
     totals,
   };
+}
+
+// ─── Vacancy History (Module 11) ───────────────────────────────────────────────
+// Point-in-time vacancy snapshots, recorded on demand (or by a scheduled job
+// hitting the same endpoint), so vacancy-rate trends can be charted over time
+// and compared against a manually-entered market rate for the same period.
+
+export async function recordVacancySnapshot(
+  organizationId: string,
+  input: { propertyId?: string; marketVacancyRatePct?: number; snapshotDate?: string }
+) {
+  const snapshotDate = input.snapshotDate ? new Date(input.snapshotDate) : new Date();
+  snapshotDate.setUTCHours(0, 0, 0, 0);
+
+  const properties = await prisma.property.findMany({
+    where: {
+      organizationId,
+      ...(input.propertyId ? { id: input.propertyId } : {}),
+    },
+    select: { id: true, units: { select: { status: true } } },
+  });
+
+  const results = [];
+  let orgTotalUnits = 0;
+  let orgVacantUnits = 0;
+
+  for (const prop of properties) {
+    const totalUnits = prop.units.length;
+    const vacantUnits = prop.units.filter((u) => u.status === 'vacant').length;
+    orgTotalUnits += totalUnits;
+    orgVacantUnits += vacantUnits;
+
+    const vacancyRatePct = totalUnits > 0 ? (vacantUnits / totalUnits) * 100 : 0;
+
+    const row = await prisma.vacancyHistory.upsert({
+      where: { organizationId_propertyId_snapshotDate: { organizationId, propertyId: prop.id, snapshotDate } },
+      create: {
+        organizationId,
+        propertyId: prop.id,
+        snapshotDate,
+        totalUnits,
+        vacantUnits,
+        vacancyRatePct,
+        marketVacancyRatePct: input.marketVacancyRatePct ?? null,
+      },
+      update: {
+        totalUnits,
+        vacantUnits,
+        vacancyRatePct,
+        ...(input.marketVacancyRatePct != null ? { marketVacancyRatePct: input.marketVacancyRatePct } : {}),
+      },
+    });
+    results.push(row);
+  }
+
+  // Org-wide aggregate row (propertyId: null) — only recorded when snapshotting
+  // the whole portfolio, not a single-property snapshot.
+  if (!input.propertyId) {
+    // The compound unique index can't be targeted via upsert's `where` when
+    // propertyId is null (Prisma requires a non-null value there), so this
+    // aggregate row is looked up and created/updated manually instead.
+    const orgVacancyRatePct = orgTotalUnits > 0 ? (orgVacantUnits / orgTotalUnits) * 100 : 0;
+    const existingOrgRow = await prisma.vacancyHistory.findFirst({
+      where: { organizationId, propertyId: null, snapshotDate },
+    });
+
+    const orgRow = existingOrgRow
+      ? await prisma.vacancyHistory.update({
+          where: { id: existingOrgRow.id },
+          data: {
+            totalUnits: orgTotalUnits,
+            vacantUnits: orgVacantUnits,
+            vacancyRatePct: orgVacancyRatePct,
+            ...(input.marketVacancyRatePct != null ? { marketVacancyRatePct: input.marketVacancyRatePct } : {}),
+          },
+        })
+      : await prisma.vacancyHistory.create({
+          data: {
+            organizationId,
+            propertyId: null,
+            snapshotDate,
+            totalUnits: orgTotalUnits,
+            vacantUnits: orgVacantUnits,
+            vacancyRatePct: orgVacancyRatePct,
+            marketVacancyRatePct: input.marketVacancyRatePct ?? null,
+          },
+        });
+    results.push(orgRow);
+  }
+
+  return results;
+}
+
+export async function getVacancyHistory(
+  organizationId: string,
+  filters: { propertyId?: string; periodStart?: string; periodEnd?: string }
+) {
+  const history = await prisma.vacancyHistory.findMany({
+    where: {
+      organizationId,
+      propertyId: filters.propertyId ?? null,
+      ...(filters.periodStart || filters.periodEnd
+        ? {
+            snapshotDate: {
+              ...(filters.periodStart ? { gte: new Date(filters.periodStart) } : {}),
+              ...(filters.periodEnd ? { lte: new Date(filters.periodEnd) } : {}),
+            },
+          }
+        : {}),
+    },
+    orderBy: { snapshotDate: 'asc' },
+  });
+
+  return history.map((h) => ({
+    id: h.id,
+    propertyId: h.propertyId,
+    snapshotDate: h.snapshotDate.toISOString().slice(0, 10),
+    totalUnits: h.totalUnits,
+    vacantUnits: h.vacantUnits,
+    vacancyRatePct: Number(h.vacancyRatePct),
+    marketVacancyRatePct: h.marketVacancyRatePct != null ? Number(h.marketVacancyRatePct) : null,
+  }));
+}
+
+// ─── Report Builder (Module 11) ───────────────────────────────────────────────
+// Runs an existing report source and projects it down to the columns the user
+// picked — the "configurable report builder" over the existing report data
+// the module spec calls for, rather than a fixed set of columns per source.
+
+export const REPORT_BUILDER_SOURCES = [
+  'financial-summary',
+  'rent-roll',
+  'spend-by-location',
+  'vacancy-snapshot',
+  'vacancy-history',
+] as const;
+
+export type ReportBuilderSource = (typeof REPORT_BUILDER_SOURCES)[number];
+
+interface ReportBuilderInput {
+  source: ReportBuilderSource;
+  columns?: string[];
+  filters?: {
+    periodStart?: string;
+    periodEnd?: string;
+    propertyId?: string;
+    status?: string;
+  };
+}
+
+function projectColumns(rows: Record<string, unknown>[], columns?: string[]) {
+  if (!columns || columns.length === 0) return rows;
+  return rows.map((row) => {
+    const projected: Record<string, unknown> = {};
+    for (const col of columns) projected[col] = row[col];
+    return projected;
+  });
+}
+
+export async function runReportBuilder(organizationId: string, input: ReportBuilderInput) {
+  const filters = input.filters ?? {};
+  let rows: Record<string, unknown>[];
+  let availableColumns: string[];
+
+  switch (input.source) {
+    case 'financial-summary': {
+      const result = await getFinancialSummary(organizationId, {
+        periodStart: filters.periodStart ?? '1970-01-01',
+        periodEnd: filters.periodEnd ?? new Date().toISOString().slice(0, 10),
+        propertyId: filters.propertyId,
+      });
+      rows = result.properties.map((p) => ({
+        propertyId: p.propertyId,
+        propertyName: p.propertyName,
+        address: p.address,
+        rent: p.incomeBreakdown.rent,
+        lateFees: p.incomeBreakdown.lateFees,
+        deposits: p.incomeBreakdown.deposits,
+        otherIncome: p.incomeBreakdown.other,
+        totalIncome: p.totalIncome,
+        totalExpenses: p.totalExpenses,
+        netOperatingIncome: p.netOperatingIncome,
+      }));
+      availableColumns = ['propertyId', 'propertyName', 'address', 'rent', 'lateFees', 'deposits', 'otherIncome', 'totalIncome', 'totalExpenses', 'netOperatingIncome'];
+      break;
+    }
+    case 'rent-roll': {
+      const result = await getRentRoll(organizationId, { propertyId: filters.propertyId, status: filters.status });
+      rows = result.rows;
+      availableColumns = ['unitId', 'unitNumber', 'propertyId', 'propertyName', 'status', 'rentAmount', 'sqFt', 'leaseId', 'leaseStatus', 'leaseStart', 'leaseEnd', 'tenantName', 'tenantEmail', 'daysVacant'];
+      break;
+    }
+    case 'spend-by-location': {
+      const result = await getSpendByLocation(organizationId, {
+        periodStart: filters.periodStart ?? '1970-01-01',
+        periodEnd: filters.periodEnd ?? new Date().toISOString().slice(0, 10),
+        propertyId: filters.propertyId,
+      });
+      rows = result.locations as unknown as Record<string, unknown>[];
+      availableColumns = ['locationType', 'workOrderCount', 'laborCost', 'partsCost', 'capitalSpend', 'routineSpend', 'totalSpend'];
+      break;
+    }
+    case 'vacancy-snapshot': {
+      const result = await getVacancySnapshot(organizationId, { propertyId: filters.propertyId });
+      rows = result.properties;
+      availableColumns = ['propertyId', 'propertyName', 'totalUnits', 'occupiedUnits', 'vacantUnits', 'noticeUnits', 'occupancyRate', 'avgDaysVacant'];
+      break;
+    }
+    case 'vacancy-history': {
+      rows = await getVacancyHistory(organizationId, {
+        propertyId: filters.propertyId,
+        periodStart: filters.periodStart,
+        periodEnd: filters.periodEnd,
+      });
+      availableColumns = ['id', 'propertyId', 'snapshotDate', 'totalUnits', 'vacantUnits', 'vacancyRatePct', 'marketVacancyRatePct'];
+      break;
+    }
+  }
+
+  return {
+    source: input.source,
+    availableColumns,
+    columns: input.columns && input.columns.length > 0 ? input.columns : availableColumns,
+    rows: projectColumns(rows, input.columns),
+  };
+}
+
+// ─── Saved Report Configs ──────────────────────────────────────────────────────
+
+export async function listSavedReports(organizationId: string) {
+  return prisma.savedReport.findMany({
+    where: { organizationId },
+    orderBy: { updatedAt: 'desc' },
+  });
+}
+
+export async function createSavedReport(
+  organizationId: string,
+  userId: string,
+  data: { name: string; source: ReportBuilderSource; columns: string[]; filters: Record<string, unknown> }
+) {
+  return prisma.savedReport.create({
+    data: {
+      organizationId,
+      createdByUserId: userId,
+      name: data.name,
+      source: data.source,
+      columns: data.columns,
+      filters: data.filters as object,
+    },
+  });
+}
+
+export async function deleteSavedReport(organizationId: string, savedReportId: string) {
+  const existing = await prisma.savedReport.findFirst({ where: { id: savedReportId, organizationId } });
+  if (!existing) throw new AppError(404, 'SAVED_REPORT_NOT_FOUND', 'Saved report not found.');
+  await prisma.savedReport.delete({ where: { id: savedReportId } });
 }

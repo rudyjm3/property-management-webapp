@@ -8,6 +8,8 @@ import { RentRollTable } from '@/components/reports/RentRollTable';
 import { VacancyReport } from '@/components/reports/VacancyReport';
 import { OwnerStatements } from '@/components/reports/OwnerStatements';
 import { SpendByLocationReport } from '@/components/reports/SpendByLocationReport';
+import { ReportBuilder } from '@/components/reports/ReportBuilder';
+import { exportPdf } from '@/lib/exportPdf';
 
 interface OwnerShare {
   ownerId: string;
@@ -50,7 +52,7 @@ interface PropertyOption {
   name: string;
 }
 
-type Tab = 'financial' | 'trend' | 'spend' | 'rentroll' | 'vacancy' | 'statements';
+type Tab = 'financial' | 'trend' | 'spend' | 'rentroll' | 'vacancy' | 'statements' | 'builder';
 
 const TABS: { id: Tab; label: string }[] = [
   { id: 'financial', label: 'Financial Summary' },
@@ -59,6 +61,7 @@ const TABS: { id: Tab; label: string }[] = [
   { id: 'rentroll', label: 'Rent Roll' },
   { id: 'vacancy', label: 'Vacancy' },
   { id: 'statements', label: 'Owner Statements' },
+  { id: 'builder', label: 'Report Builder' },
 ];
 
 function fmt(n: number): string {
@@ -129,11 +132,27 @@ export default function ReportsPage() {
     exportCsv(`financial-summary-${report.periodStart}-to-${report.periodEnd}.csv`, headers, rows);
   }
 
+  function handleExportFinancialPdf() {
+    if (!report) return;
+    const headers = ['Property', 'Address', 'Rent', 'Late Fees', 'Deposits', 'Other Income', 'Total Income', 'Expenses', 'NOI'];
+    const rows = report.properties.map((p) => [
+      p.propertyName, p.address,
+      fmt(p.incomeBreakdown.rent), fmt(p.incomeBreakdown.lateFees), fmt(p.incomeBreakdown.deposits), fmt(p.incomeBreakdown.other),
+      fmt(p.totalIncome), fmt(p.totalExpenses), fmt(p.netOperatingIncome),
+    ]);
+    exportPdf(
+      `financial-summary-${report.periodStart}-to-${report.periodEnd}.pdf`,
+      `Financial Summary — ${report.periodStart} to ${report.periodEnd}`,
+      headers,
+      rows
+    );
+  }
+
   const noiColor = (noi: number) =>
     noi >= 0 ? 'var(--color-success, #16a34a)' : 'var(--color-danger, #dc2626)';
 
   // Tabs that use the date-range filter vs those that are always fresh
-  const showDateFilter = activeTab === 'financial' || activeTab === 'trend' || activeTab === 'spend';
+  const showDateFilter = activeTab === 'financial' || activeTab === 'trend' || activeTab === 'spend' || activeTab === 'builder';
 
   return (
     <div className="page-container">
@@ -316,9 +335,14 @@ export default function ReportsPage() {
                 <h2 style={{ fontSize: '1rem', fontWeight: 600, margin: 0 }}>
                   By Property ({report.properties.length})
                 </h2>
-                <button className="btn btn-sm btn-secondary" onClick={handleExportFinancial}>
-                  Export CSV
-                </button>
+                <div style={{ display: 'flex', gap: '0.5rem' }}>
+                  <button className="btn btn-sm btn-secondary" onClick={handleExportFinancial}>
+                    Export CSV
+                  </button>
+                  <button className="btn btn-sm btn-secondary" onClick={handleExportFinancialPdf}>
+                    Export PDF
+                  </button>
+                </div>
               </div>
 
               {report.properties.length === 0 ? (
@@ -505,6 +529,15 @@ export default function ReportsPage() {
         {/* ─── Owner Statements ──────────────────────────────────── */}
         {activeTab === 'statements' && (
           <OwnerStatements propertyId={selectedPropertyId || undefined} properties={properties} />
+        )}
+
+        {/* ─── Report Builder ─────────────────────────────────────── */}
+        {activeTab === 'builder' && (
+          <ReportBuilder
+            propertyId={selectedPropertyId || undefined}
+            periodStart={periodStart}
+            periodEnd={periodEnd}
+          />
         )}
       </div>
     </div>

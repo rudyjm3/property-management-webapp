@@ -1,5 +1,7 @@
 import { prisma } from '@propflow/db';
 import { AppError } from '../middleware/error-handler';
+import { supabaseAdmin } from '../lib/supabase';
+import { sendOwnerPortalInviteEmail } from './email.service';
 
 // ─── Owner CRUD ───────────────────────────────────────────────────────────────
 
@@ -88,6 +90,131 @@ export async function updateOwner(
 export async function deleteOwner(organizationId: string, ownerId: string) {
   await getOwner(organizationId, ownerId);
   await prisma.owner.delete({ where: { id: ownerId } });
+}
+
+// ─── Owner Portal Invite ───────────────────────────────────────────────────────
+
+function isAlreadyRegisteredError(message: string): boolean {
+  const lower = message.toLowerCase();
+  return (
+    lower.includes('already been registered') ||
+    lower.includes('already registered') ||
+    lower.includes('already exists')
+  );
+}
+
+async function findSupabaseUserIdByEmail(email: string): Promise<string | null> {
+  const normalizedEmail = email.trim().toLowerCase();
+  let page = 1;
+  const perPage = 200;
+
+  while (page <= 20) {
+    const { data, error } = await supabaseAdmin.auth.admin.listUsers({ page, perPage });
+    if (error) throw error;
+
+    const users = data?.users ?? [];
+    const match = users.find((u) => (u.email ?? '').trim().toLowerCase() === normalizedEmail);
+    if (match) return match.id;
+
+    if (users.length < perPage) break;
+    page += 1;
+  }
+
+  return null;
+}
+
+/**
+ * Invites an owner to the read-only owner portal — generates a Supabase auth
+ * user (if one doesn't already exist for this email) and emails a set-password
+ * link. Mirrors the tenant invite-portal / staff invite flows.
+ */
+export async function inviteOwnerPortal(organizationId: string, ownerId: string) {
+  const owner = await getOwner(organizationId, ownerId);
+
+  if (owner.portalStatus === 'active') {
+    throw new AppError(409, 'ALREADY_ACTIVE', 'This owner has already activated their portal account.');
+  }
+
+  const onboardingNext = encodeURIComponent('/owner-portal/set-password?invited=true');
+  const redirectTo = `${process.env.APP_URL}/auth/callback?next=${onboardingNext}`;
+
+  // Resend for an owner who already has a linked Supabase user uses a recovery
+  // link instead of a fresh invite — Supabase rejects a second 'invite'
+  // generateLink for an already-registered email.
+  let supabaseUserId: string | null = owner.supabaseUserId;
+  let actionLink: string | undefined;
+  let createdNewSupabaseUser = false;
+
+  if (owner.supabaseUserId) {
+    const recovery = await supabaseAdmin.auth.admin.generateLink({
+      type: 'recovery',
+      email: owner.email,
+      options: { redirectTo },
+    });
+    if (recovery.error || !recovery.data.properties?.action_link) {
+      throw new AppError(400, 'INVITE_FAILED', recovery.error?.message || 'Failed to generate owner portal invite link.');
+    }
+    actionLink = recovery.data.properties.action_link;
+  } else {
+    const invite = await supabaseAdmin.auth.admin.generateLink({
+      type: 'invite',
+      email: owner.email,
+      options: {
+        redirectTo,
+        data: { ownerId: owner.id, organizationId },
+      },
+    });
+
+    if (invite.error) {
+      // The owner's email may already have a Supabase account under a different
+      // record (e.g. the same person is also a tenant or staff user) — fall back
+      // to a recovery link against that existing account instead of failing.
+      if (!isAlreadyRegisteredError(invite.error.message)) {
+        throw new AppError(400, 'INVITE_FAILED', invite.error.message);
+      }
+
+      const existingUserId = await findSupabaseUserIdByEmail(owner.email);
+      const recovery = await supabaseAdmin.auth.admin.generateLink({
+        type: 'recovery',
+        email: owner.email,
+        options: { redirectTo },
+      });
+      if (recovery.error || !recovery.data.properties?.action_link) {
+        throw new AppError(400, 'INVITE_FAILED', recovery.error?.message || 'Failed to generate owner portal invite link.');
+      }
+      actionLink = recovery.data.properties.action_link;
+      supabaseUserId = existingUserId;
+    } else {
+      if (!invite.data.properties?.action_link) {
+        throw new AppError(400, 'INVITE_FAILED', 'Failed to generate owner portal invite link.');
+      }
+      actionLink = invite.data.properties.action_link;
+      supabaseUserId = invite.data.user?.id ?? null;
+      createdNewSupabaseUser = true;
+    }
+  }
+
+  try {
+    await sendOwnerPortalInviteEmail(owner.email, owner.name, actionLink!);
+  } catch (_emailErr) {
+    // Only clean up a Supabase user this call created — never delete an
+    // already-existing account (the owner's own, or one shared with a tenant/
+    // staff record), which would strand that account on retry.
+    if (createdNewSupabaseUser && supabaseUserId) {
+      await supabaseAdmin.auth.admin.deleteUser(supabaseUserId).catch(() => {});
+    }
+    throw new AppError(500, 'INVITE_EMAIL_FAILED', 'Failed to send owner portal invite email. Please try again.');
+  }
+
+  return prisma.owner.update({
+    where: { id: ownerId },
+    data: {
+      supabaseUserId: supabaseUserId ?? owner.supabaseUserId ?? null,
+      portalStatus: 'invited',
+      portalInvitedAt: new Date(),
+    },
+    select: { id: true, email: true, portalStatus: true, portalInvitedAt: true },
+  });
 }
 
 // ─── Property Ownership ───────────────────────────────────────────────────────

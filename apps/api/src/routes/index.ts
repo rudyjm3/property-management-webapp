@@ -1,5 +1,5 @@
 import { Router } from 'express';
-import { requireAuth, requireOrg, requireRoles, requireTenantAuth } from '../middleware/auth';
+import { requireAuth, requireOrg, requireRoles, requireTenantAuth, requireOwnerAuth } from '../middleware/auth';
 import authRoutes from './auth';
 import inviteRoutes from './invite';
 import organizationRoutes from './organizations';
@@ -23,6 +23,7 @@ import applyRoutes from './apply';
 import signRoutes from './sign';
 import ownerRoutes from './owners';
 import reportRoutes from './reports';
+import ownerPortalRoutes from './owner-portal';
 
 const router = Router();
 
@@ -69,5 +70,8 @@ router.use('/organizations/:orgId/reports', requireAuth, requireOrg, reportRoute
 
 // Tenant portal routes — protected by tenant auth (separate from manager auth)
 router.use('/tenant', requireTenantAuth, tenantPortalRoutes);
+
+// Owner portal routes — protected by owner auth (separate from manager and tenant auth)
+router.use('/owner-portal', requireOwnerAuth, ownerPortalRoutes);
 
 export default router;

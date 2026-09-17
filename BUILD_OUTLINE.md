@@ -939,10 +939,10 @@ This appendix captures what is currently implemented in the repo beyond or diffe
 - Sentry error monitoring wired into web, API, and mobile (was console.error-only). (update 05-31-2026)
 - Rate limiting middleware added and applied to invite/apply/e-sign public routes (`apps/api/src/middleware/rate-limit.ts`). (update 05-31-2026)
 - SMS notifications via Twilio shipped, with automatic fallback to email when SMS is unconfigured; message file/photo attachments shipped on both web and mobile. (update 05-29-2026 / 05-30-2026)
-- Payment void status tracking added (`voidPayment()`, `voidedAt`/`voidReason` on Payment) — marks a completed/waived payment as voided with a reason, but does **not** create a counterpart ledger entry or restore the ledger balance; it's audit metadata, not an accounting reversal. First piece of the financial audit trail, not the full fix. (see `payment.service.ts`)
+- Payment void now posts a real ledger reversal (update 09-16-2026): `voidPayment()` still sets `voidedAt`/`voidReason`/`status: 'voided'`, but now also nets whatever the payment already posted to the ledger (e.g. an ACH credit from the Stripe webhook) and creates a counterpart reversing entry in the same transaction, so the ledger balance is restored to what it would be had the payment never completed. No-ops for payments that never posted a ledger entry (cash/check/waived). Covered by `payment.service.test.ts` (ledger balance before/after). (see `payment.service.ts`, `ledger.service.ts`)
 - Mobile invite-code activation screen shipped (`apps/mobile/app/(auth)/activate.tsx`) and autopay toggle shipped in the mobile Payments tab (`AutopaySetupSheet.tsx`).
 - Online rental application form + e-signature flow shipped (`routes/apply.ts`, `routes/sign.ts`, `rental-application.service.ts`) — core of Module 1's leasing funnel. Background/credit check integration (TransUnion or similar) is not yet built; `screeningConsentAt`/`ssnFullEncrypted`/`govtIdNumber` remain dormant schema hooks.
-- Module 9 (Owner Portal / Financial Reporting & Owner Statements) and Module 11 (Reporting & Analytics) both landed a meaningful subset of functionality, well ahead of their "Low priority" roadmap position, but neither is fully built — see §7 note and `docs/reference/modules.md`. Module 9 ships `Owner`/`PropertyOwner`/`OwnerStatement` data and manager-facing routes, but no owner login or owner-facing portal UI. Module 11 ships a fixed set of report endpoints with CSV export, not the custom report builder or PDF export the module spec calls for. Neither is currently feature-flagged either: there is still no `active_modules` field on `Organization` and no `ModuleGate` component, so what is built ships as always-on rather than paid/gated.
+- Module 9 (Owner Portal / Financial Reporting & Owner Statements) and Module 11 (Reporting & Analytics) are now both fully built functionally (update 09-16-2026), well ahead of their "Low priority" roadmap position — see §7 note and `docs/reference/modules.md`. Module 9 ships `Owner`/`PropertyOwner`/`OwnerStatement` data and manager-facing routes (`routes/owners.ts`), plus a separate owner-facing auth path (`Owner.supabaseUserId`/`portalStatus`, `requireOwnerAuth` middleware) and a read-only owner portal web UI (`apps/web/app/owner-portal/*` — login, set-password, dashboard, properties, statements, reports) backed by `routes/owner-portal.ts`. Module 11 adds a configurable report builder (`POST /reports/builder`, column/filter selection over the existing report sources, with saved configs via `SavedReport`), vacancy-rate history with manual market-rate comparison (`VacancyHistory` model, `/reports/vacancy-history*`), and PDF export alongside the existing CSV export (`apps/web/lib/exportPdf.ts` via `jspdf`), on top of the fixed report endpoints. Neither is currently feature-flagged: there is still no `active_modules` field on `Organization` and no `ModuleGate` component, so what is built ships as always-on rather than paid/gated — that gating work remains open (see item 16 below).
 
 ---
 
@@ -975,7 +975,7 @@ _Last updated: 2026-09-16. Status reflects the `main` branch._
 | API TypeScript build passing                                        | ✅     | Fixed 2026-04-09                                                                                                        |
 
 **Pilot blockers:** Onboarding must complete without manual DB intervention. Build must be green.
-**Production gaps:** Auth + CRUD integration tests needed. Payment void status-tracking now exists (`voidPayment()`), but it does not post a ledger reversal; true financial reversal plus an audit trail for lease changes are still needed.
+**Production gaps:** Auth + CRUD integration tests needed. Payment void now posts a real ledger reversal (see above); an audit trail for lease changes is still needed.
 
 ---
 
@@ -1074,7 +1074,7 @@ _Sourced from MVP review, 2026-05-26. Re-verified against code 2026-09-16 — it
 
 ### New since last pass (found in this review)
 
-16. **Module gating infrastructure** — Modules 9 (Owner Portal) and 11 (Reporting & Analytics) have partially shipped (see #12 and `docs/reference/modules.md`), but there is still no `active_modules` field on `Organization` and no `ModuleGate` component. What's built currently ships always-on rather than as paid/flagged add-ons — needed before selling modules as billed upsells.
+16. **Module gating infrastructure** — Modules 9 (Owner Portal) and 11 (Reporting & Analytics) are now fully built functionally (see #12 and `docs/reference/modules.md`), but there is still no `active_modules` field on `Organization` and no `ModuleGate` component. What's built currently ships always-on rather than as paid/flagged add-ons — needed before selling modules as billed upsells.
 17. **Background/credit check integration for Module 1** — the application + e-signature flow is built; the screening/credit-check step (TransUnion SmartMove or equivalent) against the existing `screeningConsentAt`/`ssnFullEncrypted`/`govtIdNumber` fields is not.
 18. **Formal security review** — a cross-org work-order scoping leak was found and fixed reactively (07-19-2026); no audit pass has been done to look for others across auth, file access, org isolation, and webhook HMAC verification.
 19. **Notification preferences + contact-manager shortcut (mobile Account tab)** — spec'd in §8 but not implemented.
@@ -1082,12 +1082,12 @@ _Sourced from MVP review, 2026-05-26. Re-verified against code 2026-09-16 — it
 ### Months 3–6 (growth phase)
 
 11. **Full accounting module (P&L, bank reconciliation, Schedule E)** — Module 4 in the roadmap (renumbered from the module table in §7). Required to compete with DoorLoop and Buildium at scale.
-12. ~~Owner portal~~ — **Partially done** (Module 9), ahead of schedule: `Owner`/`PropertyOwner`/`OwnerStatement` data model and manager-facing routes exist, but there is no owner login or owner-facing portal UI, and it still needs module-gating (see #16).
+12. ~~Owner portal~~ — **Done** (Module 9), ahead of schedule: `Owner`/`PropertyOwner`/`OwnerStatement` data model, manager-facing routes, owner-facing auth (`requireOwnerAuth`), and the owner portal web UI all exist; it still needs module-gating (see #16).
 13. **Tenant credit reporting** — free differentiator that drives mobile adoption; tenants who report rent to credit bureaus are stickier.
 14. **Vacancy listing syndication** — Module 8. Top-of-funnel capture from Zillow/Apartments.com.
 15. **AI maintenance triage** — differentiator; auto-categorizes and prioritizes work orders on submission.
 
-> **Bottom line (updated 2026-09-16):** The product has moved past most of its original MVP gap list — activation flow, autopay, Sentry, rate limiting, SMS, and attachments are all fully shipped, and two "Low priority" modules (Owner Portal, Reporting & Analytics) have landed meaningful partial implementations ahead of schedule. What's left before a confident launch is narrower and more operational: the ACH smoke test, a real security review, module billing/gating, finishing Module 1's screening step, an actual ledger-reversal on payment void (today's void is status-only), and completing Module 9's owner-facing portal and Module 11's report builder/export. The data model was already designed for all of this — execution continues to be the remaining work, not redesign.
+> **Bottom line (updated 2026-09-16):** The product has moved past most of its original MVP gap list — activation flow, autopay, Sentry, rate limiting, SMS, and attachments are all fully shipped, and two "Low priority" modules (Owner Portal, Reporting & Analytics) are now fully built functionally, ahead of schedule, including payment void's ledger reversal. What's left before a confident launch is narrower and more operational: the ACH smoke test, a real security review, module billing/gating (now the main gap for Modules 9 and 11, which ship unbilled), and finishing Module 1's screening step. The data model was already designed for all of this — execution continues to be the remaining work, not redesign.
 
 ---
 

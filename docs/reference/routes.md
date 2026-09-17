@@ -33,8 +33,9 @@ file directly for per-endpoint behavior.
 | `/organizations/:orgId/billing` | `routes/billing.ts` | `requireAuth`, `requireOrg` |
 | `/organizations/:orgId` (application links, review, manager lease signing) | `routes/applications.ts` | `requireAuth`, `requireOrg`, `requireRoles(['owner','manager'])` |
 | `/organizations/:orgId/owners` | `routes/owners.ts` | `requireAuth`, `requireOrg` |
-| `/organizations/:orgId/reports` | `routes/reports.ts` | `requireAuth`, `requireOrg` (financial reports) |
+| `/organizations/:orgId/reports` | `routes/reports.ts` | `requireAuth`, `requireOrg` (financial reports, report builder, vacancy history, saved reports) |
 | `/tenant` | `routes/tenants-portal.ts` | `requireTenantAuth` (separate identity from all routes above — see `rbac.md`) |
+| `/owner-portal` | `routes/owner-portal.ts` | `requireOwnerAuth` (separate identity from all routes above — see `rbac.md`) |
 
 ## Not mounted through `index.ts`
 
@@ -47,7 +48,10 @@ file directly for per-endpoint behavior.
 ## Web app (Next.js, `apps/web/app/`)
 
 Route-group segments: `(auth)`, `(dashboard)`, `auth`, `apply`, `sign`,
-`onboarding`. ~36 `page.tsx` files plus 1 `route.ts` API handler as of this
-writing — mirrors the manager screen list in `BUILD_OUTLINE.md` §8
-("Manager Web App"). Consult that section for the full screen-by-screen
-breakdown; this doc only tracks the API layer.
+`onboarding`, plus a top-level `owner-portal` folder (own layout, not part
+of the `(dashboard)` group — login/set-password are public within it, the
+rest require an active Supabase session checked client-side against
+`/api/v1/owner-portal/me`). ~42 `page.tsx` files plus 1 `route.ts` API
+handler as of this writing — mirrors the manager screen list in
+`BUILD_OUTLINE.md` §8 ("Manager Web App"). Consult that section for the
+full screen-by-screen breakdown; this doc only tracks the API layer.

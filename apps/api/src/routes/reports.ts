@@ -66,4 +66,90 @@ router.get('/vacancy-snapshot', requireManagerAccess, async (req: Request, res: 
   }
 });
 
+// GET /api/v1/organizations/:orgId/reports/vacancy-history
+router.get('/vacancy-history', requireManagerAccess, async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const { propertyId, periodStart, periodEnd } = req.query as Record<string, string | undefined>;
+    const data = await reportService.getVacancyHistory(req.params.orgId as string, { propertyId, periodStart, periodEnd });
+    res.json({ data });
+  } catch (err) {
+    next(err);
+  }
+});
+
+// POST /api/v1/organizations/:orgId/reports/vacancy-history/snapshot
+router.post('/vacancy-history/snapshot', requireManagerAccess, async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const { propertyId, marketVacancyRatePct } = req.body as { propertyId?: string; marketVacancyRatePct?: number };
+    const data = await reportService.recordVacancySnapshot(req.params.orgId as string, { propertyId, marketVacancyRatePct });
+    res.status(201).json({ data });
+  } catch (err) {
+    next(err);
+  }
+});
+
+// POST /api/v1/organizations/:orgId/reports/builder
+router.post('/builder', requireManagerAccess, async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const { source, columns, filters } = req.body as {
+      source: reportService.ReportBuilderSource;
+      columns?: string[];
+      filters?: Record<string, unknown>;
+    };
+    if (!reportService.REPORT_BUILDER_SOURCES.includes(source)) {
+      res.status(400).json({ error: { code: 'INVALID_SOURCE', message: `source must be one of: ${reportService.REPORT_BUILDER_SOURCES.join(', ')}` } });
+      return;
+    }
+    const data = await reportService.runReportBuilder(req.params.orgId as string, { source, columns, filters });
+    res.json({ data });
+  } catch (err) {
+    next(err);
+  }
+});
+
+// GET /api/v1/organizations/:orgId/reports/saved
+router.get('/saved', requireManagerAccess, async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const data = await reportService.listSavedReports(req.params.orgId as string);
+    res.json({ data });
+  } catch (err) {
+    next(err);
+  }
+});
+
+// POST /api/v1/organizations/:orgId/reports/saved
+router.post('/saved', requireManagerAccess, async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const { name, source, columns, filters } = req.body as {
+      name: string;
+      source: reportService.ReportBuilderSource;
+      columns: string[];
+      filters: Record<string, unknown>;
+    };
+    if (!name || !source) {
+      res.status(400).json({ error: { code: 'MISSING_FIELDS', message: 'name and source are required.' } });
+      return;
+    }
+    const data = await reportService.createSavedReport(req.params.orgId as string, req.user!.userId, {
+      name,
+      source,
+      columns: columns ?? [],
+      filters: filters ?? {},
+    });
+    res.status(201).json({ data });
+  } catch (err) {
+    next(err);
+  }
+});
+
+// DELETE /api/v1/organizations/:orgId/reports/saved/:savedReportId
+router.delete('/saved/:savedReportId', requireManagerAccess, async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    await reportService.deleteSavedReport(req.params.orgId as string, req.params.savedReportId as string);
+    res.status(204).send();
+  } catch (err) {
+    next(err);
+  }
+});
+
 export default router;
