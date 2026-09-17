@@ -37,24 +37,40 @@ import {
 } from '../src/services/screening.service';
 
 describe('buildScreeningConsentUpdate', () => {
-  it('returns an empty object when no screening input is given', () => {
-    expect(buildScreeningConsentUpdate(['advanced_tenant_onboarding'], undefined, '127.0.0.1')).toEqual({});
+  it('returns an empty object when no screening input is given and the module is inactive', () => {
+    expect(buildScreeningConsentUpdate([], undefined, '127.0.0.1')).toEqual({});
+  });
+
+  it('throws SCREENING_CONSENT_REQUIRED when screening input is omitted but the module is active', () => {
+    expect(() =>
+      buildScreeningConsentUpdate(['advanced_tenant_onboarding'], undefined, '127.0.0.1')
+    ).toThrow(expect.objectContaining({ code: 'SCREENING_CONSENT_REQUIRED' }));
   });
 
   it('throws MODULE_NOT_ACTIVE when consent is given but the module is not active', () => {
     expect(() =>
       buildScreeningConsentUpdate(
         [],
-        { ssnFull: '123-45-6789', govtIdType: 'drivers_license', govtIdNumber: 'D1234567' },
+        { consentGiven: true, ssnFull: '123-45-6789', govtIdType: 'drivers_license', govtIdNumber: 'D1234567' },
         '127.0.0.1'
       )
     ).toThrow(expect.objectContaining({ code: 'MODULE_NOT_ACTIVE' }));
   });
 
+  it('throws SCREENING_CONSENT_REQUIRED when consentGiven is not true', () => {
+    expect(() =>
+      buildScreeningConsentUpdate(
+        ['advanced_tenant_onboarding'],
+        { consentGiven: false as unknown as true, ssnFull: '123-45-6789', govtIdType: 'drivers_license', govtIdNumber: 'D1234567' },
+        '127.0.0.1'
+      )
+    ).toThrow(expect.objectContaining({ code: 'SCREENING_CONSENT_REQUIRED' }));
+  });
+
   it('encrypts SSN and govt ID and stamps consent when the module is active', () => {
     const result = buildScreeningConsentUpdate(
       ['advanced_tenant_onboarding'],
-      { ssnFull: '123-45-6789', govtIdType: 'drivers_license', govtIdNumber: 'D1234567' },
+      { consentGiven: true, ssnFull: '123-45-6789', govtIdType: 'drivers_license', govtIdNumber: 'D1234567' },
       '127.0.0.1'
     );
 

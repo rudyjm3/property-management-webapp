@@ -258,6 +258,9 @@ export async function getApplication(orgId: string, id: string) {
         },
       },
     },
+    // Ciphertext has no business leaving the server — the review UI only
+    // ever needs screeningConsentAt/govtIdType, never the encrypted values.
+    omit: { ssnFullEncrypted: true, govtIdNumber: true },
   });
   if (!app) throw new AppError(404, 'APPLICATION_NOT_FOUND', 'Application not found.');
   return app;

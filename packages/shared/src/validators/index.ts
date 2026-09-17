@@ -403,6 +403,7 @@ export const submitApplicationSchema = z.object({
   consentGiven: z.literal(true, { errorMap: () => ({ message: 'You must agree to the authorization statement.' }) }),
   screening: z
     .object({
+      consentGiven: z.literal(true, { errorMap: () => ({ message: 'You must agree to the screening consent statement.' }) }),
       ssnFull: z.string().regex(/^\d{3}-?\d{2}-?\d{4}$/, 'Enter a valid 9-digit SSN.'),
       govtIdType: z.enum(GOVERNMENT_ID_TYPES),
       govtIdNumber: z.string().min(1).max(50),

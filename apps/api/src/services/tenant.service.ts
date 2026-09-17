@@ -28,6 +28,9 @@ export async function listTenants(organizationId: string) {
         take: 1,
       },
     },
+    // Ciphertext has no business leaving the server, and this list is
+    // visible to every authenticated org role, including maintenance.
+    omit: { ssnFullEncrypted: true, govtIdNumber: true },
     orderBy: { name: 'asc' },
   });
 }
@@ -62,6 +65,9 @@ export async function getTenant(organizationId: string, tenantId: string) {
         take: 10,
       },
     },
+    // Ciphertext has no business leaving the server, and this is visible
+    // to every authenticated org role, including maintenance.
+    omit: { ssnFullEncrypted: true, govtIdNumber: true },
   });
 
   if (!tenant) {

@@ -13,6 +13,7 @@ import { getScreeningProviderClient } from './screening-provider.client';
  */
 
 export interface ScreeningConsentInput {
+  consentGiven: true;
   ssnFull: string;
   govtIdType: string;
   govtIdNumber: string;
@@ -22,22 +23,45 @@ export interface ScreeningConsentInput {
  * Builds the RentalApplication update fields for a screening-consent
  * submission. Called from rental-application.service.submitApplication so
  * consent + SSN/govt ID land in the same write as the rest of the
- * application. Returns `{}` (no-op) when the applicant didn't go through
- * the screening step. Throws if consent was given but the org doesn't have
- * Module 1 active — defense in depth behind the frontend's own gate.
+ * application. When the org has Module 1 active, screening data is
+ * mandatory (matches the frontend's own required step) — a caller can't
+ * silently skip it by omitting `screening` from the request body. Throws
+ * if consent was given but the org doesn't have Module 1 active — defense
+ * in depth behind the frontend's own gate. `consentGiven` must be the
+ * literal `true` the applicant actually checked; a request that includes
+ * SSN/govt ID without it does not get treated as consent.
  */
 export function buildScreeningConsentUpdate(
   activeModules: string[],
   input: ScreeningConsentInput | undefined,
   ip: string
 ): Prisma.RentalApplicationUpdateInput {
-  if (!input) return {};
+  const moduleActive = activeModules.includes(MODULE_KEYS.ADVANCED_TENANT_ONBOARDING);
 
-  if (!activeModules.includes(MODULE_KEYS.ADVANCED_TENANT_ONBOARDING)) {
+  if (!input) {
+    if (moduleActive) {
+      throw new AppError(
+        400,
+        'SCREENING_CONSENT_REQUIRED',
+        'Background/credit screening consent, SSN, and government ID are required for this organization.'
+      );
+    }
+    return {};
+  }
+
+  if (!moduleActive) {
     throw new AppError(
       403,
       'MODULE_NOT_ACTIVE',
       'Background/credit screening is not enabled for this organization.'
+    );
+  }
+
+  if (input.consentGiven !== true) {
+    throw new AppError(
+      400,
+      'SCREENING_CONSENT_REQUIRED',
+      'Explicit consent is required before capturing SSN/government ID.'
     );
   }
 

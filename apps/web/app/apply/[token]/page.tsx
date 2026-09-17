@@ -156,7 +156,12 @@ export default function ApplyPage() {
       };
 
       if (context?.screeningModuleActive) {
-        payload.screening = { ssnFull: ssnFull.trim(), govtIdType, govtIdNumber: govtIdNumber.trim() };
+        payload.screening = {
+          consentGiven: true,
+          ssnFull: ssnFull.trim(),
+          govtIdType,
+          govtIdNumber: govtIdNumber.trim(),
+        };
       }
 
       const res = await fetch(`${API_URL}/api/v1/apply/${token}`, {
