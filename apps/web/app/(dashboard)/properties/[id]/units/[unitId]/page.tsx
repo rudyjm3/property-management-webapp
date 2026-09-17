@@ -59,6 +59,17 @@ interface Appliance {
   workOrderCount: number;
 }
 
+// Prisma serializes @db.Date columns (purchaseDate/installDate/warrantyExpiresAt)
+// as UTC-midnight ISO strings (e.g. "2026-09-17T00:00:00.000Z"). Parsing that
+// with `new Date(iso)` and formatting in the viewer's local timezone shifts it
+// back a calendar day for anyone west of UTC. Build the Date from the literal
+// year/month/day in the ISO string instead, so it always renders the date as
+// entered regardless of viewer timezone.
+function formatDateOnly(iso: string): string {
+  const [year, month, day] = iso.slice(0, 10).split('-').map(Number);
+  return new Date(year, month - 1, day).toLocaleDateString();
+}
+
 const UNIT_STATUS_LABELS: Record<string, string> = {
   occupied: 'Occupied',
   vacant: 'Vacant',
@@ -699,12 +710,12 @@ export default function UnitDetailPage() {
                         <td>{a.serialNumber || '--'}</td>
                         <td>
                           {a.installDate
-                            ? new Date(a.installDate).toLocaleDateString()
+                            ? formatDateOnly(a.installDate)
                             : a.purchaseDate
-                              ? new Date(a.purchaseDate).toLocaleDateString()
+                              ? formatDateOnly(a.purchaseDate)
                               : '--'}
                         </td>
-                        <td>{a.warrantyExpiresAt ? new Date(a.warrantyExpiresAt).toLocaleDateString() : '--'}</td>
+                        <td>{a.warrantyExpiresAt ? formatDateOnly(a.warrantyExpiresAt) : '--'}</td>
                         <td>${a.totalMaintenanceCost.toLocaleString()}</td>
                         <td>
                           {a.replacementAlert ? (

@@ -7,7 +7,17 @@ import { AppError } from '../middleware/error-handler';
 // null until this module populates it), and Prisma's { increment } compiles
 // to `SET appliance_count = appliance_count + 1`, which stays NULL forever
 // under Postgres NULL-propagation semantics if the base value was never set.
+//
+// The count()-then-update() pair is itself a read-then-write race between
+// two concurrent creates/deletes on the same unit: without serializing them,
+// both transactions can count before either commits and each write back the
+// same stale total. An advisory lock keyed by unitId (mirrors the pattern in
+// ledger.service.ts/payment.service.ts) forces one to wait for the other to
+// commit before it counts — a plain `SELECT ... FOR UPDATE` on the unit row
+// wouldn't help here since neither statement conflicts on the unit row
+// itself, only on the appliances table.
 async function syncApplianceCount(tx: Prisma.TransactionClient, unitId: string): Promise<void> {
+  await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${unitId})::bigint)`;
   const applianceCount = await tx.appliance.count({ where: { unitId } });
   await tx.unit.update({ where: { id: unitId }, data: { applianceCount } });
 }

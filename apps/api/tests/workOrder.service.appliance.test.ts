@@ -8,10 +8,12 @@ vi.mock('@propflow/db', () => ({
     property: { findFirst: vi.fn() },
     vendor: { findFirst: vi.fn() },
     user: { findFirst: vi.fn() },
+    organization: { findUnique: vi.fn() },
     workOrder: {
       create: vi.fn(),
       update: vi.fn(),
       findFirst: vi.fn(),
+      findMany: vi.fn(),
     },
   },
   WorkOrderStatus: { new_order: 'new_order' },
@@ -21,7 +23,13 @@ vi.mock('@propflow/db', () => ({
 }));
 
 import { prisma } from '@propflow/db';
-import { createWorkOrder, updateWorkOrder } from '../src/services/workOrder.service';
+import { createWorkOrder, updateWorkOrder, listWorkOrders, getWorkOrder } from '../src/services/workOrder.service';
+
+function mockModuleActive(active: boolean) {
+  (prisma.organization.findUnique as any).mockResolvedValue({
+    activeModules: active ? ['unit_intelligence'] : [],
+  });
+}
 
 describe('workOrder.service appliance linking on create', () => {
   beforeEach(() => {
@@ -30,6 +38,7 @@ describe('workOrder.service appliance linking on create', () => {
     (prisma.workOrder.create as any).mockImplementation(({ data }: any) =>
       Promise.resolve({ id: 'wo-1', ...data })
     );
+    mockModuleActive(true);
   });
 
   it('rejects an applianceId that does not belong to the target unit', async () => {
@@ -65,11 +74,45 @@ describe('workOrder.service appliance linking on create', () => {
     );
     expect(result.applianceId).toBe('appliance-1');
   });
+
+  it('rejects linking an appliance when unit_intelligence is not active for the org', async () => {
+    mockModuleActive(false);
+    (prisma.appliance.findFirst as any).mockResolvedValue({ id: 'appliance-1' });
+
+    await expect(
+      createWorkOrder('org-1', {
+        unitId: 'unit-1',
+        applianceId: 'appliance-1',
+        category: 'hvac',
+        description: 'Not cooling',
+      })
+    ).rejects.toMatchObject({ code: 'MODULE_NOT_ACTIVE' });
+
+    // Never even checks whether the appliance itself is valid — the module
+    // gate is the first thing checked, so a deactivated org can't probe for
+    // appliance IDs either.
+    expect(prisma.appliance.findFirst).not.toHaveBeenCalled();
+    expect(prisma.workOrder.create).not.toHaveBeenCalled();
+  });
+
+  it('still creates an ordinary (non-appliance) work order when the module is inactive', async () => {
+    mockModuleActive(false);
+
+    const result = await createWorkOrder('org-1', {
+      unitId: 'unit-1',
+      category: 'plumbing',
+      description: 'Leaky faucet',
+    });
+
+    expect(prisma.workOrder.create).toHaveBeenCalled();
+    expect(result.id).toBe('wo-1');
+  });
 });
 
 describe('workOrder.service appliance linking on update', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    mockModuleActive(true);
   });
 
   it('rejects linking an appliance to a property-level (unitless) work order', async () => {
@@ -123,5 +166,58 @@ describe('workOrder.service appliance linking on update', () => {
     expect(prisma.workOrder.update).toHaveBeenCalledWith(
       expect.objectContaining({ data: expect.objectContaining({ applianceId: null }) })
     );
+  });
+
+  it('rejects re-linking an existing work order to an appliance once the module is deactivated', async () => {
+    mockModuleActive(false);
+    (prisma.workOrder.findFirst as any).mockResolvedValue({
+      id: 'wo-1',
+      unitId: 'unit-1',
+      status: 'assigned',
+      tenantId: null,
+    });
+
+    await expect(
+      updateWorkOrder('org-1', 'wo-1', { applianceId: 'appliance-1' })
+    ).rejects.toMatchObject({ code: 'MODULE_NOT_ACTIVE' });
+
+    expect(prisma.appliance.findFirst).not.toHaveBeenCalled();
+    expect(prisma.workOrder.update).not.toHaveBeenCalled();
+  });
+});
+
+describe('workOrder.service hides the appliance relation once the module is deactivated', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it('omits the appliance include on listWorkOrders when unit_intelligence is inactive', async () => {
+    mockModuleActive(false);
+    (prisma.workOrder.findMany as any).mockResolvedValue([]);
+
+    await listWorkOrders('org-1');
+
+    const include = (prisma.workOrder.findMany as any).mock.calls[0][0].include;
+    expect(include).not.toHaveProperty('appliance');
+  });
+
+  it('includes the appliance relation on listWorkOrders when unit_intelligence is active', async () => {
+    mockModuleActive(true);
+    (prisma.workOrder.findMany as any).mockResolvedValue([]);
+
+    await listWorkOrders('org-1');
+
+    const include = (prisma.workOrder.findMany as any).mock.calls[0][0].include;
+    expect(include).toHaveProperty('appliance');
+  });
+
+  it('omits the appliance include on getWorkOrder when unit_intelligence is inactive, even for a work order with an existing link', async () => {
+    mockModuleActive(false);
+    (prisma.workOrder.findFirst as any).mockResolvedValue({ id: 'wo-1', applianceId: 'appliance-1' });
+
+    await getWorkOrder('org-1', 'wo-1');
+
+    const include = (prisma.workOrder.findFirst as any).mock.calls[0][0].include;
+    expect(include).not.toHaveProperty('appliance');
   });
 });

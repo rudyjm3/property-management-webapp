@@ -35,6 +35,7 @@ function yearsAgo(years: number): Date {
 
 function mockTx(applianceCountAfter = 1) {
   const tx = {
+    $executeRaw: vi.fn().mockResolvedValue(undefined),
     appliance: {
       create: vi.fn().mockImplementation(({ data }: any) => Promise.resolve({ id: 'appliance-1', ...data })),
       delete: vi.fn().mockResolvedValue(undefined),
@@ -206,6 +207,15 @@ describe('appliance.service createAppliance / deleteAppliance keep applianceCoun
       data: { applianceCount: 3 },
     });
     expect(result.id).toBe('appliance-1');
+
+    // Serializes concurrent count-then-write races on the same unit (two
+    // overlapping creates could otherwise each count before the other
+    // commits and write back the same stale total) — acquired before the
+    // count, inside the same transaction as the create.
+    expect(tx.$executeRaw).toHaveBeenCalledTimes(1);
+    const lockCallOrder = (tx.$executeRaw as any).mock.invocationCallOrder[0];
+    const countCallOrder = (tx.appliance.count as any).mock.invocationCallOrder[0];
+    expect(lockCallOrder).toBeLessThan(countCallOrder);
   });
 
   it('recomputes Unit.applianceCount from a fresh count when an appliance is deleted', async () => {
