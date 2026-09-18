@@ -143,6 +143,16 @@ export const WORK_ORDER_LOCATION_TYPES = [
 
 export const VENDOR_STATUSES = ['active', 'inactive'] as const;
 
+// Vendor & Contractor Management (Module 5) — lookahead window (in days) for
+// flagging a vendor's license/insurance as "expiring soon" on the expiry
+// alerts endpoint/job/dashboard widget. A vendor whose expiry date has
+// already passed is always flagged regardless of this window.
+export const VENDOR_EXPIRY_ALERT_LOOKAHEAD_DAYS = 30;
+
+// 1-5 star rating captured per work-order completion (VendorWorkOrderRating).
+export const VENDOR_RATING_MIN = 1;
+export const VENDOR_RATING_MAX = 5;
+
 // ─── Maintenance Schedule (Grounds & Property Maintenance / Module 3) ─────────
 // Fixed cadence set, not a full cron-style recurrence-rule engine — see
 // docs/reference/modules.md for what "recurring" covers in v1.
@@ -233,6 +243,7 @@ export const MODULE_KEYS = {
   UNIT_INTELLIGENCE: 'unit_intelligence',
   INSPECTIONS_COMPLIANCE: 'inspections_compliance',
   GROUNDS_MAINTENANCE: 'grounds_maintenance',
+  VENDOR_MANAGEMENT: 'vendor_management',
 } as const;
 
 export type ModuleKey = (typeof MODULE_KEYS)[keyof typeof MODULE_KEYS];

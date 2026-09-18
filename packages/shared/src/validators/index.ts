@@ -28,6 +28,8 @@ import {
   INSPECTION_STATUSES,
   INSPECTION_MEDIA_TYPES,
   MAINTENANCE_CADENCES,
+  VENDOR_RATING_MIN,
+  VENDOR_RATING_MAX,
 } from '../constants';
 
 // ─── Organization ─────────────────────────────────────────────────────────────
@@ -332,6 +334,11 @@ export const createWorkOrderSchema = z
     entryPermissionGranted: z.boolean().default(false),
     preferredContactWindow: z.string().max(200).nullable().optional(),
     tenantId: z.string().uuid().nullable().optional(),
+    // Optional explicit vendor assignment at creation time. When omitted and
+    // the vendor_management module (Module 5) is active for the org, the
+    // service layer defaults it from a matching PreferredVendorAssignment —
+    // see vendor.service.ts's resolvePreferredVendor.
+    vendorId: z.string().uuid().nullable().optional(),
   })
   .refine((data) => data.unitId || data.propertyId, {
     message: 'Either unitId or propertyId is required',
@@ -383,6 +390,32 @@ export const createVendorSchema = z.object({
 });
 
 export const updateVendorSchema = createVendorSchema.partial();
+
+// ─── Vendor & Contractor Management (Module 5) ─────────────────────────────
+
+// Rating + optional note captured for a completed work order assigned to a
+// vendor. Posted to a dedicated endpoint (POST
+// .../work-orders/:workOrderId/vendor-rating) rather than folded into
+// updateWorkOrderSchema — see docs/reference/modules.md for why.
+export const rateVendorWorkOrderSchema = z.object({
+  rating: z.number().int().min(VENDOR_RATING_MIN).max(VENDOR_RATING_MAX),
+  note: z.string().max(2000).nullable().optional(),
+});
+
+// A preferred-vendor-by-category assignment. `category` is always required;
+// `propertyId` narrows it to one property, and omitting it (or passing null)
+// makes it the org-wide default for that category — see the schema comment
+// on PreferredVendorAssignment for why there's no category-agnostic,
+// property-only assignment.
+export const upsertPreferredVendorAssignmentSchema = z.object({
+  propertyId: z.string().uuid().nullable().optional(),
+  category: z.enum(WORK_ORDER_CATEGORIES),
+  vendorId: z.string().uuid(),
+});
+
+export const vendorWorkHistoryQuerySchema = z.object({
+  months: z.coerce.number().int().min(1).max(60).default(12),
+});
 
 // ─── Message ──────────────────────────────────────────────────────────────────
 

@@ -59,6 +59,7 @@ model Organization {
   inspections                 Inspection[]
   inspectionTemplates         InspectionTemplate[]
   maintenanceSchedules        MaintenanceSchedule[]
+  preferredVendorAssignments  PreferredVendorAssignment[]
 
   @@map("organizations")
 }
@@ -166,6 +167,7 @@ model Property {
   // the property level, not the unit level.
   inspections          Inspection[]
   maintenanceSchedules MaintenanceSchedule[]
+  preferredVendorAssignments PreferredVendorAssignment[]
 
   @@index([organizationId])
   @@map("properties")
@@ -938,6 +940,9 @@ model WorkOrder {
   appliance       Appliance?           @relation(fields: [applianceId], references: [id])
   schedule        MaintenanceSchedule? @relation(fields: [scheduleId], references: [id], onDelete: SetNull)
   messages        Message[]
+  // Vendor & Contractor Management (Module 5) — at most one rating per work
+  // order completion (unique on VendorWorkOrderRating.workOrderId).
+  vendorRating    VendorWorkOrderRating?
 
   @@index([unitId])
   @@index([propertyId])
@@ -1015,9 +1020,12 @@ model Vendor {
   createdAt          DateTime     @default(now()) @map("created_at")
   updatedAt          DateTime     @updatedAt @map("updated_at")
 
-  organization         Organization          @relation(fields: [organizationId], references: [id])
+  organization         Organization                @relation(fields: [organizationId], references: [id])
   workOrders           WorkOrder[]
   maintenanceSchedules MaintenanceSchedule[]
+  // Vendor & Contractor Management (Module 5)
+  workOrderRatings     VendorWorkOrderRating[]
+  preferredAssignments PreferredVendorAssignment[]
 
   @@index([organizationId])
   @@map("vendors")
@@ -1026,6 +1034,71 @@ model Vendor {
 enum VendorStatus {
   active
   inactive
+}
+
+// ─── Vendor & Contractor Management (Module 5) ─────────────────────────────
+// Two net-new models for this module. See docs/reference/modules.md for the
+// gating decisions (what's ungated base vendor CRUD vs. gated Module 5
+// functionality) and for exactly what's simplified here.
+
+// Per-work-order-completion rating, captured via a dedicated endpoint
+// (POST .../work-orders/:workOrderId/vendor-rating) rather than baked into
+// the general WorkOrder PATCH — a work order must already be
+// completed/closed and have a vendorId before a rating can be recorded, and
+// at most one rating exists per work order (workOrderId is unique). The
+// existing single running `Vendor.rating` field is kept (approach (a) in the
+// module spec) and recomputed as the average of all of a vendor's ratings
+// each time one is created, so `Vendor.rating`'s existing consumers (vendor
+// list ordering, etc.) keep working unchanged.
+model VendorWorkOrderRating {
+  id          String   @id @default(uuid())
+  workOrderId String   @unique @map("work_order_id")
+  vendorId    String   @map("vendor_id")
+  rating      Int // 1-5, validated at the service layer (no DB check constraint)
+  note        String?
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  workOrder WorkOrder @relation(fields: [workOrderId], references: [id])
+  vendor    Vendor    @relation(fields: [vendorId], references: [id])
+
+  @@index([vendorId])
+  @@map("vendor_work_order_ratings")
+}
+
+// Preferred-vendor-by-category assignment, replacing the old global
+// `Vendor.preferred` boolean (kept as a column for backward compatibility /
+// display, but no longer the source of truth for auto-assignment). `category`
+// is required — an assignment always names a WorkOrderCategory; `propertyId`
+// is optional and narrows it to one property, with a null propertyId acting
+// as the org-wide default for that category. This is a simplification of the
+// "per property or category" spec: there is no property-scoped-but-
+// category-agnostic assignment (i.e. "always use this vendor for property X
+// regardless of category") — every assignment is keyed by category, since
+// the auto-assignment lookup at work-order-creation time always has a
+// category to match on and a category-less assignment would have no
+// deterministic way to pick among multiple vendors for the same property.
+model PreferredVendorAssignment {
+  id             String            @id @default(uuid())
+  organizationId String            @map("organization_id")
+  propertyId     String?           @map("property_id")
+  category       WorkOrderCategory
+  vendorId       String            @map("vendor_id")
+  createdAt      DateTime          @default(now()) @map("created_at")
+  updatedAt      DateTime          @updatedAt @map("updated_at")
+
+  organization Organization @relation(fields: [organizationId], references: [id])
+  property     Property?    @relation(fields: [propertyId], references: [id])
+  vendor       Vendor       @relation(fields: [vendorId], references: [id])
+
+  // One preferred vendor per (property, category) combo. Postgres treats
+  // each NULL in a unique index as distinct, so this does NOT by itself
+  // prevent duplicate org-wide (propertyId: null) rows for the same
+  // category — that's enforced at the service layer instead (see
+  // vendor.service.ts upsertPreferredVendorAssignment).
+  @@unique([organizationId, propertyId, category])
+  @@index([organizationId])
+  @@index([propertyId])
+  @@map("preferred_vendor_assignments")
 }
 
 // ─── Maintenance Schedule (Grounds & Property Maintenance / Module 3) ─────────
