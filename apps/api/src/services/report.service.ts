@@ -718,6 +718,108 @@ export async function getScheduleEExport(
   return { periodStart: filters.periodStart, periodEnd: filters.periodEnd, rows };
 }
 
+// ─── Grounds Maintenance Compliance (Grounds & Property Maintenance / Module 3) ─
+// Task completion history and compliance reporting for MaintenanceSchedule-
+// generated WorkOrders, per property. "On time" compares a completed work
+// order's completedAt against the scheduledAt it was generated with
+// (groundsMaintenanceJob.ts always sets scheduledAt to the schedule's due
+// date at generation time); "overdue" is a still-open generated work order
+// whose scheduledAt has already passed. Photo-compliance rate only covers
+// completed generated work orders' `photosAfter` array — it does NOT check
+// whether a separate grounds Inspection (see inspection.service.ts) exists
+// for the same period, since recurring task generation and the grounds
+// inspection log are two independent mechanisms in this v1, not linked to
+// each other. Grounds inspection counts are reported separately alongside.
+
+export interface GroundsMaintenanceComplianceRow {
+  propertyId: string;
+  propertyName: string;
+  generatedCount: number;
+  completedOnTime: number;
+  completedLate: number;
+  openOverdue: number;
+  photoComplianceRate: number | null; // null when there are 0 completed work orders to measure
+  groundsInspectionsCompleted: number;
+}
+
+export async function getGroundsMaintenanceCompliance(
+  organizationId: string,
+  filters: { propertyId?: string; periodStart?: string; periodEnd?: string }
+): Promise<{ periodStart: string | null; periodEnd: string | null; properties: GroundsMaintenanceComplianceRow[] }> {
+  const start = filters.periodStart ? new Date(filters.periodStart) : null;
+  const end = filters.periodEnd ? new Date(filters.periodEnd) : null;
+  if (end) end.setHours(23, 59, 59, 999);
+
+  const properties = await prisma.property.findMany({
+    where: { organizationId, ...(filters.propertyId ? { id: filters.propertyId } : {}) },
+    select: { id: true, name: true },
+  });
+
+  const now = new Date();
+
+  const rows: GroundsMaintenanceComplianceRow[] = [];
+  for (const property of properties) {
+    const workOrders = await prisma.workOrder.findMany({
+      where: {
+        propertyId: property.id,
+        scheduleId: { not: null },
+        ...(start || end
+          ? { createdAt: { ...(start ? { gte: start } : {}), ...(end ? { lte: end } : {}) } }
+          : {}),
+      },
+      select: { status: true, scheduledAt: true, completedAt: true, photosAfter: true },
+    });
+
+    let completedOnTime = 0;
+    let completedLate = 0;
+    let openOverdue = 0;
+    let completedWithPhoto = 0;
+    const completedCount = workOrders.filter((wo) => wo.status === 'completed' || wo.status === 'closed').length;
+
+    for (const wo of workOrders) {
+      const isCompleted = wo.status === 'completed' || wo.status === 'closed';
+      if (isCompleted) {
+        if (wo.completedAt && wo.scheduledAt && wo.completedAt <= wo.scheduledAt) {
+          completedOnTime++;
+        } else {
+          completedLate++;
+        }
+        if (wo.photosAfter.length > 0) completedWithPhoto++;
+      } else if (wo.scheduledAt && wo.scheduledAt < now) {
+        openOverdue++;
+      }
+    }
+
+    const groundsInspectionsCompleted = await prisma.inspection.count({
+      where: {
+        propertyId: property.id,
+        type: 'grounds',
+        status: 'completed',
+        ...(start || end
+          ? { completedAt: { ...(start ? { gte: start } : {}), ...(end ? { lte: end } : {}) } }
+          : {}),
+      },
+    });
+
+    rows.push({
+      propertyId: property.id,
+      propertyName: property.name,
+      generatedCount: workOrders.length,
+      completedOnTime,
+      completedLate,
+      openOverdue,
+      photoComplianceRate: completedCount > 0 ? Math.round((completedWithPhoto / completedCount) * 1000) / 10 : null,
+      groundsInspectionsCompleted,
+    });
+  }
+
+  return {
+    periodStart: filters.periodStart ?? null,
+    periodEnd: filters.periodEnd ?? null,
+    properties: rows,
+  };
+}
+
 // ─── Report Builder (Module 11) ───────────────────────────────────────────────
 // Runs an existing report source and projects it down to the columns the user
 // picked — the "configurable report builder" over the existing report data

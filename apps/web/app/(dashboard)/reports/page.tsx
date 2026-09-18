@@ -55,7 +55,7 @@ interface PropertyOption {
   name: string;
 }
 
-type Tab = 'financial' | 'trend' | 'spend' | 'rentroll' | 'vacancy' | 'statements' | 'builder' | 'scheduleE';
+type Tab = 'financial' | 'trend' | 'spend' | 'rentroll' | 'vacancy' | 'statements' | 'builder' | 'scheduleE' | 'groundsMaintenance';
 
 interface ScheduleERow {
   propertyId: string;
@@ -70,7 +70,18 @@ interface ScheduleERow {
   netIncomeOrLoss: number;
 }
 
-const TABS: { id: Tab; label: string; module?: 'owner_portal' | 'advanced_payments_accounting' }[] = [
+interface GroundsComplianceRow {
+  propertyId: string;
+  propertyName: string;
+  generatedCount: number;
+  completedOnTime: number;
+  completedLate: number;
+  openOverdue: number;
+  photoComplianceRate: number | null;
+  groundsInspectionsCompleted: number;
+}
+
+const TABS: { id: Tab; label: string; module?: 'owner_portal' | 'advanced_payments_accounting' | 'grounds_maintenance' }[] = [
   { id: 'financial', label: 'Financial Summary' },
   { id: 'trend', label: 'Revenue Trend' },
   { id: 'spend', label: 'Spend by Location' },
@@ -83,6 +94,9 @@ const TABS: { id: Tab; label: string; module?: 'owner_portal' | 'advanced_paymen
   // Schedule E export is an Advanced Payments & Accounting (Module 4) feature
   // layered on this Module 11-gated page — needs both modules active.
   { id: 'scheduleE', label: 'Schedule E Export', module: MODULE_KEYS.ADVANCED_PAYMENTS_ACCOUNTING },
+  // Grounds & Property Maintenance (Module 3) — layered on this Module
+  // 11-gated page the same way Schedule E is; needs both modules active.
+  { id: 'groundsMaintenance', label: 'Grounds Maintenance', module: MODULE_KEYS.GROUNDS_MAINTENANCE },
 ];
 
 function fmt(n: number): string {
@@ -125,6 +139,9 @@ function ReportsPageContent() {
   const [scheduleERows, setScheduleERows] = useState<ScheduleERow[]>([]);
   const [scheduleELoading, setScheduleELoading] = useState(false);
   const [scheduleEError, setScheduleEError] = useState('');
+  const [groundsRows, setGroundsRows] = useState<GroundsComplianceRow[]>([]);
+  const [groundsLoading, setGroundsLoading] = useState(false);
+  const [groundsError, setGroundsError] = useState('');
 
   const { start, end } = currentMonthRange();
   const [periodStart, setPeriodStart] = useState(start);
@@ -190,6 +207,27 @@ function ReportsPageContent() {
     if (activeTab === 'scheduleE') loadScheduleE();
   }, [activeTab]); // eslint-disable-line react-hooks/exhaustive-deps
 
+  async function loadGroundsMaintenance() {
+    setGroundsLoading(true);
+    setGroundsError('');
+    try {
+      const data = await api.reports.groundsMaintenanceCompliance({
+        propertyId: selectedPropertyId || undefined,
+        periodStart,
+        periodEnd,
+      });
+      setGroundsRows(data.properties ?? []);
+    } catch (err: any) {
+      setGroundsError(err.message || 'Failed to load grounds maintenance compliance.');
+    } finally {
+      setGroundsLoading(false);
+    }
+  }
+
+  useEffect(() => {
+    if (activeTab === 'groundsMaintenance') loadGroundsMaintenance();
+  }, [activeTab]); // eslint-disable-line react-hooks/exhaustive-deps
+
   function handleExportScheduleE() {
     if (scheduleERows.length === 0) return;
     const headers = ['Property', 'Address', 'Tax Parcel ID', 'Rents Received', 'Other Income', 'Repairs & Maintenance', 'Management Fees', 'Total Expenses', 'Net Income/Loss'];
@@ -231,7 +269,7 @@ function ReportsPageContent() {
     noi >= 0 ? 'var(--color-success, #16a34a)' : 'var(--color-danger, #dc2626)';
 
   // Tabs that use the date-range filter vs those that are always fresh
-  const showDateFilter = activeTab === 'financial' || activeTab === 'trend' || activeTab === 'spend' || activeTab === 'builder' || activeTab === 'scheduleE';
+  const showDateFilter = activeTab === 'financial' || activeTab === 'trend' || activeTab === 'spend' || activeTab === 'builder' || activeTab === 'scheduleE' || activeTab === 'groundsMaintenance';
 
   return (
     <div className="page-container">
@@ -669,6 +707,59 @@ function ReportsPageContent() {
                         <td>{fmt(r.managementFees)}</td>
                         <td>{fmt(r.totalExpenses)}</td>
                         <td style={{ fontWeight: 600, color: noiColor(r.netIncomeOrLoss) }}>{fmt(r.netIncomeOrLoss)}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* ─── Grounds Maintenance Compliance (Module 3) ─────────────── */}
+        {activeTab === 'groundsMaintenance' && (
+          <div>
+            <p style={{ fontSize: '13px', color: 'var(--color-text-muted)', marginBottom: '16px' }}>
+              Task completion history for recurring maintenance schedules (on time vs. late, photo-compliance
+              rate) plus completed grounds-inspection counts, per property. Recurring task generation and the
+              grounds inspection log are independent — photo compliance here reflects each generated work
+              order&apos;s own photos, not whether a separate inspection was also logged.
+            </p>
+            {groundsError && (
+              <div style={{ color: 'var(--color-danger)', marginBottom: '12px', fontSize: '14px' }}>
+                {groundsError}
+              </div>
+            )}
+            {groundsLoading ? (
+              <div className="loading">Loading grounds maintenance compliance...</div>
+            ) : groundsRows.length === 0 ? (
+              <div className="empty-state">
+                <h3>No data for this period</h3>
+              </div>
+            ) : (
+              <div className="table-container">
+                <table>
+                  <thead>
+                    <tr>
+                      <th>Property</th>
+                      <th>Generated</th>
+                      <th>On Time</th>
+                      <th>Late</th>
+                      <th>Open &amp; Overdue</th>
+                      <th>Photo Compliance</th>
+                      <th>Grounds Inspections Completed</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {groundsRows.map((r) => (
+                      <tr key={r.propertyId}>
+                        <td>{r.propertyName}</td>
+                        <td>{r.generatedCount}</td>
+                        <td>{r.completedOnTime}</td>
+                        <td>{r.completedLate}</td>
+                        <td>{r.openOverdue}</td>
+                        <td>{r.photoComplianceRate === null ? '—' : `${r.photoComplianceRate}%`}</td>
+                        <td>{r.groundsInspectionsCompleted}</td>
                       </tr>
                     ))}
                   </tbody>

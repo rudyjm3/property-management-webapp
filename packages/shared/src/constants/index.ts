@@ -143,6 +143,11 @@ export const WORK_ORDER_LOCATION_TYPES = [
 
 export const VENDOR_STATUSES = ['active', 'inactive'] as const;
 
+// ─── Maintenance Schedule (Grounds & Property Maintenance / Module 3) ─────────
+// Fixed cadence set, not a full cron-style recurrence-rule engine — see
+// docs/reference/modules.md for what "recurring" covers in v1.
+export const MAINTENANCE_CADENCES = ['weekly', 'monthly', 'quarterly', 'semi_annual', 'annual'] as const;
+
 // ─── Document ─────────────────────────────────────────────────────────────────
 
 export const DOCUMENT_ENTITY_TYPES = [
@@ -187,7 +192,7 @@ export const DISBURSEMENT_STATUSES = ['pending', 'completed', 'cancelled'] as co
 
 // ─── Inspection (Inspections & Compliance / Module 6) ─────────────────────────
 
-export const INSPECTION_TYPES = ['move_in', 'move_out', 'scheduled', 'annual', 'semi_annual'] as const;
+export const INSPECTION_TYPES = ['move_in', 'move_out', 'scheduled', 'annual', 'semi_annual', 'grounds'] as const;
 
 export const INSPECTION_STATUSES = ['scheduled', 'in_progress', 'completed', 'cancelled'] as const;
 
@@ -227,6 +232,7 @@ export const MODULE_KEYS = {
   ADVANCED_PAYMENTS_ACCOUNTING: 'advanced_payments_accounting',
   UNIT_INTELLIGENCE: 'unit_intelligence',
   INSPECTIONS_COMPLIANCE: 'inspections_compliance',
+  GROUNDS_MAINTENANCE: 'grounds_maintenance',
 } as const;
 
 export type ModuleKey = (typeof MODULE_KEYS)[keyof typeof MODULE_KEYS];

@@ -14,6 +14,7 @@ import { generalRateLimit, webhookRateLimit } from './middleware/rate-limit';
 import { startSlaBreachJob } from './jobs/slaBreachCheck';
 import { startLateFeeJob } from './jobs/lateFeeJob';
 import { startRentGenerationJob } from './jobs/rentGenerationJob';
+import { startGroundsMaintenanceJob } from './jobs/groundsMaintenanceJob';
 import stripeWebhookHandler from './webhooks/stripe';
 
 const app = express();
@@ -62,6 +63,7 @@ app.listen(PORT, () => {
   startSlaBreachJob();
   startRentGenerationJob();
   startLateFeeJob();
+  startGroundsMaintenanceJob();
 });
 
 export default app;

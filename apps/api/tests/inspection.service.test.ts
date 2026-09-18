@@ -6,6 +6,9 @@ vi.mock('@propflow/db', () => ({
       findFirst: vi.fn(),
       updateMany: vi.fn(),
     },
+    property: {
+      findFirst: vi.fn(),
+    },
     lease: {
       findFirst: vi.fn(),
     },
@@ -26,6 +29,7 @@ vi.mock('@propflow/db', () => ({
     inspectionMedia: {
       create: vi.fn(),
       findMany: vi.fn(),
+      findFirst: vi.fn(),
     },
     $transaction: vi.fn(),
   },
@@ -49,6 +53,8 @@ import {
   compareLeaseInspections,
   requestMediaUploadUrl,
   attachMedia,
+  createPropertyInspection,
+  completePropertyInspection,
 } from '../src/services/inspection.service';
 
 function mockTx(opts: { completeCount?: number } = {}) {
@@ -437,5 +443,67 @@ describe('inspection.service media', () => {
 
     expect(result.storageKey).toContain('inspection');
     expect(result.uploadUrl).toBeTruthy();
+  });
+});
+
+describe('inspection.service property-scoped (grounds) inspections — Module 3', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it('creates a grounds inspection scoped to the property, not a unit', async () => {
+    (prisma.property.findFirst as any).mockResolvedValue({ id: 'prop-1' });
+    (prisma.inspection.create as any).mockImplementation(({ data }: any) => Promise.resolve({ id: 'insp-1', ...data }));
+
+    const result = await createPropertyInspection('org-1', 'prop-1', {});
+
+    expect(prisma.inspection.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({ propertyId: 'prop-1', type: 'grounds', status: 'scheduled' }),
+      })
+    );
+    expect(result.type).toBe('grounds');
+  });
+
+  const existingGroundsInspection = {
+    id: 'insp-1',
+    propertyId: 'prop-1',
+    status: 'in_progress',
+    notes: null,
+    inspectorUserId: null,
+  };
+
+  it('rejects completion when no photo has been attached', async () => {
+    (prisma.property.findFirst as any).mockResolvedValue({ id: 'prop-1' });
+    (prisma.inspection.findFirst as any).mockResolvedValue(existingGroundsInspection);
+    (prisma.inspectionMedia.findFirst as any).mockResolvedValue(null);
+
+    await expect(
+      completePropertyInspection('org-1', 'prop-1', 'insp-1', {}, { userId: 'user-1', role: 'manager' })
+    ).rejects.toMatchObject({ code: 'PHOTO_REQUIRED' });
+
+    expect(prisma.inspection.updateMany).not.toHaveBeenCalled();
+  });
+
+  it('allows completion once at least one photo is attached', async () => {
+    (prisma.property.findFirst as any).mockResolvedValue({ id: 'prop-1' });
+    (prisma.inspection.findFirst as any)
+      .mockResolvedValueOnce(existingGroundsInspection) // getExistingPropertyInspection
+      .mockResolvedValueOnce({ ...existingGroundsInspection, status: 'completed' }); // final re-fetch
+    (prisma.inspectionMedia.findFirst as any).mockResolvedValue({ id: 'media-1' });
+    (prisma.inspection.updateMany as any).mockResolvedValue({ count: 1 });
+
+    const result = await completePropertyInspection(
+      'org-1',
+      'prop-1',
+      'insp-1',
+      { notes: 'Grounds look good' },
+      { userId: 'user-1', role: 'manager' }
+    );
+
+    expect(prisma.inspection.updateMany).toHaveBeenCalledWith(
+      expect.objectContaining({ data: expect.objectContaining({ status: 'completed' }) })
+    );
+    expect(result?.status).toBe('completed');
   });
 });

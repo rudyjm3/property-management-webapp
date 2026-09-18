@@ -1394,6 +1394,81 @@ see `docs/reference/modules.md` for the full gating detail. Summary:
 - Inspection log with completion photo requirement
 - Task completion history and compliance reporting
 
+**Status (2026-09-18): gated + shipped.** Read this before assuming any
+bullet above is fully built as originally scoped — see `docs/reference/modules.md`
+for the full gating detail.
+
+- **Recurring task scheduling — the net-new piece.** A new `MaintenanceSchedule`
+  model (`property`, `title`, `category`/`locationType` reusing `WorkOrder`'s
+  own enums, `cadence: weekly|monthly|quarterly|semi_annual|annual`,
+  `vendorId?`, `nextDueDate`, `active`) with CRUD at
+  `.../properties/:propertyId/maintenance-schedules[/:scheduleId]`. A daily
+  recurrence job (`groundsMaintenanceJob.ts`) generates a real `WorkOrder`
+  for each due, active schedule and advances `nextDueDate` forward by one
+  cadence period — mirrors how `rentGenerationJob.ts` generates monthly
+  `Payment` records from active leases. **Cadence is a fixed set, not a
+  full cron-style recurrence-rule engine** — no "every 2nd Tuesday", no
+  custom day-of-month/interval, and a schedule missed for multiple periods
+  (e.g. after downtime) generates exactly one catch-up work order per run
+  rather than backfilling every missed occurrence.
+- **Vendor assignment to recurring tasks** — shipped as scoped:
+  `MaintenanceSchedule.vendorId` (reusing the existing `Vendor` model, not a
+  new one) auto-populates `WorkOrder.vendorId` on every generated work
+  order, which also auto-transitions the generated order's status to
+  `assigned` instead of `new_order`. This is a single preferred/default
+  vendor per schedule, not the fuller "preferred vendor per category" logic
+  Module 5 (Vendor & Contractor Management) is scoped to add later.
+- **Inspection log with completion-photo requirement** — reuses Module 6's
+  `Inspection`/`InspectionMedia` models rather than a second, parallel
+  table: `Inspection.unitId` is now nullable and a nullable `propertyId` FK
+  was added, plus a new `InspectionType.grounds` value, so a property-scoped
+  "grounds" inspection is just another row in the same table as unit-scoped
+  move-in/move-out/etc inspections. Property-scoped inspections are created
+  and completed through a **separate, parallel set of service functions and
+  routes** (`.../properties/:propertyId/inspections[/:id]`) rather than the
+  existing unit-scoped ones, since every function in `inspection.service.ts`
+  built for Module 6 hard-requires a `unitId` — see `docs/reference/schema.md`
+  for why sharing them wasn't worth threading unitId-or-propertyId through
+  every function. Grounds inspections skip checklist templates, leases, and
+  signature capture entirely (those stay unit-scoped Module 6 concepts) —
+  they're just a scheduled/in-progress/completed/cancelled record with
+  attached media. **The completion-photo requirement is real and enforced
+  server-side**: `POST .../inspections/:id/complete` 400s with
+  `PHOTO_REQUIRED` unless at least one `InspectionMedia` row with
+  `mediaType: photo` already exists on that inspection — a video alone does
+  not satisfy it.
+- **Task completion history and compliance reporting** — `GET
+  .../reports/grounds-maintenance-compliance`, per property: generated
+  work-order count, completed-on-time vs. completed-late (comparing
+  `completedAt` to the `scheduledAt` the work order was generated with),
+  still-open-and-overdue count, a photo-compliance rate (% of completed
+  generated work orders with at least one `photosAfter` entry), and a
+  separate completed-grounds-inspection count. **Recurring task generation
+  and the grounds inspection log are two independent mechanisms in this
+  v1** — a generated work order is not required to have a matching grounds
+  `Inspection`, and the photo-compliance rate only looks at `photosAfter`
+  on the generated work orders themselves, not whether an inspection was
+  also logged for the same period. Gating decision, made explicit here per
+  the pattern Module 4's Schedule E export established: this report is
+  gated behind **both** `grounds_maintenance` and `reporting_analytics`
+  (stacked on top of `reports.ts`'s existing Module 11 mount-level gate) —
+  it lives alongside this org's other reports rather than under its own
+  module's CRUD routes, but still requires Module 3 active since the data
+  it reports on is Module 3's own.
+
+**Not built**: custom/interval-based recurrence rules beyond the fixed
+cadence set, a per-category "preferred vendor" picker (single vendor per
+schedule only), linking a generated work order to a specific grounds
+`Inspection`, and any standalone nav page — both features live as cards on
+the existing property detail page (`/properties/[id]`), mirroring how
+Modules 2/6 avoided sidebar nav complexity.
+
+**Data hooks now in schema:** `WorkOrder.scheduleId` (FK →
+`MaintenanceSchedule`, `ON DELETE SET NULL`) and `Inspection.propertyId` —
+see `docs/reference/schema.md`. Module 3 no longer has "no dedicated schema
+hooks" as previously noted; that note has been removed from
+`docs/reference/modules.md`.
+
 **Dependencies:** Work orders, Vendor management
 
 ---
