@@ -656,6 +656,42 @@ export const api = {
       const qs = params?.activeOnly ? '?status=active' : '';
       return apiFetch<any[]>(`/api/v1/organizations/${_orgId}/vendors${qs}`);
     },
+    get: (id: string) => apiFetch<any>(`/api/v1/organizations/${_orgId}/vendors/${id}`),
+    create: (data: any) =>
+      apiFetch<any>(`/api/v1/organizations/${_orgId}/vendors`, {
+        method: 'POST',
+        body: JSON.stringify(data),
+      }),
+    update: (id: string, data: any) =>
+      apiFetch<any>(`/api/v1/organizations/${_orgId}/vendors/${id}`, {
+        method: 'PATCH',
+        body: JSON.stringify(data),
+      }),
+    delete: (id: string) =>
+      apiFetch<void>(`/api/v1/organizations/${_orgId}/vendors/${id}`, {
+        method: 'DELETE',
+      }),
+    // Vendor & Contractor Management (Module 5) — gated behind vendor_management
+    expiryAlerts: () => apiFetch<any[]>(`/api/v1/organizations/${_orgId}/vendors/expiry-alerts`),
+    workHistory: (id: string, months?: number) =>
+      apiFetch<any>(`/api/v1/organizations/${_orgId}/vendors/${id}/work-history${months ? `?months=${months}` : ''}`),
+    preferredAssignments: {
+      list: () => apiFetch<any[]>(`/api/v1/organizations/${_orgId}/vendors/preferred-assignments`),
+      upsert: (data: { propertyId?: string | null; category: string; vendorId: string }) =>
+        apiFetch<any>(`/api/v1/organizations/${_orgId}/vendors/preferred-assignments`, {
+          method: 'POST',
+          body: JSON.stringify(data),
+        }),
+      delete: (id: string) =>
+        apiFetch<void>(`/api/v1/organizations/${_orgId}/vendors/preferred-assignments/${id}`, {
+          method: 'DELETE',
+        }),
+    },
+    rateWorkOrder: (workOrderId: string, data: { rating: number; note?: string | null }) =>
+      apiFetch<any>(`/api/v1/organizations/${_orgId}/work-orders/${workOrderId}/vendor-rating`, {
+        method: 'POST',
+        body: JSON.stringify(data),
+      }),
   },
   documents: {
     requestUploadUrl: (data: {

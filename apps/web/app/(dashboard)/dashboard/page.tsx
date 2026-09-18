@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { api } from '@/lib/api';
 import { useAuth } from '@/contexts/AuthContext';
+import ModuleGate from '@/components/ModuleGate';
 
 interface PortfolioStats {
   totalProperties: number;
@@ -54,6 +55,16 @@ interface ExpiringLease {
   participants: Array<{ isPrimary: boolean; tenant: { id: string; name: string } }>;
 }
 
+interface VendorExpiryAlert {
+  id: string;
+  companyName: string;
+  contactName: string;
+  licenseExpiresAt: string | null;
+  licenseStatus: 'expired' | 'expiring' | null;
+  insuranceExpiresAt: string | null;
+  insuranceStatus: 'expired' | 'expiring' | null;
+}
+
 interface MessageThread {
   threadId: string;
   subject: string | null;
@@ -71,17 +82,24 @@ export default function DashboardPage() {
   const [leaseSummary, setLeaseSummary] = useState<LeaseSummary>({ expiring30: 0, expiring60: 0 });
   const [recentThreads, setRecentThreads] = useState<MessageThread[]>([]);
   const [expiringLeases, setExpiringLeases] = useState<ExpiringLease[]>([]);
+  const [vendorAlerts, setVendorAlerts] = useState<VendorExpiryAlert[]>([]);
   const [loading, setLoading] = useState(true);
+  const vendorManagementActive = profile?.organization.activeModules?.includes('vendor_management') ?? false;
 
   useEffect(() => {
     async function loadDashboard() {
       try {
-        const [properties, stats, workOrders, leases, threads] = await Promise.all([
+        const [properties, stats, workOrders, leases, threads, vendorExpiryAlerts] = await Promise.all([
           api.properties.list(),
           isMaintenance ? Promise.resolve(null) : api.payments.stats(),
           api.workOrders.list(),
           isMaintenance ? Promise.resolve([]) : api.leases.list(),
           isMaintenance ? Promise.resolve([]) : api.messages.threads.list().catch(() => []),
+          // Vendor & Contractor Management (Module 5) — 403s for an org
+          // without the module active, so it's only fetched when the
+          // AuthContext-derived flag says it's on (mirrors how ModuleGate
+          // itself decides visibility, avoiding a guaranteed failed request).
+          !isMaintenance && vendorManagementActive ? api.vendors.expiryAlerts().catch(() => []) : Promise.resolve([]),
         ]);
 
         // Portfolio stats
@@ -126,6 +144,9 @@ export default function DashboardPage() {
 
         // Recent message threads (last 3)
         setRecentThreads((threads || []).slice(0, 3));
+
+        // Vendor license/insurance expiry alerts (Module 5)
+        setVendorAlerts(vendorExpiryAlerts || []);
       } catch (err) {
         console.error('Failed to load dashboard:', err);
       } finally {
@@ -520,6 +541,54 @@ export default function DashboardPage() {
             )}
           </div>
         </div>
+      )}
+
+      {/* Vendor License/Insurance Expiry Alerts (Module 5) */}
+      {!isMaintenance && (
+        <ModuleGate module="vendor_management">
+          <div className="card" style={{ marginBottom: '24px' }}>
+            <div className="card-body" style={{ padding: '0' }}>
+              <div style={{ padding: '16px 20px', borderBottom: '1px solid var(--color-border)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <h3 style={{ fontSize: '15px', fontWeight: 600 }}>
+                  Vendor License/Insurance Alerts
+                  {vendorAlerts.length > 0 && (
+                    <span style={{ marginLeft: '8px', background: '#fee2e2', color: '#991b1b', borderRadius: '12px', padding: '2px 8px', fontSize: '12px' }}>
+                      {vendorAlerts.length}
+                    </span>
+                  )}
+                </h3>
+              </div>
+              {vendorAlerts.length === 0 ? (
+                <div style={{ padding: '24px', textAlign: 'center', color: 'var(--color-text-muted)', fontSize: '14px' }}>
+                  No vendors with expiring or expired license/insurance
+                </div>
+              ) : (
+                <div>
+                  {vendorAlerts.map((v) => (
+                    <div key={v.id} style={{ padding: '12px 20px', borderBottom: '1px solid var(--color-border)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                      <div>
+                        <div style={{ fontWeight: 500, fontSize: '14px' }}>{v.companyName}</div>
+                        <div style={{ fontSize: '12px', color: 'var(--color-text-muted)' }}>{v.contactName}</div>
+                      </div>
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', alignItems: 'flex-end' }}>
+                        {v.licenseStatus && (
+                          <span style={{ fontSize: '12px', fontWeight: 600, color: v.licenseStatus === 'expired' ? 'var(--color-danger)' : '#ca8a04' }}>
+                            License {v.licenseStatus === 'expired' ? 'expired' : 'expiring'} {v.licenseExpiresAt ? new Date(v.licenseExpiresAt).toLocaleDateString() : ''}
+                          </span>
+                        )}
+                        {v.insuranceStatus && (
+                          <span style={{ fontSize: '12px', fontWeight: 600, color: v.insuranceStatus === 'expired' ? 'var(--color-danger)' : '#ca8a04' }}>
+                            Insurance {v.insuranceStatus === 'expired' ? 'expired' : 'expiring'} {v.insuranceExpiresAt ? new Date(v.insuranceExpiresAt).toLocaleDateString() : ''}
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+        </ModuleGate>
       )}
 
       {/* Recent Messages */}
