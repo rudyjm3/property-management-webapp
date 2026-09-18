@@ -452,6 +452,63 @@ export const api = {
         `/api/v1/organizations/${_orgId}/properties/${propertyId}/units/${unitId}/inspections/${inspectionId}/media`
       ),
   },
+  // Grounds & Property Maintenance (Module 3) — gated by activeModules.
+  maintenanceSchedules: {
+    list: (propertyId: string) =>
+      apiFetch<any[]>(`/api/v1/organizations/${_orgId}/properties/${propertyId}/maintenance-schedules`),
+    create: (propertyId: string, data: any) =>
+      apiFetch<any>(`/api/v1/organizations/${_orgId}/properties/${propertyId}/maintenance-schedules`, {
+        method: 'POST',
+        body: JSON.stringify(data),
+      }),
+    update: (propertyId: string, scheduleId: string, data: any) =>
+      apiFetch<any>(
+        `/api/v1/organizations/${_orgId}/properties/${propertyId}/maintenance-schedules/${scheduleId}`,
+        { method: 'PATCH', body: JSON.stringify(data) }
+      ),
+    delete: (propertyId: string, scheduleId: string) =>
+      apiFetch<void>(
+        `/api/v1/organizations/${_orgId}/properties/${propertyId}/maintenance-schedules/${scheduleId}`,
+        { method: 'DELETE' }
+      ),
+  },
+  // Property-scoped (grounds/common-area) inspections — Module 3, reuses
+  // Module 6's Inspection/InspectionMedia models scoped to a property.
+  propertyInspections: {
+    list: (propertyId: string) =>
+      apiFetch<any[]>(`/api/v1/organizations/${_orgId}/properties/${propertyId}/inspections`),
+    create: (propertyId: string, data: any) =>
+      apiFetch<any>(`/api/v1/organizations/${_orgId}/properties/${propertyId}/inspections`, {
+        method: 'POST',
+        body: JSON.stringify(data),
+      }),
+    complete: (propertyId: string, inspectionId: string, data: any) =>
+      apiFetch<any>(
+        `/api/v1/organizations/${_orgId}/properties/${propertyId}/inspections/${inspectionId}/complete`,
+        { method: 'POST', body: JSON.stringify(data) }
+      ),
+    cancel: (propertyId: string, inspectionId: string) =>
+      apiFetch<any>(
+        `/api/v1/organizations/${_orgId}/properties/${propertyId}/inspections/${inspectionId}/cancel`,
+        { method: 'POST' }
+      ),
+    requestMediaUploadUrl: (propertyId: string, inspectionId: string, fileName: string, contentType: string) =>
+      apiFetch<{ uploadUrl: string; storageKey: string; expiresInSeconds: number }>(
+        `/api/v1/organizations/${_orgId}/properties/${propertyId}/inspections/${inspectionId}/media/upload-url`,
+        { method: 'POST', body: JSON.stringify({ fileName, contentType }) }
+      ),
+    attachMedia: (
+      propertyId: string,
+      inspectionId: string,
+      data: { storageKey: string; mediaType: string; capturedAt?: string | null; latitude?: number | null; longitude?: number | null }
+    ) =>
+      apiFetch<any>(
+        `/api/v1/organizations/${_orgId}/properties/${propertyId}/inspections/${inspectionId}/media`,
+        { method: 'POST', body: JSON.stringify(data) }
+      ),
+    listMedia: (propertyId: string, inspectionId: string) =>
+      apiFetch<any[]>(`/api/v1/organizations/${_orgId}/properties/${propertyId}/inspections/${inspectionId}/media`),
+  },
   inspectionTemplates: {
     list: () => apiFetch<any[]>(`/api/v1/organizations/${_orgId}/inspection-templates`),
     get: (templateId: string) => apiFetch<any>(`/api/v1/organizations/${_orgId}/inspection-templates/${templateId}`),
@@ -879,6 +936,17 @@ export const api = {
       query.set('periodEnd', params.periodEnd);
       if (params.propertyId) query.set('propertyId', params.propertyId);
       return apiFetch<any>(`/api/v1/organizations/${_orgId}/reports/schedule-e-export?${query.toString()}`);
+    },
+    // Grounds & Property Maintenance (Module 3) — task completion history and
+    // photo-compliance rate per property. Gated behind both grounds_maintenance
+    // and reporting_analytics (see reports.ts).
+    groundsMaintenanceCompliance: (params?: { propertyId?: string; periodStart?: string; periodEnd?: string }) => {
+      const query = new URLSearchParams();
+      if (params?.propertyId) query.set('propertyId', params.propertyId);
+      if (params?.periodStart) query.set('periodStart', params.periodStart);
+      if (params?.periodEnd) query.set('periodEnd', params.periodEnd);
+      const qs = query.toString();
+      return apiFetch<any>(`/api/v1/organizations/${_orgId}/reports/grounds-maintenance-compliance${qs ? `?${qs}` : ''}`);
     },
     savedReports: {
       list: () => apiFetch<any[]>(`/api/v1/organizations/${_orgId}/reports/saved`),

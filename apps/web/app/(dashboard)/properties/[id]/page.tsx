@@ -5,6 +5,8 @@ import { useParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { api } from '@/lib/api';
 import DocumentPanel from '@/components/DocumentPanel';
+import ModuleGate from '@/components/ModuleGate';
+import GroundsMaintenanceCard from '@/components/GroundsMaintenanceCard';
 import { useAuth } from '@/contexts/AuthContext';
 import BulkCreateModal from './BulkCreateModal';
 
@@ -706,6 +708,10 @@ export default function PropertyDetailPage() {
           )}
         </div>
       )}
+
+      <ModuleGate module="grounds_maintenance">
+        <GroundsMaintenanceCard propertyId={propertyId} />
+      </ModuleGate>
 
       {!isMaintenance && <DocumentPanel entityType="property" entityId={propertyId} />}
 

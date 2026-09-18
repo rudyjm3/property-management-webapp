@@ -27,6 +27,7 @@ import {
   INSPECTION_TYPES,
   INSPECTION_STATUSES,
   INSPECTION_MEDIA_TYPES,
+  MAINTENANCE_CADENCES,
 } from '../constants';
 
 // ─── Organization ─────────────────────────────────────────────────────────────
@@ -681,3 +682,43 @@ export const createInspectionTemplateSchema = z.object({
 });
 
 export const updateInspectionTemplateSchema = createInspectionTemplateSchema.partial();
+
+// ─── Maintenance Schedule (Grounds & Property Maintenance / Module 3) ─────────
+
+export const createMaintenanceScheduleSchema = z.object({
+  title: z.string().min(1).max(200),
+  category: z.enum(WORK_ORDER_CATEGORIES).default('grounds'),
+  locationType: z.enum(WORK_ORDER_LOCATION_TYPES).nullable().optional(),
+  description: z.string().max(4000).nullable().optional(),
+  cadence: z.enum(MAINTENANCE_CADENCES),
+  vendorId: z.string().uuid().nullable().optional(),
+  nextDueDate: z.string().date(),
+  active: z.boolean().optional(),
+});
+
+export const updateMaintenanceScheduleSchema = z.object({
+  title: z.string().min(1).max(200).optional(),
+  category: z.enum(WORK_ORDER_CATEGORIES).optional(),
+  locationType: z.enum(WORK_ORDER_LOCATION_TYPES).nullable().optional(),
+  description: z.string().max(4000).nullable().optional(),
+  cadence: z.enum(MAINTENANCE_CADENCES).optional(),
+  vendorId: z.string().uuid().nullable().optional(),
+  nextDueDate: z.string().date().optional(),
+  active: z.boolean().optional(),
+});
+
+// ─── Property-scoped (grounds/common-area) inspections — Module 3 ────────────
+// Reuses the Inspection/InspectionMedia models from Module 6, scoped to a
+// Property instead of a Unit. type is always 'grounds' server-side, so no
+// `type` field is accepted here (unlike createInspectionSchema).
+
+export const createPropertyInspectionSchema = z.object({
+  scheduledAt: z.string().datetime().nullable().optional(),
+  inspectorUserId: z.string().uuid().nullable().optional(),
+  notes: z.string().max(4000).nullable().optional(),
+});
+
+export const completePropertyInspectionSchema = z.object({
+  notes: z.string().max(4000).nullable().optional(),
+  completedAt: z.string().datetime().nullable().optional(),
+});

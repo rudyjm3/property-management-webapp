@@ -19,6 +19,13 @@ const requireManagerAccess = requireRoles(['owner', 'manager']);
 // itself stays under financial-summary/Module 11 (see docs/reference/modules.md
 // for why); this only gates the tax-export extension.
 const requireAccountingModule = requireModule(MODULE_KEYS.ADVANCED_PAYMENTS_ACCOUNTING);
+// Grounds maintenance compliance is a Grounds & Property Maintenance
+// (Module 3) feature layered on top of this router's Reporting & Analytics
+// (Module 11) gate, the same stacking pattern as Schedule E export above —
+// an org needs both modules active to see it. Kept here (rather than under
+// its own module's routes) since it's a report alongside the rest of this
+// router's reports, not a grounds-maintenance CRUD operation.
+const requireGroundsMaintenanceModule = requireModule(MODULE_KEYS.GROUNDS_MAINTENANCE);
 
 // GET /api/v1/organizations/:orgId/reports/financial-summary
 router.get('/financial-summary', requireManagerAccess, async (req: Request, res: Response, next: NextFunction) => {
@@ -75,6 +82,29 @@ router.get('/schedule-e-export', requireManagerAccess, requireAccountingModule, 
     next(err);
   }
 });
+
+// GET /api/v1/organizations/:orgId/reports/grounds-maintenance-compliance
+// Grounds & Property Maintenance (Module 3) — task completion history and
+// photo-compliance rate for MaintenanceSchedule-generated work orders, per
+// property, plus completed grounds-inspection counts.
+router.get(
+  '/grounds-maintenance-compliance',
+  requireManagerAccess,
+  requireGroundsMaintenanceModule,
+  async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const { propertyId, periodStart, periodEnd } = req.query as Record<string, string | undefined>;
+      const data = await reportService.getGroundsMaintenanceCompliance(req.params.orgId as string, {
+        propertyId,
+        periodStart,
+        periodEnd,
+      });
+      res.json({ data });
+    } catch (err) {
+      next(err);
+    }
+  }
+);
 
 // GET /api/v1/organizations/:orgId/reports/vacancy-snapshot
 router.get('/vacancy-snapshot', requireManagerAccess, async (req: Request, res: Response, next: NextFunction) => {

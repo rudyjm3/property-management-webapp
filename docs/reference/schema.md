@@ -41,7 +41,9 @@ Manager-side account (owner/manager/maintenance staff).
 - `unitCount, amenities[], yearBuilt?`
 - `taxParcelId? [deferred: Advanced Payments & Accounting]`
 - `insurancePolicyNumber?, insuranceExpiresAt?`
-- Has many: units, workOrders, propertyOwners, ownerStatements
+- Has many: units, workOrders, propertyOwners, ownerStatements, inspections
+  `[Grounds & Property Maintenance — property-scoped/grounds inspections only]`,
+  maintenanceSchedules `[Grounds & Property Maintenance]`
 
 ## Unit
 - `id, propertyId(FK), unitNumber` — `@@unique([propertyId, unitNumber])`
@@ -90,9 +92,9 @@ Inspections & Compliance module (gated) — configurable checklist template.
 - Has many: inspections (via `Inspection.templateId`)
 
 ## Inspection
-Inspections & Compliance module (gated) — move-in/move-out/scheduled/annual/semi-annual inspection records.
-- `id, organizationId(FK), unitId(FK), leaseId?(FK)` — nullable lease link so move-in/move-out inspections can be tied to the specific lease they're comparing for deposit purposes; ad hoc/annual/semi-annual inspections typically have no lease.
-- `type: InspectionType(move_in|move_out|scheduled|annual|semi_annual)`
+Inspections & Compliance module (gated) — move-in/move-out/scheduled/annual/semi-annual inspection records. As of Grounds & Property Maintenance (Module 3, gated separately behind `grounds_maintenance`), also used for property-scoped common-area/grounds inspections (`type: grounds`) — see the propertyId note below.
+- `id, organizationId(FK), unitId?(FK, ON DELETE RESTRICT), propertyId?(FK, ON DELETE SET NULL), leaseId?(FK)` — exactly one of `unitId`/`propertyId` is set (enforced in `inspection.service.ts`, not a DB constraint): unit-scoped for `move_in|move_out|scheduled|annual|semi_annual` (Module 6, unchanged), property-scoped for `grounds` (Module 3, new). `unitId`'s FK is explicitly `ON DELETE RESTRICT` (set via `@relation(..., onDelete: Restrict)` in the schema, since Prisma's implicit default for a now-optional relation is `SET NULL`) so a unit with unit-scoped inspections on file still can't be deleted — the same behavior Module 6 originally had, preserved despite `unitId` becoming nullable. `leaseId` only ever applies to unit-scoped inspections — nullable lease link so move-in/move-out inspections can be tied to the specific lease they're comparing for deposit purposes.
+- `type: InspectionType(move_in|move_out|scheduled|annual|semi_annual|grounds)` — `grounds` added by Module 3
 - `status: InspectionStatus(scheduled|in_progress|completed|cancelled)`, default `scheduled`
 - `scheduledAt?, completedAt?`
 - `inspectorUserId?(FK → User, "InspectionInspector")` — assigned staff inspector; a `maintenance`-role user may only complete an inspection where they're the assigned inspector (owner/manager may complete any).
@@ -101,7 +103,8 @@ Inspections & Compliance module (gated) — move-in/move-out/scheduled/annual/se
 - `notes?` — overall inspection notes.
 - Signature capture (typed-name attestation, mirrors `lease-esignature.service.ts` — **not** a canvas-drawn image; see `modules.md`): `tenantSignatureName?/tenantSignatureAt?/tenantSignatureIp?`, `managerSignatureName?/managerSignatureAt?/managerSignatureIp?`. Both are captured on the same `/complete` request (a manager/inspector-device walkthrough), not via a separate tenant-facing public signing link.
 - Has many: media (`InspectionMedia`, cascade delete), `depositsAsMoveIn`/`depositsAsMoveOut` (`SecurityDepositDisposition`, reverse of its `moveInInspectionId`/`moveOutInspectionId`)
-- Completing an inspection (`POST .../inspections/:id/complete`) advances `Unit.lastInspectionAt` forward-only — see the Unit entry above.
+- Completing a unit-scoped inspection (`POST .../units/:unitId/inspections/:id/complete`) advances `Unit.lastInspectionAt` forward-only — see the Unit entry above.
+- **Property-scoped (`type: grounds`) inspections** — Module 3's inspection log — are created/completed via a separate, parallel set of endpoints (`.../properties/:propertyId/inspections[/:id]`, `inspection.service.ts`'s `*PropertyInspection*` functions), not the unit-scoped functions above, since every unit-scoped function hard-requires `unitId`. They never use `leaseId`, `templateId`, `checklistResults`, or signature capture — those fields stay empty/null. Completing one (`POST .../properties/:propertyId/inspections/:id/complete`) enforces a real completion-photo requirement: it 400s with `PHOTO_REQUIRED` unless at least one `InspectionMedia` row with `mediaType: photo` already exists for that inspection. This does **not** advance `Unit.lastInspectionAt` (there is no unit).
 
 ## InspectionMedia
 Photo/video documentation attached to an `Inspection`.
@@ -202,8 +205,9 @@ details).
 - `status: DisbursementStatus(pending|completed|cancelled)`, `referenceNote?, disbursedAt?`
 
 ## WorkOrder
-- `id` — nullable FKs to `unitId?, propertyId?, tenantId?, assignedToUserId?, submittedByUserId?, vendorId?, applianceId?` (property-level orders have no unit)
+- `id` — nullable FKs to `unitId?, propertyId?, tenantId?, assignedToUserId?, submittedByUserId?, vendorId?, applianceId?, scheduleId?` (property-level orders have no unit)
 - `applianceId? [Unit Intelligence & Appliance Registry]` — optional link to a specific `Appliance`; the API verifies the appliance belongs to the *same* `unitId` as the work order (or rejects it) and property-level orders can never have one. `ON DELETE SET NULL` — deleting the appliance never deletes the work order.
+- `scheduleId? (FK → MaintenanceSchedule, ON DELETE SET NULL) [Grounds & Property Maintenance]` — set when this work order was auto-generated by a `MaintenanceSchedule`'s recurrence job (`groundsMaintenanceJob.ts`) rather than created directly. The FK itself is `SET NULL` at the DB level, but `deleteMaintenanceSchedule` (`maintenance-schedule.service.ts`) refuses to delete a schedule that has generated any work orders (`400 SCHEDULE_HAS_HISTORY`) specifically so that `SET NULL` path is never hit in practice — pausing (`active: false`) is the supported way to stop a schedule without losing its history from the compliance report, which only counts work orders whose `scheduleId` is still set. When set, `scheduledAt` (below) is the schedule's due date at generation time (UTC midnight); the compliance report (`GET .../reports/grounds-maintenance-compliance`) compares `completedAt` against the *end* of that due date, not the midnight instant itself, so a same-day completion counts as on time.
 - `title?, category: WorkOrderCategory(plumbing|electrical|hvac|appliance|pest|structural|cosmetic|grounds|general|other)`
 - `priority: WorkOrderPriority(emergency|urgent|routine, + legacy low|normal)`
 - `status: WorkOrderStatus(new_order|assigned|in_progress|pending_parts|completed|closed|cancelled)`
@@ -221,7 +225,24 @@ details).
 - `specialties[], status: VendorStatus(active|inactive), preferred?, rating?`
 - `licenseNumber?, licenseExpiresAt?, insuranceOnFile, insuranceExpiresAt?`
 - `w9OnFile? [deferred: Vendor & Contractor Management / 1099 accounting]`
-- Has many: workOrders
+- Has many: workOrders, maintenanceSchedules `[Grounds & Property Maintenance]`
+
+## MaintenanceSchedule
+Grounds & Property Maintenance module (gated behind `grounds_maintenance`) —
+the net-new piece of Module 3. Recurring task scheduling for common-area work
+(landscaping, HVAC filter changes, pest control, etc); generates real
+`WorkOrder` records on a fixed cadence, mirroring how `rentGenerationJob.ts`
+generates monthly `Payment` records from active leases — see
+`groundsMaintenanceJob.ts`.
+- `id, organizationId(FK), propertyId(FK), vendorId?(FK → Vendor, ON DELETE SET NULL)` — optional preferred/default vendor, auto-assigned onto each generated `WorkOrder.vendorId`
+- `title, category: WorkOrderCategory` (default `grounds`, same enum `WorkOrder.category` uses), `locationType?: WorkOrderLocationType`, `description?`
+- `cadence: MaintenanceCadence(weekly|monthly|quarterly|semi_annual|annual)` — a fixed set of cadences, **not** a full cron-style recurrence-rule engine (no "every 2nd Tuesday", no custom day-of-month/interval); see `modules.md`
+- `active` (default `true`) — pausing a schedule stops it from generating new work orders without losing its history or configuration
+- `nextDueDate` (date-only) — the next date the recurrence job generates a `WorkOrder` for this schedule; advanced forward by `cadence` from its own previous value each time (never from "now", and clamped to the target month's last valid day rather than overflowing — e.g. a Jan 31 monthly schedule advances to Feb 28, not Mar 3), so a paused-then-reactivated schedule resumes on its original cadence alignment rather than drifting
+- `lastGeneratedAt?` — timestamp of the most recent generation
+- **Concurrency**: `generateWorkOrderForSchedule` (`maintenance-schedule.service.ts`) claims a due occurrence with a conditional `updateMany` (`WHERE id = :id AND nextDueDate = :theDueDateItRead`) before creating the `WorkOrder`, inside the same transaction — if two job runs or API instances race on the same schedule, the loser's update matches zero rows and it skips creating a duplicate work order for that occurrence.
+- **Deletion is blocked once a schedule has generated history** (`400 SCHEDULE_HAS_HISTORY`) — `WorkOrder.scheduleId` is `ON DELETE SET NULL` at the DB level, but letting a delete through would silently drop that schedule's generated work orders out of the compliance report (which only counts work orders with `scheduleId` still set); pause (`active: false`) instead.
+- Has many: workOrders (via `WorkOrder.scheduleId`)
 
 ## Message
 - `id, organizationId(FK), threadId?, unitId?(FK), workOrderId?(FK)`

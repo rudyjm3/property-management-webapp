@@ -15,9 +15,10 @@ gating infrastructure" below — and is wired to the two modules that had
 shipped ahead of it, Module 9 (Owner Portal) and Module 11 (Reporting &
 Analytics), the screening step of Module 1 (Advanced Tenant Onboarding),
 Module 4 (Advanced Payments & Accounting), Module 2 (Unit Intelligence &
-Appliance Registry), and now Module 6 (Inspections & Compliance), all built
-across this and prior updates. No other module has functionality built
-yet, so no other module needs gating today. Full Stripe Subscription Item
+Appliance Registry), Module 6 (Inspections & Compliance), and now Module 3
+(Grounds & Property Maintenance), all built across this and prior updates.
+No other module has functionality built yet, so no other module needs
+gating today. Full Stripe Subscription Item
 billing is still
 not wired — see the "How activation works today" section for the interim
 mechanism. What exists beyond gating is (a) base schema columns kept
@@ -32,7 +33,8 @@ with what a module will later extend.
   Holds module keys, defined in `packages/shared/src/constants/index.ts` as
   `MODULE_KEYS` (`owner_portal`, `reporting_analytics`,
   `advanced_tenant_onboarding`, `advanced_payments_accounting`,
-  `unit_intelligence`, `inspections_compliance`) / `ALL_MODULE_KEYS`.
+  `unit_intelligence`, `inspections_compliance`, `grounds_maintenance`) /
+  `ALL_MODULE_KEYS`.
 - **API middleware**: `requireModule(moduleKey)`
   (`apps/api/src/middleware/module-gate.ts`) — looks up the requesting org's
   `activeModules` fresh per request and returns `403 MODULE_NOT_ACTIVE` if
@@ -57,7 +59,17 @@ with what a module will later extend.
     whole `inspection-templates.ts` router at its
     `/organizations/:orgId/inspection-templates` mount in `routes/index.ts`
     (org-level checklist template CRUD, since templates aren't scoped to a
-    single unit).
+    single unit). Module 3 (Grounds & Property Maintenance) uses the same
+    router-mount pattern one level deeper again, but directly inside
+    `apps/api/src/routes/properties.ts` rather than `units.ts` since both of
+    its features are property-scoped, not unit-scoped:
+    `requireModule('grounds_maintenance')` is applied to the whole
+    `maintenance-schedules.ts` router at its
+    `/:propertyId/maintenance-schedules` mount and separately to the whole
+    `property-inspections.ts` router at its `/:propertyId/inspections`
+    mount (a distinct route file and mount point from the unit-scoped
+    `/:unitId/inspections` → `inspections.ts` above, gated by
+    `inspections_compliance` instead — the two never share a mount).
   - **Per-route gating**: in `apps/api/src/routes/applications.ts`, to just
     the screening endpoints (`POST`/`GET .../applications/:id/screening`)
     — the rest of that router (application links, review, e-sign) ships
@@ -79,7 +91,14 @@ with what a module will later extend.
     & Compliance) adds one more per-route instance: `GET
     .../leases/:leaseId/inspections/compare` in `apps/api/src/routes/leases.ts`,
     the move-in vs. move-out comparison endpoint (per-route because the rest
-    of `leases.ts` is base product / gated by Module 4 instead).
+    of `leases.ts` is base product / gated by Module 4 instead). Module 3
+    (Grounds & Property Maintenance) adds one per-route instance of its own:
+    `GET .../reports/grounds-maintenance-compliance` in
+    `apps/api/src/routes/reports.ts`, stacked on top of that router's
+    `reporting_analytics` mount-level gate the same way Schedule E export
+    is — an org needs both `grounds_maintenance` and `reporting_analytics`
+    active to see it. See Module 3's row below for why this report sits
+    under `reports.ts` rather than its own module's route file.
   The public, unauthenticated screening-consent capture on
   `POST /apply/:token` (no `req.user`/`req.owner`/`req.tenant` to resolve an
   org from) is instead checked directly in
@@ -120,7 +139,18 @@ with what a module will later extend.
   photo-and-signature-capture / completion view — which isn't itself gated
   (it's only ever linked to from already-gated UI) and isn't in the sidebar
   nav, mirroring how Module 2 avoided nav complexity by keeping everything
-  reachable from the unit page.
+  reachable from the unit page. Module 3 (Grounds & Property Maintenance)
+  also has no standalone page or nav item — a single `GroundsMaintenanceCard`
+  component (combining the recurring-schedules table and the grounds
+  inspection log, since both are property-scoped) is wrapped in
+  `<ModuleGate module="grounds_maintenance">` on the property detail page
+  (`/properties/[id]`), and the new "Grounds Maintenance" tab on `/reports`
+  is likewise gated (with its own tab-visibility check additionally
+  requiring `reporting_analytics`, the same pattern the Schedule E tab
+  uses). Photo upload for a grounds inspection is handled inline in that
+  card (file input → presigned upload URL → attach) rather than reusing the
+  unit-scoped `/inspections/[id]` page, since that page assumes a unitId
+  throughout.
 - **How activation works today**: no Stripe Subscription Item billing yet.
   Instead, `PATCH /organizations/:orgId` accepts an `activeModules` array
   (validated against `ALL_MODULE_KEYS`), settable by any `owner`/`manager` —
@@ -128,7 +158,7 @@ with what a module will later extend.
   the web app. This is a placeholder switch to make gating testable, not a
   billing decision; it should move behind an actual paid-subscription check
   once module billing ships. The seed script's demo org
-  (`packages/db/prisma/seed.ts`) defaults all six gated modules to active
+  (`packages/db/prisma/seed.ts`) defaults all seven gated modules to active
   so local dev/demo environments see the gated features without an extra
   step.
 
@@ -157,7 +187,7 @@ forward-only conditional update (see `schema.md`'s Unit entry).
 |---|---|---|---|---|---|
 | 1 | Advanced Tenant Onboarding | $25–40/mo | High | `ssnFullEncrypted`, `screeningConsentAt`, `govtIdNumber`, `govtIdType` (Tenant + RentalApplication) — application form + e-signature ship ungated as base product (`routes/apply.ts`, `routes/sign.ts`, `rental-application.service.ts`); **screening step gated + shipped (2026-09-17)**: consent + encrypted SSN/govt ID capture on the application form, a `ScreeningCheck` model, manager trigger/review UI (`applications/:id`), and approve/deny driving the existing tenant+lease path. `requireModule('advanced_tenant_onboarding')` on the screening endpoints only (rest of `applications.ts` stays ungated). **TransUnion SmartMove call is mocked** (`screening-provider.client.ts`) — no credentials in any environment | Lease Mgmt, Stripe, Resend, 3rd-party screening API |
 | 2 | Unit Intelligence & Appliance Registry | $20–35/mo | High | **Fully shipped (2026-09-17)**: a new `Appliance` model (`unitId` FK, category, make/model/serial, purchase/install dates, warranty expiry, `status: active\|removed`, `removedAt`, `replacesApplianceId` self-relation) with CRUD at `.../units/:unitId/appliances[/:applianceId]`, gated behind `requireModule('unit_intelligence')` at that router's mount in `units.ts`. Maintenance cost tracking reuses `WorkOrder.laborCost/partsCost/totalCost` via a new optional `WorkOrder.applianceId` FK (`ON DELETE SET NULL`) — each appliance exposes a summed `totalMaintenanceCost` and its linked-work-order history. Age-based replacement alerts are computed on read from a per-category expected-lifespan heuristic (`APPLIANCE_EXPECTED_LIFESPAN_YEARS`), not manufacturer data, and are **not** surfaced on the dashboard — only as a badge in the unit detail appliance table. QR labels are generated client-side (`qrcode` npm package, no new endpoint) and link to the unit detail page with `?appliance=<id>` — there's **no separate per-appliance detail page**. `Unit.applianceCount` is recomputed via `appliance.count()` (filtered to `status: active`) on every create/delete/retire/replace (not an in-place increment, since that column defaults to `null` and Postgres NULL-propagation would otherwise leave a naive `{ increment: 1 }` permanently null). **Appliance replacement history**: `POST .../appliances/:id/retire` marks an appliance removed (no replacement), and `POST .../appliances/:id/replace` retires the old appliance and creates a new one in one step, linked via `replacesApplianceId` — the unit page shows a "Current Appliances" section and a separate "Appliance History" section with install→removed date ranges and cross-links between an appliance and what replaced it. **Not built**: appliance photo/document attachments (no S3 hookup despite S3 being a listed dependency), manufacturer-specific lifespan/recall data. See `BUILD_OUTLINE.md` §14 Module 2 for the full breakdown. | Unit Mgmt, S3 |
-| 3 | Grounds & Property Maintenance | $25–40/mo | Medium | none dedicated — reuses WorkOrder + Vendor | Work Orders, Vendor |
+| 3 | Grounds & Property Maintenance | $25–40/mo | Medium | **Gated + shipped (2026-09-18)**: a new `MaintenanceSchedule` model (`property`, `title`, `category`/`locationType` reusing `WorkOrder`'s own enums, `cadence: weekly\|monthly\|quarterly\|semi_annual\|annual`, `vendorId?`, `nextDueDate`, `active`) with CRUD at `.../properties/:propertyId/maintenance-schedules[/:scheduleId]`, gated behind `requireModule('grounds_maintenance')` at that router's mount in `properties.ts`. A daily job (`groundsMaintenanceJob.ts`) generates a real `WorkOrder` per due, active schedule — **fixed cadence set, not a full cron-style recurrence-rule engine**, and a schedule missed for multiple periods only backfills one work order per run. `MaintenanceSchedule.vendorId` (reusing `Vendor`, not a new model) auto-populates the generated `WorkOrder.vendorId` and auto-assigns its status — **a single preferred vendor per schedule**, not Module 5's fuller per-category vendor logic. The inspection log reuses Module 6's `Inspection`/`InspectionMedia` models: `Inspection.unitId` is now nullable, a nullable `propertyId` FK was added, and a new `InspectionType.grounds` value marks a property-scoped common-area inspection — created/completed through a **separate, parallel set of functions/routes** (`.../properties/:propertyId/inspections[/:id]`) since Module 6's unit-scoped functions all hard-require `unitId`; grounds inspections skip checklist templates, leases, and signature capture. **The completion-photo requirement is real and server-enforced**: completing one 400s with `PHOTO_REQUIRED` unless at least one photo `InspectionMedia` row already exists. Task completion/compliance reporting ships as `GET .../reports/grounds-maintenance-compliance` (per property: generated count, on-time vs. late completions, open-and-overdue count, photo-compliance rate, completed-grounds-inspection count), gated behind **both** `grounds_maintenance` and `reporting_analytics` (stacked on `reports.ts`'s Module 11 mount-level gate, same pattern as Schedule E export) — recurring task generation and the grounds inspection log are **independent mechanisms**, not cross-linked, so photo compliance there reflects `WorkOrder.photosAfter` only, not whether a matching inspection was also logged. No standalone page for either feature — both live as a single `GroundsMaintenanceCard` on the property detail page, `<ModuleGate module="grounds_maintenance">`-wrapped, plus a gated "Grounds Maintenance" tab on `/reports`. See `BUILD_OUTLINE.md` §14 Module 3 for the full breakdown. | Work Orders, Vendor |
 | 4 | Advanced Payments & Accounting | $30–50/mo | Medium | `taxParcelId` (Property) — used by the Schedule E export. **Gated + shipped (2026-09-17)**: card payments alongside ACH (`initiate-card` on both manager and tenant payment routes); partial payment recording with balance carry-forward, *manager-recorded payments only* (`Payment.record-partial`) — no partial support in the self-service ACH/card checkout flow; a `SecurityDepositDisposition` model formalizing the deposit-vs-deductions math the move-out workflow already computes (reconciled against itemized deductions; as of Module 6 shipping, also linked to the lease's completed move-in/move-out `Inspection` records when they exist, via `moveInInspectionId`/`moveOutInspectionId` — free-text condition notes remain for leases with no inspection on file); a `Disbursement` model computing a configurable management-fee deduction against an `OwnerStatement.distributionAmount` — **bookkeeping only, no payout wiring** since Owner Portal has no owner bank-account capture; a Schedule E data export (`GET /reports/schedule-e-export`) gated behind both `advanced_payments_accounting` and `reporting_analytics`. P&L by property is **not** duplicated here — see the "Notes on base-product overlap" section below for why it stays under Module 11. `requireModule('advanced_payments_accounting')` applied per-route across `payments.ts`, `tenants-portal.ts`, `leases.ts`, `owners.ts`, and `reports.ts` — see "Module gating infrastructure" above | Stripe, Payment Ledger, Owner Portal (for disbursements) |
 | 5 | Vendor & Contractor Management | $20–30/mo | Medium | `w9OnFile` (Vendor) | Work Orders |
 | 6 | Inspections & Compliance | $25–40/mo | Medium | `lastInspectionAt` (Unit) — no longer dormant, see above. **Gated + shipped (2026-09-18)**: an `Inspection` model (`unitId` FK, nullable `leaseId` FK, `type: move_in\|move_out\|scheduled\|annual\|semi_annual`, `status: scheduled\|in_progress\|completed\|cancelled`, `scheduledAt`/`completedAt`, nullable `inspectorUserId` FK to `User`, nullable `templateId` FK, `checklistResults: Json`, `notes`) with CRUD + schedule + assign-inspector + complete + cancel at `.../units/:unitId/inspections[/:inspectionId]`, gated behind `requireModule('inspections_compliance')` at that router's mount in `units.ts` (same pattern as Module 2's appliances). An `InspectionTemplate` model (`checklistItems: Json` array of `{section, item, description?}`) provides **real per-org stored checklist data with basic CRUD** — but v1 ships a single seeded default template (kitchen/bathrooms/bedrooms/living areas/exterior/appliances/safety devices) rather than a full property-type-aware template picker; **do not describe this as fully configurable per property type**. An `InspectionMedia` model reuses the exact `storage.service.ts` presigned-upload pattern (`Document`/`WorkOrder` photos) for photo/video attachments, with `capturedAt` always populated and `latitude`/`longitude` captured **best-effort only** via the browser Geolocation API — permission-gated, and built/tested in a non-mobile web session, so GPS population from a real device is **unverified**, not confirmed working. Signature capture uses a **typed attestation name + IP + timestamp** (mirrors `lease-esignature.service.ts`'s e-sign flow), **not** a canvas-drawn image — both tenant and manager signatures are captured on the same `/complete` request as a manager/inspector-device walkthrough, not a separate tenant-facing public signing link. Completing an inspection advances `Unit.lastInspectionAt` forward-only via a conditional `updateMany`. A move-in vs. move-out comparison endpoint (`GET .../leases/:leaseId/inspections/compare`, gated per-route in `leases.ts`) diffs the two inspections' checklist results by section+item — the basis for `SecurityDepositDisposition`'s now-real `moveInInspectionId`/`moveOutInspectionId` linkage (see Module 4's row above). PDF report generation is **client-side only** (`apps/web/lib/exportInspectionPdf.ts`, `jspdf` — the existing web dependency, no new server-side PDF library added), listing photo/video references by storage key rather than embedding images. **Not built**: a property-type-aware template picker UI, verified GPS capture from a real device, canvas-drawn signatures, and a public tenant-facing inspection-signing link. See `BUILD_OUTLINE.md` §14 Module 6 for the full breakdown. | Unit Mgmt, S3 |
@@ -277,3 +307,28 @@ PDF report generation stays client-side (`jspdf`, already a web dependency)
 rather than adding a server-side PDF library. See the module table above and
 `BUILD_OUTLINE.md` §14 Module 6 for the full breakdown of what shipped vs.
 what's simplified.
+
+**Module 3 (Grounds & Property Maintenance)** is the first module to reuse
+*both* an existing domain model (`WorkOrder`/`Vendor`, per its original
+"no dedicated schema hooks" note, now removed) and another module's newer
+models (`Inspection`/`InspectionMedia` from Module 6) rather than starting
+from a blank schema. The one genuinely new model is `MaintenanceSchedule`
+— the recurrence piece the module spec calls out as the core net-new
+feature. Two things to call out precisely, matching this series' pattern of
+being explicit about what's simplified: (1) **recurrence is a fixed cadence
+set** (weekly/monthly/quarterly/semi-annual/annual) generated by a daily
+job, not a general-purpose cron/RRULE engine — there's no support for
+custom intervals or specific weekdays/dates, and a schedule that missed
+several periods only ever generates one catch-up work order per job run;
+(2) **the recurring-task generator and the grounds inspection log don't
+talk to each other** — a `MaintenanceSchedule`-generated `WorkOrder` is
+never required to have (or automatically linked to) a corresponding
+`grounds`-type `Inspection`, so the compliance report's photo-compliance
+rate and its grounds-inspection count are reported as two separate numbers,
+not reconciled against each other. Extending Module 6's `Inspection` model
+to be property-scoped (nullable `unitId`, new nullable `propertyId`) rather
+than adding a second inspection table was a deliberate schema choice — see
+`schema.md`'s `Inspection` entry and the note there on why the property-
+scoped code path is a parallel set of functions rather than a shared one.
+See the module table above and `BUILD_OUTLINE.md` §14 Module 3 for the full
+breakdown of what shipped vs. what's simplified.

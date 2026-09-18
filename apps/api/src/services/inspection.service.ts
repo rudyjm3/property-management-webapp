@@ -410,6 +410,204 @@ function keyOf(r: ChecklistResult) {
   return `${r.section}::${r.item}`;
 }
 
+// ─── Property-scoped (grounds/common-area) inspections — Module 3 ─────────
+// Grounds & Property Maintenance's "inspection log with completion-photo
+// requirement" reuses the Inspection/InspectionMedia models above rather
+// than a second, parallel table — see docs/reference/modules.md. These are
+// separate functions from the unit-scoped ones above (rather than making
+// unitId/propertyId both optional throughout) because every existing
+// function above hard-requires a unitId; property-scoped inspections always
+// have type 'grounds', no lease/template/checklist, and a real photo
+// requirement enforced at completion, so the two code paths diverge enough
+// that sharing them would mean threading unitId-or-propertyId through every
+// function above for no real reuse benefit.
+
+async function verifyPropertyForInspection(organizationId: string, propertyId: string) {
+  const property = await prisma.property.findFirst({
+    where: { id: propertyId, organizationId },
+    select: { id: true },
+  });
+  if (!property) {
+    throw new AppError(404, 'PROPERTY_NOT_FOUND', 'Property not found in your organization.');
+  }
+}
+
+async function getExistingPropertyInspection(propertyId: string, inspectionId: string) {
+  const existing = await prisma.inspection.findFirst({ where: { id: inspectionId, propertyId } });
+  if (!existing) {
+    throw new AppError(404, 'INSPECTION_NOT_FOUND', 'Inspection not found on this property.');
+  }
+  return existing;
+}
+
+export async function listPropertyInspections(organizationId: string, propertyId: string) {
+  await verifyPropertyForInspection(organizationId, propertyId);
+  return prisma.inspection.findMany({
+    where: { propertyId },
+    include: inspectionInclude,
+    orderBy: { createdAt: 'desc' },
+  });
+}
+
+export async function getPropertyInspection(organizationId: string, propertyId: string, inspectionId: string) {
+  await verifyPropertyForInspection(organizationId, propertyId);
+  const inspection = await prisma.inspection.findFirst({
+    where: { id: inspectionId, propertyId },
+    include: inspectionInclude,
+  });
+  if (!inspection) {
+    throw new AppError(404, 'INSPECTION_NOT_FOUND', 'Inspection not found on this property.');
+  }
+  return inspection;
+}
+
+interface CreatePropertyInspectionInput {
+  scheduledAt?: string | null;
+  inspectorUserId?: string | null;
+  notes?: string | null;
+}
+
+export async function createPropertyInspection(
+  organizationId: string,
+  propertyId: string,
+  data: CreatePropertyInspectionInput
+) {
+  await verifyPropertyForInspection(organizationId, propertyId);
+  if (data.inspectorUserId) {
+    await verifyInspector(organizationId, data.inspectorUserId);
+  }
+
+  return prisma.inspection.create({
+    data: {
+      organizationId,
+      propertyId,
+      type: 'grounds',
+      status: 'scheduled',
+      scheduledAt: data.scheduledAt ? new Date(data.scheduledAt) : null,
+      inspectorUserId: data.inspectorUserId ?? null,
+      notes: data.notes ?? null,
+      checklistResults: [],
+    },
+    include: inspectionInclude,
+  });
+}
+
+export async function cancelPropertyInspection(organizationId: string, propertyId: string, inspectionId: string) {
+  await verifyPropertyForInspection(organizationId, propertyId);
+  const existing = await getExistingPropertyInspection(propertyId, inspectionId);
+  if (existing.status === 'completed') {
+    throw new AppError(400, 'INSPECTION_FINALIZED', 'A completed inspection cannot be cancelled.');
+  }
+  return prisma.inspection.update({
+    where: { id: inspectionId },
+    data: { status: 'cancelled' },
+    include: inspectionInclude,
+  });
+}
+
+// Enforces the completion-photo requirement: a grounds/common-area
+// inspection cannot be marked completed without at least one photo attached
+// via the media endpoints below (a video alone does not satisfy it).
+interface CompletePropertyInspectionInput {
+  notes?: string | null;
+  completedAt?: string | null;
+}
+
+export async function completePropertyInspection(
+  organizationId: string,
+  propertyId: string,
+  inspectionId: string,
+  data: CompletePropertyInspectionInput,
+  actor: { userId?: string; role?: string } | null
+) {
+  await verifyPropertyForInspection(organizationId, propertyId);
+  const existing = await getExistingPropertyInspection(propertyId, inspectionId);
+
+  if (existing.status === 'completed' || existing.status === 'cancelled') {
+    throw new AppError(400, 'INSPECTION_FINALIZED', 'This inspection has already been finalized.');
+  }
+
+  requireInspectorAssignment(existing, actor);
+
+  const hasPhoto = await prisma.inspectionMedia.findFirst({
+    where: { inspectionId, mediaType: 'photo' },
+    select: { id: true },
+  });
+  if (!hasPhoto) {
+    throw new AppError(
+      400,
+      'PHOTO_REQUIRED',
+      'At least one completion photo must be attached before this inspection can be marked complete.'
+    );
+  }
+
+  const completedAt = data.completedAt ? new Date(data.completedAt) : new Date();
+
+  const { count } = await prisma.inspection.updateMany({
+    where: { id: inspectionId, status: { notIn: ['completed', 'cancelled'] } },
+    data: {
+      status: 'completed',
+      completedAt,
+      notes: data.notes !== undefined ? data.notes : existing.notes,
+    },
+  });
+
+  if (count === 0) {
+    throw new AppError(400, 'INSPECTION_FINALIZED', 'This inspection has already been finalized.');
+  }
+
+  return prisma.inspection.findFirst({ where: { id: inspectionId }, include: inspectionInclude });
+}
+
+export async function requestPropertyMediaUploadUrl(
+  organizationId: string,
+  propertyId: string,
+  inspectionId: string,
+  fileName: string,
+  contentType: string,
+  actor: { userId?: string; role?: string } | null
+) {
+  await verifyPropertyForInspection(organizationId, propertyId);
+  const existing = await getExistingPropertyInspection(propertyId, inspectionId);
+  requireInspectorAssignment(existing, actor);
+
+  const storageKey = buildStorageKey(organizationId, 'inspection', inspectionId, fileName);
+  const { uploadUrl } = await generateUploadPresignedUrl(storageKey, contentType);
+  return { uploadUrl, storageKey, expiresInSeconds: 900 };
+}
+
+export async function attachPropertyMedia(
+  organizationId: string,
+  propertyId: string,
+  inspectionId: string,
+  data: AttachMediaInput,
+  actor: { userId?: string; role?: string } | null
+) {
+  await verifyPropertyForInspection(organizationId, propertyId);
+  const existing = await getExistingPropertyInspection(propertyId, inspectionId);
+  requireInspectorAssignment(existing, actor);
+
+  return prisma.inspectionMedia.create({
+    data: {
+      inspectionId,
+      storageKey: data.storageKey,
+      mediaType: data.mediaType as InspectionMediaType,
+      capturedAt: data.capturedAt ? new Date(data.capturedAt) : new Date(),
+      latitude: data.latitude ?? null,
+      longitude: data.longitude ?? null,
+    },
+  });
+}
+
+export async function listPropertyMedia(organizationId: string, propertyId: string, inspectionId: string) {
+  await verifyPropertyForInspection(organizationId, propertyId);
+  await getExistingPropertyInspection(propertyId, inspectionId);
+  return prisma.inspectionMedia.findMany({
+    where: { inspectionId },
+    orderBy: { capturedAt: 'asc' },
+  });
+}
+
 export async function compareLeaseInspections(organizationId: string, leaseId: string) {
   const lease = await prisma.lease.findFirst({
     where: { id: leaseId, deletedAt: null, unit: { property: { organizationId } } },
