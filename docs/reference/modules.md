@@ -16,8 +16,9 @@ shipped ahead of it, Module 9 (Owner Portal) and Module 11 (Reporting &
 Analytics), the screening step of Module 1 (Advanced Tenant Onboarding),
 Module 4 (Advanced Payments & Accounting), Module 2 (Unit Intelligence &
 Appliance Registry), Module 6 (Inspections & Compliance), Module 3
-(Grounds & Property Maintenance), and now Module 5 (Vendor & Contractor
-Management), all built across this and prior updates.
+(Grounds & Property Maintenance), Module 5 (Vendor & Contractor
+Management), and now Module 8 (Eviction Management), all built across this
+and prior updates.
 No other module has functionality built yet, so no other module needs
 gating today. Full Stripe Subscription Item
 billing is still
@@ -35,7 +36,7 @@ with what a module will later extend.
   `MODULE_KEYS` (`owner_portal`, `reporting_analytics`,
   `advanced_tenant_onboarding`, `advanced_payments_accounting`,
   `unit_intelligence`, `inspections_compliance`, `grounds_maintenance`,
-  `vendor_management`) / `ALL_MODULE_KEYS`.
+  `vendor_management`, `eviction_management`) / `ALL_MODULE_KEYS`.
 - **API middleware**: `requireModule(moduleKey)`
   (`apps/api/src/middleware/module-gate.ts`) — looks up the requesting org's
   `activeModules` fresh per request and returns `403 MODULE_NOT_ACTIVE` if
@@ -71,6 +72,15 @@ with what a module will later extend.
     mount (a distinct route file and mount point from the unit-scoped
     `/:unitId/inspections` → `inspections.ts` above, gated by
     `inspections_compliance` instead — the two never share a mount).
+    Module 8 (Eviction Management) is simpler than the others here — it has
+    no unit/property-scoped nesting to worry about, since `Eviction` is a
+    fresh top-level model keyed off `leaseId` rather than reusing an
+    existing nested route tree: `requireModule('eviction_management')` is
+    applied directly at `/organizations/:orgId/evictions` (`routes/evictions.ts`)
+    and separately at `/organizations/:orgId/state-eviction-rules`
+    (`routes/state-eviction-rules.ts`, the jurisdiction reference table),
+    both mounted directly in `routes/index.ts` alongside `owners`/`reports`
+    rather than nested under `properties`/`units`/`leases`.
   - **Per-route gating**: in `apps/api/src/routes/applications.ts`, to just
     the screening endpoints (`POST`/`GET .../applications/:id/screening`)
     — the rest of that router (application links, review, e-sign) ships
@@ -202,7 +212,30 @@ with what a module will later extend.
   follow-up (would be new backend work, not just UI) and is called out
   precisely rather than glossed over. Base vendor CRUD, work-history/rating
   endpoints, and preferred-vendor-assignment endpoints are all real,
-  tested, and now reachable from `apps/web` end to end.
+  tested, and now reachable from `apps/web` end to end. Module 8 (Eviction
+  Management) adds a standalone nav item — "Evictions"
+  (`<ModuleGate module="eviction_management">` in `Sidebar.tsx`, with a
+  deadline-alert count badge like the vendor expiry badge) — and two new
+  pages: `/evictions` (the portfolio-wide timeline dashboard: list + filter
+  + a "New Eviction Notice" creation modal with the jurisdiction-lookup
+  preview) and `/evictions/[id]` (detail + all lifecycle-transition actions).
+  Unlike every other module in this series, this one *does* get a
+  standalone nav page and dashboard — the module spec explicitly calls for
+  "an eviction timeline dashboard with deadline flags," similar in spirit
+  to the existing `/leases` color-coded list, rather than folding into an
+  existing page the way Modules 2/3/6 did. A `<ModuleGate>`-wrapped
+  `EvictionsCard` component is also added to the lease detail page
+  (`/leases/[id]`), listing any evictions on file for that lease with a
+  "Start Eviction" link back to `/evictions?newForLease=<leaseId>` — this
+  mirrors how other modules still surface their gated feature from the most
+  relevant existing page, in addition to (not instead of) the dashboard.
+  The color-coded deadline flags (red/yellow/none, `EVICTION_DEADLINE_WARNING_DAYS`)
+  are computed client-side from `deadlineDate`/`courtDate`, the same pattern
+  `/leases` already uses for `endDate` — the API returns raw dates, not a
+  precomputed flag. Every eviction-facing screen (the creation modal, the
+  detail page, and the jurisdiction-lookup preview) carries a persistent
+  "not legal advice" disclaimer — see the Module 8 writeup below for why
+  that's load-bearing, not decorative.
 - **How activation works today**: no Stripe Subscription Item billing yet.
   Instead, `PATCH /organizations/:orgId` accepts an `activeModules` array
   (validated against `ALL_MODULE_KEYS`), settable by any `owner`/`manager` —
@@ -210,7 +243,7 @@ with what a module will later extend.
   the web app. This is a placeholder switch to make gating testable, not a
   billing decision; it should move behind an actual paid-subscription check
   once module billing ships. The seed script's demo org
-  (`packages/db/prisma/seed.ts`) defaults all eight gated modules to active
+  (`packages/db/prisma/seed.ts`) defaults all nine gated modules to active
   so local dev/demo environments see the gated features without an extra
   step.
 
@@ -244,7 +277,7 @@ forward-only conditional update (see `schema.md`'s Unit entry).
 | 5 | Vendor & Contractor Management | $20–30/mo | Medium | **Gated + shipped (2026-09-18)**: base vendor CRUD (list/get/create/update/delete, `routes/vendors.ts`) ships ungated — it barely existed before this change (only a list endpoint), so this change also had to build it out, not just the gated features. Gated behind `requireModule('vendor_management')`, all per-route: **license/insurance expiry alerts** — computed live from the existing `licenseExpiresAt`/`insuranceExpiresAt` fields (`GET .../vendors/expiry-alerts`, 30-day lookahead via `VENDOR_EXPIRY_ALERT_LOOKAHEAD_DAYS`), plus a daily `vendorExpiryAlertJob.ts` that only logs a per-org count for ops visibility — there is no persisted "alert" row and no outbound notification yet, and the dashboard widget/endpoint both compute the same set live rather than reading anything the job writes; **work-history/spend tracking** — `GET .../vendors/:vendorId/work-history?months=`, aggregating completed/closed `WorkOrder`s (including Module 3 schedule-generated ones, which need no special handling since they're just `WorkOrder` rows with `vendorId` set) by count, total spend (`totalCost` if present, else `laborCost + partsCost`), and category breakdown — kept under `vendor_management` rather than Module 11's `reporting_analytics`, since it's vendor-specific detail (mirroring how Module 2's per-appliance `totalMaintenanceCost` sits under `unit_intelligence`, not reporting) rather than a cross-vendor report; **per-completion ratings** — a new `VendorWorkOrderRating` model (`workOrderId` unique, `vendorId`, `rating` 1-5, `note?`), captured via `POST .../work-orders/:workOrderId/vendor-rating` once a work order is `completed`/`closed`, rolling into a recomputed `Vendor.rating` average (approach (a) from the spec — the existing field's consumers are unaffected); **preferred vendor assignments** — a new `PreferredVendorAssignment` model (`propertyId?`, `category` required, `vendorId`) replacing `Vendor.preferred`'s role (the boolean itself is kept, unused, for display/back-compat), resolved property+category-first then org-wide-by-category, and consulted by **both** manual `createWorkOrder` and Module 3's `generateWorkOrderForSchedule` when no vendor is otherwise specified — **simplified to category-required only**, there is no property-only/category-agnostic assignment mode. **A full vendor management web UI now exists** — `/vendors` list, `/vendors/[vendorId]` detail (work-history/spend + "Preferred For", both gated), preferred-vendor-assignment management on `/settings/organization`, and a vendor-rating capture card on the work-order detail page; the only known gap is that ratings history in the UI is bounded to the selected work-history month range (no unbounded "list all ratings for this vendor" endpoint exists) — see the Web UI note above for the full breakdown. See `BUILD_OUTLINE.md` §14 Module 5 for the full breakdown. | Work Orders |
 | 6 | Inspections & Compliance | $25–40/mo | Medium | `lastInspectionAt` (Unit) — no longer dormant, see above. **Gated + shipped (2026-09-18)**: an `Inspection` model (`unitId` FK, nullable `leaseId` FK, `type: move_in\|move_out\|scheduled\|annual\|semi_annual`, `status: scheduled\|in_progress\|completed\|cancelled`, `scheduledAt`/`completedAt`, nullable `inspectorUserId` FK to `User`, nullable `templateId` FK, `checklistResults: Json`, `notes`) with CRUD + schedule + assign-inspector + complete + cancel at `.../units/:unitId/inspections[/:inspectionId]`, gated behind `requireModule('inspections_compliance')` at that router's mount in `units.ts` (same pattern as Module 2's appliances). An `InspectionTemplate` model (`checklistItems: Json` array of `{section, item, description?}`) provides **real per-org stored checklist data with basic CRUD** — but v1 ships a single seeded default template (kitchen/bathrooms/bedrooms/living areas/exterior/appliances/safety devices) rather than a full property-type-aware template picker; **do not describe this as fully configurable per property type**. An `InspectionMedia` model reuses the exact `storage.service.ts` presigned-upload pattern (`Document`/`WorkOrder` photos) for photo/video attachments, with `capturedAt` always populated and `latitude`/`longitude` captured **best-effort only** via the browser Geolocation API — permission-gated, and built/tested in a non-mobile web session, so GPS population from a real device is **unverified**, not confirmed working. Signature capture uses a **typed attestation name + IP + timestamp** (mirrors `lease-esignature.service.ts`'s e-sign flow), **not** a canvas-drawn image — both tenant and manager signatures are captured on the same `/complete` request as a manager/inspector-device walkthrough, not a separate tenant-facing public signing link. Completing an inspection advances `Unit.lastInspectionAt` forward-only via a conditional `updateMany`. A move-in vs. move-out comparison endpoint (`GET .../leases/:leaseId/inspections/compare`, gated per-route in `leases.ts`) diffs the two inspections' checklist results by section+item — the basis for `SecurityDepositDisposition`'s now-real `moveInInspectionId`/`moveOutInspectionId` linkage (see Module 4's row above). PDF report generation is **client-side only** (`apps/web/lib/exportInspectionPdf.ts`, `jspdf` — the existing web dependency, no new server-side PDF library added), listing photo/video references by storage key rather than embedding images. **Not built**: a property-type-aware template picker UI, verified GPS capture from a real device, canvas-drawn signatures, and a public tenant-facing inspection-signing link. See `BUILD_OUTLINE.md` §14 Module 6 for the full breakdown. | Unit Mgmt, S3 |
 | 7 | Lease Renewal (full negotiation flow) | $15–25/mo | Medium | none dedicated — base one-click renewal via `Lease.renewalOfLeaseId` already ships | Lease Mgmt, Messaging |
-| 8 | Eviction Management | $30–50/mo | Medium | none dedicated — will use `Property.state` for jurisdiction lookup | Lease Mgmt, property jurisdiction data |
+| 8 | Eviction Management | $30–50/mo | Medium | **Gated + shipped (2026-09-18)**: two net-new models — `Eviction` (`leaseId` FK, `noticeType: pay_or_quit\|cure_or_quit\|unconditional_quit`, `noticeDate`, `noticePeriodDays`/`deadlineDate` computed from the jurisdiction lookup, `deliveryMethod: certified_mail\|personal_service\|posting` + `deliveryDate`/`servedByUserId`/`servedByName`, `status: notice_served\|cured\|paid\|expired\|filed\|court_date_set\|judgment\|writ_issued\|completed\|dismissed`, court case number/date, judgment outcome, writ/completion/dismissal timestamps) and `StateEvictionRule` (per-state, per-notice-type reference table: notice period, allowed delivery methods, `source`/`lastVerifiedAt`) — with CRUD + seven lifecycle-transition endpoints at `.../evictions[/:id/{resolve,file,court-date,judgment,writ,complete,dismiss}]` and **read-only** reference-table access at `.../state-eviction-rules[/:id]` (no write endpoint — see below), both gated behind `requireModule('eviction_management')` at their router mounts. **Jurisdiction data is reference material, not verified legal advice** — the 51-jurisdiction (50 states + DC) × 3-notice-type seed table (153 rows, lazily seeded like `InspectionTemplate`'s default) was assembled from general landlord-tenant law domain knowledge cross-checked against reachable search snippets, not independently verified against primary statute text for every state (this build's sandbox blocked outbound access to every legal-reference site attempted) — flagged explicitly via `source`/`lastVerifiedAt` on every row and a persistent "not legal advice" banner on every eviction screen; see the writeup below for the full sourcing caveat. Delivery methods are generalized to the same three-value set across all states rather than individually verified per jurisdiction. Deadline computation uses simple calendar-day addition, not state-specific weekend/holiday-exclusion rules (called out per-state in the seed data's `notes` where known, e.g. Florida's business-day count). A manager can override the looked-up notice period/delivery method on an individual eviction with a required reason. **The reference table itself has no write endpoint** — `StateEvictionRule` has no `organizationId` (it's shared across every tenant) and this codebase's RBAC has no platform-admin concept, so an owner/manager route to edit it would let one customer overwrite the notice-period data every other customer's deadlines depend on (a real finding from review on this module's first PR, fixed by removing the endpoint rather than adding auth this codebase doesn't have); correcting a seeded row today requires direct database/ops access. Status transitions are each their own endpoint (not a generic status PATCH), enforced in `eviction.service.ts`. Deadline notifications reuse the existing notification system — `runEvictionDeadlineJob` (mirrors `runLeaseExpiryJob`'s threshold-scan pattern, reusing `notifLeaseExpiry` as the closest existing manager-alert preference rather than adding a new column) reminds managers at 7/3/1 days before a cure/pay deadline or court date, triggered the same cron-endpoint way as `lease-expiry`/`rent-reminders`. **Full web UI**: a standalone `/evictions` timeline dashboard (list + create) and `/evictions/[id]` detail page with every lifecycle action, plus a `<ModuleGate>`-wrapped card on the lease detail page — see the Web UI note above for exactly what shipped. See `BUILD_OUTLINE.md` §14 Module 8 for the full breakdown. | Lease Mgmt, property jurisdiction data (`Property.state`) |
 | 9 | Owner Portal | $25–40/mo | Low | **Fully shipped** (2026-09-16): manager-facing `Owner`/`PropertyOwner`/`OwnerStatement` models + `routes/owners.ts` (merged 2026-05-31), plus a separate owner-facing auth path — `Owner.supabaseUserId`/`portalStatus`/`portalInvitedAt`, `requireOwnerAuth` middleware, `routes/owner-portal.ts` mounted at `/owner-portal` (see `schema.md`, `rbac.md`, `routes.md`) — and a read-only owner web portal (`apps/web/app/owner-portal/*`: login, set-password, dashboard, properties, statements, reports) mirroring the tenant-portal pattern. **Gated as of 2026-09-17** — `requireModule('owner_portal')` on both `/owners` and `/owner-portal`, `<ModuleGate>` on the web `/owners` page and its nav item. | Payments, Properties |
 | 10 | Communications & Resident Engagement | $20–30/mo | Low | none dedicated — base one-to-one Message thread already ships | Messaging, Notifications, Twilio |
 | 11 | Reporting & Analytics | $25–40/mo | Low | **Fully shipped** (2026-09-16): `routes/reports.ts` provides fixed reports (financial summary/trend, rent roll, spend-by-location, vacancy snapshot) with CSV export (merged 2026-05-31), plus a configurable report builder (`POST /reports/builder`, column/filter selection over the same report sources, with saved configs via the `SavedReport` model and `GET/POST/DELETE /reports/saved`), vacancy-rate history with manual market-rate comparison (`VacancyHistory` model, `GET /reports/vacancy-history`, `POST /reports/vacancy-history/snapshot`), and PDF export alongside CSV (`apps/web/lib/exportPdf.ts`, via `jspdf`) on both the fixed financial-summary report and the report builder. **Gated as of 2026-09-17** — `requireModule('reporting_analytics')` on `/reports`, `<ModuleGate>` on the web `/reports` page and its nav item. | All modules |
@@ -427,3 +460,57 @@ added as a follow-up on this PR — see the Web UI note above for exactly
 what it covers and its one known gap (no unbounded ratings-history
 endpoint). See the module table above and `BUILD_OUTLINE.md` §14 Module 5
 for the full breakdown of what shipped vs. what's simplified.
+
+**Module 8 (Eviction Management)** is the first module in this series
+explicitly flagged as legally sensitive, and the write-up here is
+correspondingly blunt about where "reference data" stops and "verified
+legal advice" would have to start (it doesn't — this module never claims
+to give legal advice). Both models (`Eviction`, `StateEvictionRule`) are
+entirely net-new, like Modules 2/4/6, gated end-to-end behind
+`requireModule('eviction_management')` at two router mounts
+(`evictions.ts`, `state-eviction-rules.ts`) rather than any per-route
+carve-out, since nothing about this module overlaps with existing base
+product. Four things worth calling out precisely, matching this series'
+pattern:
+(1) **the jurisdiction table's sourcing is honestly limited, not silently
+approximate** — this build's sandboxed environment returned a
+network-egress error on every legal-reference site it tried to fetch
+(nolo.com, ipropertymanagement.com, law.cornell.edu, evictionrules.com), so
+the 153-row seed table (`packages/shared/src/constants/eviction-rules-data.ts`)
+was assembled from general trained knowledge of US landlord-tenant law,
+cross-checked only against whatever search-result snippets were reachable
+— not verified line-by-line against current statute text for all 51
+jurisdictions. Every row carries a `source` citation and a `notes` field
+flagging known low-confidence figures (e.g. states with no fixed statutory
+minimum for nonpayment notice, like Georgia/Maryland/Missouri/New
+Jersey/North Carolina; states with unusually complex structures, like
+Virginia's 21/30 cure window or Oregon's graduated nonpayment schedule);
+`lastVerifiedAt` is a compilation date, not a legal-review date, and the UI
+says so directly rather than implying otherwise;
+(2) **delivery methods are not state-specific** — every seeded row allows
+all three (`certified_mail`, `personal_service`, `posting`) rather than
+asserting a state disallows one, since this build had no reliable way to
+verify per-state service requirements (which often hinge on nuances like
+"posting alone" vs. "posting plus mailing" that a single enum value can't
+capture) — treat the notice-period figures as the primary researched
+value and delivery-method eligibility as general guidance only;
+(3) **deadline computation is simple calendar-day addition** — `deadlineDate
+= noticeDate + noticePeriodDays`, not adjusted for the weekend/court-holiday
+exclusion rules some states apply to some notice types (Florida's 3-day
+nonpayment notice being the most commonly cited example) — flagged in that
+state's seed-data `notes` rather than silently computed as if exact;
+(4) **the deadline-reminder job reuses an existing notification
+preference** — `runEvictionDeadlineJob` (`notification.service.ts`) keys
+off `User.notifLeaseExpiry` rather than a new `notifEviction` column, since
+that's the closest existing "date-driven manager alert" preference and
+adding a schema column + settings-UI field was judged out of scope for
+this module; a manager who has muted lease-expiry alerts will also miss
+eviction-deadline alerts, which is a real (if narrow) UX gap worth knowing
+about rather than glossing over. Unlike most modules in this series,
+Eviction Management gets a real standalone nav page and dashboard
+(`/evictions`, `/evictions/[id]`) rather than folding into an existing
+page — see the Web UI note above — because the module spec explicitly
+calls for a portfolio-wide "eviction timeline dashboard with deadline
+flags," the same shape as the existing `/leases` list. See the module
+table above and `BUILD_OUTLINE.md` §14 Module 8 for the full breakdown of
+what shipped vs. what's simplified.

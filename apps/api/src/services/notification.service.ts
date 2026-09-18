@@ -6,8 +6,10 @@ import {
   sendLeaseExpiryToManager,
   sendLeaseExpiryToTenant,
   sendLateFeeToTenant,
+  sendEvictionDeadlineToManager,
 } from './email.service';
 import { sendSms } from './sms.service';
+import { EVICTION_DEADLINE_REMINDER_THRESHOLDS, MODULE_KEYS } from '@propflow/shared';
 
 // ─── Config ───────────────────────────────────────────────────────────────────
 
@@ -521,6 +523,173 @@ export async function runLateFeeNotificationJob(organizationId?: string) {
   const failed = results.filter((r) => r.status === 'rejected').length;
 
   return { processed: lateFeePayments.length, succeeded, failed };
+}
+
+// ─── Eviction Deadline Alerts (Module 8) ──────────────────────────────────────
+// Only runs for orgs with eviction_management active (gated at the query, not
+// module-gate middleware, since this is a background job with no request).
+// Reminds managers as a cure/pay deadline or a court date approaches — the
+// same threshold-scan pattern as runLeaseExpiryJob, reusing notifLeaseExpiry
+// as the closest existing "date-driven manager alert" preference rather than
+// adding a dedicated Eviction notif-preference column (see modules.md).
+
+async function evictionManagersForOrg(organizationId: string) {
+  return prisma.user.findMany({
+    where: {
+      status: 'active',
+      role: { in: ['owner', 'manager'] },
+      notifLeaseExpiry: { not: 'none' },
+      organizationId,
+    },
+    select: { id: true, name: true, email: true, notifLeaseExpiry: true },
+  });
+}
+
+interface EvictionAlertContext {
+  id: string;
+  noticeType: string;
+  organizationId: string;
+  lease: {
+    unit: {
+      unitNumber: string;
+      property: { name: string; organizationId: string };
+    };
+    participants: { tenant: { name: string } }[];
+  };
+}
+
+async function notifyEvictionDeadline(
+  eviction: EvictionAlertContext,
+  daysUntil: number,
+  deadlineDate: Date,
+  deadlineLabel: 'cure/pay deadline' | 'court date'
+) {
+  const org = await prisma.organization.findUnique({
+    where: { id: eviction.organizationId },
+    select: { id: true, name: true },
+  });
+  if (!org) return;
+
+  const managers = await evictionManagersForOrg(eviction.organizationId);
+  const property = eviction.lease.unit.property;
+  const unit = eviction.lease.unit;
+  const tenantName = eviction.lease.participants[0]?.tenant.name ?? 'Unknown Tenant';
+
+  const tasks: Promise<unknown>[] = [];
+
+  for (const user of managers) {
+    const pref = user.notifLeaseExpiry ?? 'email';
+
+    if (pref === 'email' || pref === 'both') {
+      tasks.push(
+        sendEvictionDeadlineToManager({
+          managerName: user.name,
+          managerEmail: user.email,
+          tenantName,
+          unitNumber: unit.unitNumber,
+          propertyName: property.name,
+          noticeType: eviction.noticeType,
+          deadlineLabel,
+          deadlineDate,
+          daysUntilDeadline: daysUntil,
+          organizationName: org.name,
+          evictionId: eviction.id,
+        })
+      );
+    }
+
+    if (pref === 'in_app' || pref === 'both') {
+      tasks.push(
+        createInAppNotification({
+          userId: user.id,
+          organizationId: org.id,
+          type: 'eviction_deadline',
+          title: `Eviction ${deadlineLabel} in ${daysUntil} day${daysUntil !== 1 ? 's' : ''} — ${tenantName}`,
+          body: `${property.name} Unit ${unit.unitNumber}: ${deadlineLabel} on ${deadlineDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}.`,
+          actionUrl: `/evictions/${eviction.id}`,
+        })
+      );
+    }
+  }
+
+  const results = await Promise.allSettled(tasks);
+  const failures = results.filter((r) => r.status === 'rejected');
+  if (failures.length > 0) {
+    throw new Error(`${failures.length} of ${tasks.length} eviction-deadline notification tasks failed for eviction ${eviction.id}`);
+  }
+}
+
+const evictionAlertInclude = {
+  lease: {
+    include: {
+      unit: { include: { property: { select: { name: true, organizationId: true } } } },
+      participants: {
+        where: { isPrimary: true },
+        include: { tenant: { select: { name: true } } },
+      },
+    },
+  },
+} as const;
+
+/**
+ * Finds active evictions (notice_served, with a cure/pay deadline) and filed
+ * evictions (court_date_set, with a court date) hitting one of
+ * EVICTION_DEADLINE_REMINDER_THRESHOLDS days out today, and alerts managers.
+ *
+ * Intended to be called daily.
+ */
+export async function runEvictionDeadlineJob(organizationId?: string) {
+  const now = new Date();
+  now.setHours(0, 0, 0, 0);
+
+  let processed = 0;
+  let succeeded = 0;
+  let failed = 0;
+
+  for (const days of EVICTION_DEADLINE_REMINDER_THRESHOLDS) {
+    const targetDate = new Date(now);
+    targetDate.setDate(targetDate.getDate() + days);
+    const startOfTarget = new Date(targetDate);
+    startOfTarget.setHours(0, 0, 0, 0);
+    const endOfTarget = new Date(targetDate);
+    endOfTarget.setHours(23, 59, 59, 999);
+
+    const [deadlineEvictions, courtDateEvictions] = await Promise.all([
+      prisma.eviction.findMany({
+        where: {
+          status: 'notice_served',
+          deadlineDate: { gte: startOfTarget, lte: endOfTarget },
+          organization: { activeModules: { has: MODULE_KEYS.EVICTION_MANAGEMENT } },
+          ...(organizationId ? { organizationId } : {}),
+        },
+        include: evictionAlertInclude,
+      }),
+      prisma.eviction.findMany({
+        where: {
+          status: 'court_date_set',
+          courtDate: { gte: startOfTarget, lte: endOfTarget },
+          organization: { activeModules: { has: MODULE_KEYS.EVICTION_MANAGEMENT } },
+          ...(organizationId ? { organizationId } : {}),
+        },
+        include: evictionAlertInclude,
+      }),
+    ]);
+
+    const batch = [
+      ...deadlineEvictions.map((e) => ({ eviction: e, date: e.deadlineDate, label: 'cure/pay deadline' as const })),
+      ...courtDateEvictions.map((e) => ({ eviction: e, date: e.courtDate as Date, label: 'court date' as const })),
+    ];
+
+    processed += batch.length;
+
+    const results = await Promise.allSettled(
+      batch.map(({ eviction, date, label }) => notifyEvictionDeadline(eviction, days, date, label))
+    );
+    succeeded += results.filter((r) => r.status === 'fulfilled').length;
+    failed += results.filter((r) => r.status === 'rejected').length;
+  }
+
+  return { processed, succeeded, failed };
 }
 
 // ─── In-App Notification Queries ──────────────────────────────────────────────

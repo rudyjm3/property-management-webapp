@@ -59,4 +59,19 @@ router.post('/lease-expiry', requireCronSecret, async (req: Request, res: Respon
   }
 });
 
+// POST /api/v1/organizations/:orgId/notifications/jobs/eviction-deadlines
+// Module 8 — cure/pay-deadline and court-date reminders. Not module-gated at
+// the middleware level (a cron trigger has no req.user/req.owner/req.tenant
+// to resolve an org from for requireModule) — the underlying eviction rows
+// only exist for orgs that had eviction_management active when they were
+// created, so the query is naturally scoped.
+router.post('/eviction-deadlines', requireCronSecret, async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const result = await notifService.runEvictionDeadlineJob(req.params.orgId as string);
+    res.json({ data: result });
+  } catch (err) {
+    next(err);
+  }
+});
+
 export default router;

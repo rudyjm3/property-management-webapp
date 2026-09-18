@@ -45,7 +45,10 @@ just because `index.ts` doesn't gate it. As of this writing:
 
 - **Every endpoint gated to `owner`/`manager`**: `leases.ts`, `payments.ts`,
   `owners.ts`, `reports.ts`, `ledger.ts`, `messages.ts`, `staff.ts`,
-  `billing.ts`, `connect.ts`, `documents.ts`
+  `billing.ts`, `connect.ts`, `documents.ts`, `evictions.ts` (Module 8 —
+  eviction records carry sensitive tenant legal information, so this
+  follows `leases.ts`'s pattern rather than the more common "reads open to
+  any org role" one)
 - **Also module-gated** (on top of role-gating): `owners.ts` requires
   `owner_portal` in `activeModules`, `reports.ts` requires
   `reporting_analytics`, both applied via `requireModule(...)` at the
@@ -67,7 +70,11 @@ just because `index.ts` doesn't gate it. As of this writing:
   gates the whole `appliances.ts` router, mounted at `/:unitId/appliances`
   inside `units.ts` — router-mount gating like `owners`/`reports`, just one
   level deeper in the route tree since appliances nest under a unit under a
-  property. See `modules.md` for the full module-gating picture.
+  property. `eviction_management` (Module 8) gates both `evictions.ts` and
+  `state-eviction-rules.ts` at their router mounts in `index.ts` — entirely
+  net-new functionality, same router-mount pattern as `unit_intelligence`.
+  `state-eviction-rules.ts` is `GET`-only — see `routes.md` for why it has
+  no write endpoint. See `modules.md` for the full module-gating picture.
 - **Partially gated** (mutations require `owner`/`manager`, reads are open to
   any org role): `properties.ts`, `tenants.ts`, `units.ts`, `appliances.ts`
   (on top of its `unit_intelligence` module gate); `organizations.ts`
@@ -77,7 +84,9 @@ just because `index.ts` doesn't gate it. As of this writing:
 - **Not role-gated beyond `requireAuth` + `requireOrg`** — any authenticated
   org member, including `maintenance`, can hit every endpoint:
   `workOrders.ts` (except one manager-only `DELETE`), `vendors.ts`,
-  `notifications.ts`
+  `notifications.ts`, `state-eviction-rules.ts` (Module 8 — `GET`-only,
+  generic jurisdiction reference data rather than tenant-specific, so open
+  reads are fine; there is no write endpoint at all, see `routes.md`)
 
 Net effect: `maintenance` users can freely reach work orders, vendors, and
 notifications; nearly everything else requires `owner` or `manager`. This

@@ -261,6 +261,61 @@ export async function sendLeaseExpiryToManager(params: LeaseExpiryManagerParams)
   });
 }
 
+// ─── Eviction Deadline Alert (to manager, Module 8) ──────────────────────────
+
+export interface EvictionDeadlineManagerParams {
+  managerName: string;
+  managerEmail: string;
+  tenantName: string;
+  unitNumber: string;
+  propertyName: string;
+  noticeType: string;
+  deadlineLabel: 'cure/pay deadline' | 'court date';
+  deadlineDate: Date | string;
+  daysUntilDeadline: number;
+  organizationName: string;
+  evictionId: string;
+}
+
+export async function sendEvictionDeadlineToManager(params: EvictionDeadlineManagerParams) {
+  const {
+    managerName,
+    managerEmail,
+    tenantName,
+    unitNumber,
+    propertyName,
+    noticeType,
+    deadlineLabel,
+    deadlineDate,
+    daysUntilDeadline,
+    organizationName,
+    evictionId,
+  } = params;
+
+  const body = `
+    <h1>Eviction Deadline Approaching</h1>
+    <p>Hi ${managerName},</p>
+    <p>An eviction's ${deadlineLabel} is coming up in <strong>${daysUntilDeadline} day${daysUntilDeadline !== 1 ? 's' : ''}</strong>.</p>
+    <div class="info-box">
+      <div class="row"><span class="label">Tenant</span><span class="value">${tenantName}</span></div>
+      <div class="row"><span class="label">Property</span><span class="value">${propertyName}</span></div>
+      <div class="row"><span class="label">Unit</span><span class="value">${unitNumber}</span></div>
+      <div class="row"><span class="label">Notice Type</span><span class="value">${noticeType}</span></div>
+      <div class="row"><span class="label">${deadlineLabel === 'court date' ? 'Court Date' : 'Deadline'}</span><span class="value">${formatDate(deadlineDate)}</span></div>
+    </div>
+    <div class="alert-box"><p>This is an automated reminder, not legal advice — confirm next steps with your attorney or local court rules.</p></div>
+    <a class="btn" href="${APP_URL}/evictions/${evictionId}">View in PropFlow</a>
+    <p style="margin-top:24px;font-size:13px;color:#9ca3af;">${organizationName}</p>
+  `;
+
+  return resend.emails.send({
+    from: FROM,
+    to: managerEmail,
+    subject: `[${organizationName}] Eviction ${deadlineLabel} in ${daysUntilDeadline} days — ${tenantName}, Unit ${unitNumber}`,
+    html: baseLayout('Eviction Deadline Approaching', body),
+  });
+}
+
 // ─── Lease Expiry Notice (to tenant) ──────────────────────────────────────────
 
 export interface LeaseExpiryTenantParams {

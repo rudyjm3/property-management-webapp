@@ -1,6 +1,6 @@
 # Schema Reference
 
-Source of truth: `packages/db/prisma/schema.prisma` (27 models, PostgreSQL).
+Source of truth: `packages/db/prisma/schema.prisma` (29 models, PostgreSQL).
 Regenerate this doc by hand when the schema changes — it is a compressed
 index, not a replacement for the Prisma file.
 
@@ -24,7 +24,7 @@ Tenant-root entity; everything scopes to `organizationId`.
 - `defaultManagementFeePct: Decimal` (default `10.00`) `[Advanced Payments &
   Accounting]` — org-wide default management-fee percentage applied when a
   `Disbursement` is created; overridable per-disbursement.
-- Has many: users, properties, tenants, vendors, messages, documents, notifications, ledgerEntries, rentalApplications, screeningChecks, owners, ownerStatements, disbursements, securityDepositDispositions, inspections, inspectionTemplates
+- Has many: users, properties, tenants, vendors, messages, documents, notifications, ledgerEntries, rentalApplications, screeningChecks, owners, ownerStatements, disbursements, securityDepositDispositions, inspections, inspectionTemplates, evictions
 
 ## User
 Manager-side account (owner/manager/maintenance staff).
@@ -32,7 +32,7 @@ Manager-side account (owner/manager/maintenance staff).
 - `email, name, phone?`
 - `role: UserRole(owner|manager|maintenance)`, `status: active|invited|deactivated`
 - `notif*` prefs: rentOverdue, workOrder, leaseExpiry, newMessage
-- FK targets: assignedOrders/submittedOrders (WorkOrder), sentMessages (Message), uploadedDocuments (Document), notifications
+- FK targets: assignedOrders/submittedOrders (WorkOrder), sentMessages (Message), uploadedDocuments (Document), notifications, evictionsServed (Eviction, via `Eviction.servedByUserId` — Module 8)
 - `@@unique([organizationId, email])`
 
 ## Property
@@ -156,7 +156,7 @@ Background/credit check run against a `RentalApplication` (Advanced Tenant Onboa
 - E-signing: `documentUrl?, esignatureStatus: EsignatureStatus(pending|partially_signed|completed), tenantSignedAt?/managerSignedAt?, signingToken?(unique), tenant/managerSignatureName+Ip`
 - Renewal chain: `renewalOfLeaseId?` (self-relation `LeaseRenewals`)
 - `deletedAt?` (soft delete)
-- Has many: participants (LeaseParticipant), payments; has one: securityDepositDisposition `[Advanced Payments & Accounting]`
+- Has many: participants (LeaseParticipant), payments, evictions `[Eviction Management]`; has one: securityDepositDisposition `[Advanced Payments & Accounting]`
 
 ## LeaseParticipant
 Join table: which Tenants are on a Lease.
@@ -308,3 +308,81 @@ Point-in-time vacancy snapshot, recorded on demand via `POST /reports/vacancy-hi
 A user-configured report-builder view (Reporting & Analytics module).
 - `id, organizationId(FK), createdByUserId(FK User), name`
 - `source` (one of: financial-summary|rent-roll|spend-by-location|vacancy-snapshot|vacancy-history), `columns: String[]`, `filters: Json`
+
+## Eviction `[Eviction Management / Module 8]`
+Net-new model. Notice type tracking, delivery-method logging, jurisdiction-
+looked-up deadline computation, and court filing/judgment tracking through
+to case completion. **Legally sensitive — see the disclaimer on
+`StateEvictionRule` below.** This model computes dates and tracks status; it
+is not a source of legal advice and doesn't guarantee any computed deadline
+is correct for a given jurisdiction.
+- `id, organizationId(FK), leaseId(FK Lease)`
+- `noticeType: EvictionNoticeType(pay_or_quit|cure_or_quit|unconditional_quit)`
+- `noticeDate: Date`
+- `stateRuleId?(FK → StateEvictionRule, ON DELETE SET NULL)` — the reference
+  rule this eviction's notice period/methods were looked up from at creation
+  time (via the lease's unit's property `state` + `noticeType`), if a
+  matching rule existed. Null if no rule was found, or if the rule is later
+  deleted.
+- `noticePeriodDays: Int` — the period actually used, either copied from the
+  looked-up rule or manager-entered.
+- `deadlineDate: Date` — `noticeDate + noticePeriodDays`, computed with
+  simple calendar-day addition (see the schema comment in `schema.prisma`
+  for why this doesn't account for states that exclude weekends/court
+  holidays from the count on some notice types, e.g. Florida).
+- `overrideReason?` — required by `eviction.service.ts` (not a DB
+  constraint) whenever `noticePeriodDays`/`deliveryMethod` diverges from the
+  applied `StateEvictionRule`, or when no rule was found at all.
+- `deliveryMethod: EvictionDeliveryMethod(certified_mail|personal_service|posting)`, `deliveryDate?`
+- `servedByUserId?(FK → User, ON DELETE SET NULL)`, `servedByName?` — staff
+  member or free-text third-party name (e.g. a process server) who served
+  the notice.
+- `status: EvictionStatus(notice_served|cured|paid|expired|filed|court_date_set|judgment|writ_issued|completed|dismissed)`, default `notice_served` — lifecycle transitions (`notice_served` → `cured`/`paid`/`expired` → `filed` → `court_date_set` → `judgment` → `writ_issued` → `completed`, or `dismissed` at any point once filed) are each their own service function/endpoint rather than a generic status field update, enforced in `eviction.service.ts`, not a DB-level state machine.
+- `resolvedAt?` — set when status moves to `cured` or `paid` (tenant
+  complied before the deadline).
+- `courtCaseNumber?, courtName?, filedAt?, courtDate?`
+- `judgmentOutcome?: EvictionJudgmentOutcome(possession_landlord|possession_tenant|dismissed|settled)`, `judgmentAt?`
+- `writIssuedAt?` — only reachable from a `judgment` with `possession_landlord`.
+- `completedAt?, dismissedAt?, dismissedReason?, notes?`
+- Has one (optional): `stateRule` (StateEvictionRule); belongs to: `lease` (Lease), `servedBy` (User)
+
+## StateEvictionRule `[Eviction Management / Module 8]`
+Net-new model — the jurisdiction reference table the notice-period lookup
+reads from. **Reference data, not verified legal advice.** Seeded from
+general landlord-tenant law secondary sources during this module's build —
+this build's sandboxed environment blocked outbound access to every legal-
+reference site attempted (nolo.com, ipropertymanagement.com,
+law.cornell.edu, evictionrules.com all returned network-egress errors), so
+the table was assembled from trained domain knowledge and cross-checked
+against reachable search-result snippets, **not** independently verified
+line-by-line against current statute text for all 51 jurisdictions (50
+states + DC). `source` and `lastVerifiedAt` exist so this stays flagged for
+periodic legal review — their presence is not itself a claim that review has
+already happened. See `docs/reference/modules.md` "Module 8" for the full
+sourcing writeup, which is also surfaced in the web UI wherever this table's
+data is shown (a persistent "not legal advice" banner on `/evictions` and
+the eviction detail page).
+- `id, state(2-letter USPS code or "DC"), noticeType: EvictionNoticeType`
+- `noticePeriodDays: Int`
+- `allowedDeliveryMethods: EvictionDeliveryMethod[]` — generalized to the
+  same three-value set (`certified_mail`, `personal_service`, `posting`)
+  across every state rather than individually statute-verified per
+  jurisdiction; see `modules.md`.
+- `notes?, source, lastVerifiedAt: Date`
+- `@@unique([state, noticeType])` — one row per (state, notice type) combination, `state_noticeType` compound key
+- Lazily seeded the first time it's queried (mirrors `InspectionTemplate`'s
+  `ensureDefaultTemplate` pattern in `inspection-template.service.ts`,
+  except this table is global, not per-organization) — 51 jurisdictions × 3
+  notice types = 153 rows, from `STATE_EVICTION_RULES_SEED` in
+  `packages/shared/src/constants/eviction-rules-data.ts`.
+- Has many: evictions (via `Eviction.stateRuleId`)
+- **No API write path, by design.** `.../state-eviction-rules` is `GET`-only
+  — this table has no `organizationId` (it's shared across every tenant),
+  and this codebase's RBAC has no platform-admin concept, so an
+  owner/manager write endpoint would let one customer overwrite the data
+  every other customer's deadlines depend on (a real finding from review on
+  this module's first PR). `eviction.service.ts`'s
+  `createOrUpdateStateEvictionRule`/`updateStateEvictionRule` exist for
+  correcting a seeded row once someone has actually verified it, but are
+  intentionally not wired to a route — direct database/ops access (or a
+  future platform-admin surface) is the only way to update this table today.

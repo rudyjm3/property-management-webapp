@@ -44,7 +44,7 @@ async function main() {
       rentDueDay: 1,
       // Module keys mirror @propflow/shared's MODULE_KEYS — kept as literals
       // here since packages/db doesn't otherwise depend on @propflow/shared.
-      activeModules: ['owner_portal', 'reporting_analytics', 'advanced_tenant_onboarding', 'advanced_payments_accounting', 'unit_intelligence', 'inspections_compliance', 'grounds_maintenance', 'vendor_management'],
+      activeModules: ['owner_portal', 'reporting_analytics', 'advanced_tenant_onboarding', 'advanced_payments_accounting', 'unit_intelligence', 'inspections_compliance', 'grounds_maintenance', 'vendor_management', 'eviction_management'],
     },
   });
 

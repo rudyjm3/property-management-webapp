@@ -60,6 +60,7 @@ model Organization {
   inspectionTemplates         InspectionTemplate[]
   maintenanceSchedules        MaintenanceSchedule[]
   preferredVendorAssignments  PreferredVendorAssignment[]
+  evictions                   Eviction[]
 
   @@map("organizations")
 }
@@ -113,6 +114,7 @@ model User {
   notifications       Notification[]
   savedReports        SavedReport[]
   inspectionsAssigned Inspection[]   @relation("InspectionInspector")
+  evictionsServed     Eviction[]
 
   @@unique([organizationId, email])
   @@index([organizationId])
@@ -155,18 +157,18 @@ model Property {
   createdAt             DateTime     @default(now()) @map("created_at")
   updatedAt             DateTime     @updatedAt @map("updated_at")
 
-  organization         Organization          @relation(fields: [organizationId], references: [id])
-  units                Unit[]
-  workOrders           WorkOrder[]
-  propertyOwners       PropertyOwner[]
-  ownerStatements      OwnerStatement[]
-  disbursements        Disbursement[]
-  vacancyHistory       VacancyHistory[]
+  organization               Organization                @relation(fields: [organizationId], references: [id])
+  units                      Unit[]
+  workOrders                 WorkOrder[]
+  propertyOwners             PropertyOwner[]
+  ownerStatements            OwnerStatement[]
+  disbursements              Disbursement[]
+  vacancyHistory             VacancyHistory[]
   // Grounds & Property Maintenance (Module 3) — common-area/grounds inspections
   // (Inspection.propertyId) and recurring maintenance schedules both live at
   // the property level, not the unit level.
-  inspections          Inspection[]
-  maintenanceSchedules MaintenanceSchedule[]
+  inspections                Inspection[]
+  maintenanceSchedules       MaintenanceSchedule[]
   preferredVendorAssignments PreferredVendorAssignment[]
 
   @@index([organizationId])
@@ -707,6 +709,7 @@ model Lease {
   payments                   Payment[]
   securityDepositDisposition SecurityDepositDisposition?
   inspections                Inspection[]
+  evictions                  Eviction[]
 
   @@index([unitId])
   @@index([status])
@@ -938,14 +941,14 @@ model WorkOrder {
   createdAt              DateTime               @default(now()) @map("created_at")
   updatedAt              DateTime               @updatedAt @map("updated_at")
 
-  unit            Unit?                @relation(fields: [unitId], references: [id])
-  property        Property?            @relation(fields: [propertyId], references: [id])
-  tenant          Tenant?              @relation(fields: [tenantId], references: [id])
-  assignedTo      User?                @relation("AssignedWorkOrders", fields: [assignedToUserId], references: [id])
-  submittedByUser User?                @relation("SubmittedWorkOrders", fields: [submittedByUserId], references: [id])
-  vendor          Vendor?              @relation(fields: [vendorId], references: [id])
-  appliance       Appliance?           @relation(fields: [applianceId], references: [id])
-  schedule        MaintenanceSchedule? @relation(fields: [scheduleId], references: [id], onDelete: SetNull)
+  unit            Unit?                  @relation(fields: [unitId], references: [id])
+  property        Property?              @relation(fields: [propertyId], references: [id])
+  tenant          Tenant?                @relation(fields: [tenantId], references: [id])
+  assignedTo      User?                  @relation("AssignedWorkOrders", fields: [assignedToUserId], references: [id])
+  submittedByUser User?                  @relation("SubmittedWorkOrders", fields: [submittedByUserId], references: [id])
+  vendor          Vendor?                @relation(fields: [vendorId], references: [id])
+  appliance       Appliance?             @relation(fields: [applianceId], references: [id])
+  schedule        MaintenanceSchedule?   @relation(fields: [scheduleId], references: [id], onDelete: SetNull)
   messages        Message[]
   // Vendor & Contractor Management (Module 5) — at most one rating per work
   // order completion (unique on VendorWorkOrderRating.workOrderId).
@@ -1442,4 +1445,163 @@ model SavedReport {
 
   @@index([organizationId])
   @@map("saved_reports")
+}
+
+// ─── Eviction Management (Module 8) ────────────────────────────────────────
+// Notice type tracking, delivery-method logging, jurisdiction-specific
+// notice-period lookup (via StateEvictionRule, keyed off Lease.unit.
+// property.state — the "jurisdiction hook" called out in BUILD_OUTLINE.md
+// §4/§14), and court filing/judgment tracking through to case completion.
+// See docs/reference/modules.md "Module 8" for exactly what's built vs.
+// simplified, and the disclaimer on StateEvictionRule below — this module
+// is legally sensitive: the app computes deadlines from stored data, it does
+// not provide legal advice, and the seeded jurisdiction table is reference
+// data that needs periodic legal review, not a verified compliance database.
+
+model Eviction {
+  id             String             @id @default(uuid())
+  organizationId String             @map("organization_id")
+  leaseId        String             @map("lease_id")
+  noticeType     EvictionNoticeType @map("notice_type")
+  noticeDate     DateTime           @map("notice_date") @db.Date
+
+  // The StateEvictionRule this eviction's notice period/methods were looked
+  // up from at creation time (via the lease's unit's property.state +
+  // noticeType), if a matching rule existed. Null if no rule was found for
+  // that jurisdiction/notice-type combination, or the rule is later deleted
+  // (SetNull — losing the reference-data link never blocks deleting a rule
+  // or an eviction already built from it).
+  stateRuleId String? @map("state_rule_id")
+
+  // Final notice period actually used (days) — either copied from the
+  // looked-up StateEvictionRule or manager-entered. deadlineDate is computed
+  // as noticeDate + noticePeriodDays using simple calendar-day addition; see
+  // modules.md for why this doesn't account for state-specific rules on
+  // excluding weekends/court holidays from the count in some jurisdictions.
+  noticePeriodDays Int      @map("notice_period_days")
+  deadlineDate     DateTime @map("deadline_date") @db.Date
+
+  // Required by the service layer (not a DB constraint) whenever
+  // noticePeriodDays or deliveryMethod diverges from the applied
+  // StateEvictionRule's own values, or when no rule was found at all — the
+  // manager's stated reason for departing from (or filling in without) the
+  // jurisdiction lookup.
+  overrideReason String? @map("override_reason")
+
+  deliveryMethod EvictionDeliveryMethod @map("delivery_method")
+  deliveryDate   DateTime?              @map("delivery_date") @db.Date
+  // Staff member who served the notice, if a User did so directly.
+  servedByUserId String?                @map("served_by_user_id")
+  // Free-text name when service was performed by a third party (e.g. a
+  // process server) rather than an org staff member.
+  servedByName   String?                @map("served_by_name") @db.VarChar(200)
+
+  status EvictionStatus @default(notice_served)
+
+  // notice_served -> (cured | paid | expired) for pay_or_quit/cure_or_quit,
+  // or straight to expired/completed for unconditional_quit (no cure
+  // option) -> filed -> court_date_set -> judgment -> writ_issued ->
+  // completed, or dismissed at any point after filing. Enforced in
+  // eviction.service.ts, not a DB-level state machine.
+  // When the tenant complies before the deadline — pays (pay_or_quit) or
+  // fixes the violation (cure_or_quit) — resolvedAt is set and status moves
+  // to `paid` or `cured` respectively.
+  resolvedAt DateTime? @map("resolved_at")
+
+  courtCaseNumber String?                  @map("court_case_number") @db.VarChar(100)
+  courtName       String?                  @map("court_name") @db.VarChar(200)
+  filedAt         DateTime?                @map("filed_at")
+  courtDate       DateTime?                @map("court_date")
+  judgmentOutcome EvictionJudgmentOutcome? @map("judgment_outcome")
+  judgmentAt      DateTime?                @map("judgment_at")
+  writIssuedAt    DateTime?                @map("writ_issued_at")
+  completedAt     DateTime?                @map("completed_at")
+  dismissedAt     DateTime?                @map("dismissed_at")
+  dismissedReason String?                  @map("dismissed_reason")
+  notes           String?
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  organization Organization       @relation(fields: [organizationId], references: [id])
+  lease        Lease              @relation(fields: [leaseId], references: [id])
+  stateRule    StateEvictionRule? @relation(fields: [stateRuleId], references: [id], onDelete: SetNull)
+  servedBy     User?              @relation(fields: [servedByUserId], references: [id])
+
+  @@index([organizationId])
+  @@index([leaseId])
+  @@index([status])
+  @@index([deadlineDate])
+  @@index([courtDate])
+  @@map("evictions")
+}
+
+enum EvictionNoticeType {
+  pay_or_quit
+  cure_or_quit
+  unconditional_quit
+}
+
+enum EvictionDeliveryMethod {
+  certified_mail
+  personal_service
+  posting
+}
+
+enum EvictionStatus {
+  notice_served
+  cured
+  paid
+  expired
+  filed
+  court_date_set
+  judgment
+  writ_issued
+  completed
+  dismissed
+}
+
+enum EvictionJudgmentOutcome {
+  possession_landlord
+  possession_tenant
+  dismissed
+  settled
+}
+
+// ─── StateEvictionRule (jurisdiction reference table, Module 8) ───────────
+// **Reference data, not verified legal advice.** Seeded from general
+// landlord-tenant law secondary sources — this session's sandbox blocked
+// outbound access to primary legal-reference sites (Nolo, iPropertyManagement,
+// Cornell LII all returned network-egress errors when fetched), so these
+// figures were assembled from trained domain knowledge and cross-checked
+// against whatever search-result snippets were reachable, NOT independently
+// verified line-by-line against current statute text for all 51
+// jurisdictions. `source` and `lastVerifiedAt` exist specifically so this
+// stays flagged for periodic legal review — their presence is not itself a
+// claim that review has already happened. See docs/reference/modules.md for
+// the full sourcing/disclaimer writeup, which is also surfaced in the web UI
+// wherever this table's data is shown.
+model StateEvictionRule {
+  id                     String                   @id @default(uuid())
+  // 2-letter USPS state code, or "DC".
+  state                  String                   @db.VarChar(2)
+  noticeType             EvictionNoticeType       @map("notice_type")
+  noticePeriodDays       Int                      @map("notice_period_days")
+  // Generalized across states rather than individually statute-verified per
+  // jurisdiction — see modules.md. Personal service is valid essentially
+  // everywhere; certified mail and posting are commonly accepted as
+  // substituted-service fallbacks, but exact conditions (e.g. posting alone
+  // vs. posting-plus-mail) vary and are not modeled here beyond `notes`.
+  allowedDeliveryMethods EvictionDeliveryMethod[] @map("allowed_delivery_methods")
+  notes                  String?
+  source                 String                   @db.VarChar(500)
+  lastVerifiedAt         DateTime                 @map("last_verified_at") @db.Date
+  createdAt              DateTime                 @default(now()) @map("created_at")
+  updatedAt              DateTime                 @updatedAt @map("updated_at")
+
+  evictions Eviction[]
+
+  @@unique([state, noticeType])
+  @@index([state])
+  @@map("state_eviction_rules")
 }

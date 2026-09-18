@@ -30,6 +30,7 @@ const MODULE_LABELS: Record<ModuleKey, string> = {
   [MODULE_KEYS.INSPECTIONS_COMPLIANCE]: 'Inspections & Compliance',
   [MODULE_KEYS.GROUNDS_MAINTENANCE]: 'Grounds & Property Maintenance',
   [MODULE_KEYS.VENDOR_MANAGEMENT]: 'Vendor & Contractor Management',
+  [MODULE_KEYS.EVICTION_MANAGEMENT]: 'Eviction Management',
 };
 
 const TIMEZONES = [

@@ -159,6 +159,98 @@ export interface PreferredVendorAssignment {
   property: { id: string; name: string } | null;
 }
 
+// ─── Eviction Management (Module 8) ────────────────────────────────────────
+// Shapes mirror apps/api/src/services/eviction.service.ts and
+// packages/shared/src/validators/index.ts — see docs/reference/schema.md for
+// the underlying Eviction/StateEvictionRule models. This is a legally
+// sensitive workflow — see the disclaimer on StateEvictionRule in schema.md
+// and the banner shown in the eviction UI: notice-period/delivery-method
+// data here is reference material, not verified legal advice.
+
+export type EvictionNoticeType = 'pay_or_quit' | 'cure_or_quit' | 'unconditional_quit';
+export type EvictionDeliveryMethod = 'certified_mail' | 'personal_service' | 'posting';
+export type EvictionStatus =
+  | 'notice_served'
+  | 'cured'
+  | 'paid'
+  | 'expired'
+  | 'filed'
+  | 'court_date_set'
+  | 'judgment'
+  | 'writ_issued'
+  | 'completed'
+  | 'dismissed';
+export type EvictionJudgmentOutcome = 'possession_landlord' | 'possession_tenant' | 'dismissed' | 'settled';
+
+export interface StateEvictionRule {
+  id: string;
+  state: string;
+  noticeType: EvictionNoticeType;
+  noticePeriodDays: number;
+  allowedDeliveryMethods: EvictionDeliveryMethod[];
+  notes: string | null;
+  source: string;
+  lastVerifiedAt: string;
+}
+
+export interface Eviction {
+  id: string;
+  organizationId: string;
+  leaseId: string;
+  noticeType: EvictionNoticeType;
+  noticeDate: string;
+  stateRuleId: string | null;
+  stateRule: StateEvictionRule | null;
+  noticePeriodDays: number;
+  deadlineDate: string;
+  overrideReason: string | null;
+  deliveryMethod: EvictionDeliveryMethod;
+  deliveryDate: string | null;
+  servedByUserId: string | null;
+  servedByName: string | null;
+  servedBy: { id: string; name: string; email: string } | null;
+  status: EvictionStatus;
+  resolvedAt: string | null;
+  courtCaseNumber: string | null;
+  courtName: string | null;
+  filedAt: string | null;
+  courtDate: string | null;
+  judgmentOutcome: EvictionJudgmentOutcome | null;
+  judgmentAt: string | null;
+  writIssuedAt: string | null;
+  completedAt: string | null;
+  dismissedAt: string | null;
+  dismissedReason: string | null;
+  notes: string | null;
+  createdAt: string;
+  updatedAt: string;
+  lease: {
+    id: string;
+    status: string;
+    rentAmount: string;
+    unit: {
+      id: string;
+      unitNumber: string;
+      propertyId: string;
+      property: { id: string; name: string; address: string; city: string; state: string };
+    };
+    participants: { tenant: { id: string; name: string; email: string; phone: string | null } }[];
+  };
+}
+
+export interface EvictionInput {
+  leaseId: string;
+  noticeType: EvictionNoticeType;
+  noticeDate: string;
+  deliveryMethod: EvictionDeliveryMethod;
+  deliveryDate?: string | null;
+  servedByUserId?: string | null;
+  servedByName?: string | null;
+  noticePeriodDays?: number | null;
+  overrideReason?: string | null;
+  notes?: string | null;
+}
+
 export const api = {
   auth: {
     me: () =>
@@ -1094,5 +1186,73 @@ export const api = {
       delete: (id: string) =>
         apiFetch<void>(`/api/v1/organizations/${_orgId}/reports/saved/${id}`, { method: 'DELETE' }),
     },
+  },
+
+  // Eviction Management (Module 8) — gated by activeModules.
+  evictions: {
+    list: (params?: { leaseId?: string; status?: EvictionStatus }) => {
+      const query = new URLSearchParams();
+      if (params?.leaseId) query.set('leaseId', params.leaseId);
+      if (params?.status) query.set('status', params.status);
+      const qs = query.toString();
+      return apiFetch<Eviction[]>(`/api/v1/organizations/${_orgId}/evictions${qs ? `?${qs}` : ''}`);
+    },
+    get: (id: string) => apiFetch<Eviction>(`/api/v1/organizations/${_orgId}/evictions/${id}`),
+    create: (data: EvictionInput) =>
+      apiFetch<Eviction>(`/api/v1/organizations/${_orgId}/evictions`, {
+        method: 'POST',
+        body: JSON.stringify(data),
+      }),
+    update: (id: string, data: Partial<EvictionInput>) =>
+      apiFetch<Eviction>(`/api/v1/organizations/${_orgId}/evictions/${id}`, {
+        method: 'PATCH',
+        body: JSON.stringify(data),
+      }),
+    delete: (id: string) =>
+      apiFetch<void>(`/api/v1/organizations/${_orgId}/evictions/${id}`, { method: 'DELETE' }),
+    resolve: (id: string, data: { outcome: 'cured' | 'paid' | 'expired'; resolvedAt?: string | null }) =>
+      apiFetch<Eviction>(`/api/v1/organizations/${_orgId}/evictions/${id}/resolve`, {
+        method: 'POST',
+        body: JSON.stringify(data),
+      }),
+    file: (id: string, data: { courtCaseNumber: string; courtName?: string | null; filedAt?: string | null }) =>
+      apiFetch<Eviction>(`/api/v1/organizations/${_orgId}/evictions/${id}/file`, {
+        method: 'POST',
+        body: JSON.stringify(data),
+      }),
+    setCourtDate: (id: string, courtDate: string) =>
+      apiFetch<Eviction>(`/api/v1/organizations/${_orgId}/evictions/${id}/court-date`, {
+        method: 'POST',
+        body: JSON.stringify({ courtDate }),
+      }),
+    recordJudgment: (id: string, data: { judgmentOutcome: EvictionJudgmentOutcome; judgmentAt?: string | null }) =>
+      apiFetch<Eviction>(`/api/v1/organizations/${_orgId}/evictions/${id}/judgment`, {
+        method: 'POST',
+        body: JSON.stringify(data),
+      }),
+    recordWrit: (id: string, writIssuedAt?: string | null) =>
+      apiFetch<Eviction>(`/api/v1/organizations/${_orgId}/evictions/${id}/writ`, {
+        method: 'POST',
+        body: JSON.stringify({ writIssuedAt }),
+      }),
+    complete: (id: string, completedAt?: string | null) =>
+      apiFetch<Eviction>(`/api/v1/organizations/${_orgId}/evictions/${id}/complete`, {
+        method: 'POST',
+        body: JSON.stringify({ completedAt }),
+      }),
+    dismiss: (id: string, dismissedReason: string, dismissedAt?: string | null) =>
+      apiFetch<Eviction>(`/api/v1/organizations/${_orgId}/evictions/${id}/dismiss`, {
+        method: 'POST',
+        body: JSON.stringify({ dismissedReason, dismissedAt }),
+      }),
+  },
+
+  // Read-only — StateEvictionRule is shared across every org, and this
+  // codebase's RBAC has no platform-admin concept, so there is no
+  // customer-facing write endpoint for it (see routes/state-eviction-rules.ts).
+  stateEvictionRules: {
+    list: (state?: string) =>
+      apiFetch<StateEvictionRule[]>(`/api/v1/organizations/${_orgId}/state-eviction-rules${state ? `?state=${state}` : ''}`),
+    get: (id: string) => apiFetch<StateEvictionRule>(`/api/v1/organizations/${_orgId}/state-eviction-rules/${id}`),
   },
 };

@@ -30,6 +30,10 @@ import {
   MAINTENANCE_CADENCES,
   VENDOR_RATING_MIN,
   VENDOR_RATING_MAX,
+  EVICTION_NOTICE_TYPES,
+  EVICTION_DELIVERY_METHODS,
+  EVICTION_JUDGMENT_OUTCOMES,
+  US_STATE_CODES,
 } from '../constants';
 
 // ─── Organization ─────────────────────────────────────────────────────────────
@@ -755,3 +759,108 @@ export const completePropertyInspectionSchema = z.object({
   notes: z.string().max(4000).nullable().optional(),
   completedAt: z.string().datetime().nullable().optional(),
 });
+
+// ─── Eviction Management (Module 8) ────────────────────────────────────────
+// See docs/reference/modules.md "Module 8" and the schema comment on
+// StateEvictionRule — this is a legally sensitive workflow; the jurisdiction
+// lookup is reference data, not verified legal advice, and status/lifecycle
+// transitions are each their own endpoint (not a generic status PATCH) so
+// every step captures the fields that matter for that transition.
+
+export const createEvictionSchema = z
+  .object({
+    leaseId: z.string().uuid(),
+    noticeType: z.enum(EVICTION_NOTICE_TYPES),
+    noticeDate: z.string().date(),
+    deliveryMethod: z.enum(EVICTION_DELIVERY_METHODS),
+    deliveryDate: z.string().date().nullable().optional(),
+    servedByUserId: z.string().uuid().nullable().optional(),
+    servedByName: z.string().max(200).nullable().optional(),
+    // Overrides the jurisdiction-looked-up notice period from
+    // StateEvictionRule when provided. eviction.service.ts requires
+    // overrideReason whenever this (or deliveryMethod) diverges from the
+    // applied rule, or when no rule was found for the lease's jurisdiction.
+    noticePeriodDays: z.number().int().min(0).max(365).nullable().optional(),
+    overrideReason: z.string().max(2000).nullable().optional(),
+    notes: z.string().max(4000).nullable().optional(),
+  })
+  .strict();
+
+export const updateEvictionSchema = z
+  .object({
+    noticeType: z.enum(EVICTION_NOTICE_TYPES).optional(),
+    noticeDate: z.string().date().optional(),
+    deliveryMethod: z.enum(EVICTION_DELIVERY_METHODS).optional(),
+    deliveryDate: z.string().date().nullable().optional(),
+    servedByUserId: z.string().uuid().nullable().optional(),
+    servedByName: z.string().max(200).nullable().optional(),
+    noticePeriodDays: z.number().int().min(0).max(365).optional(),
+    overrideReason: z.string().max(2000).nullable().optional(),
+    notes: z.string().max(4000).nullable().optional(),
+  })
+  .strict();
+
+export const resolveEvictionNoticeSchema = z
+  .object({
+    // 'cured'/'paid' — tenant complied before the deadline. 'expired' — the
+    // notice period lapsed with no compliance (eligible to file).
+    outcome: z.enum(['cured', 'paid', 'expired']),
+    resolvedAt: z.string().datetime().nullable().optional(),
+  })
+  .strict();
+
+export const fileEvictionSchema = z
+  .object({
+    courtCaseNumber: z.string().min(1).max(100),
+    courtName: z.string().max(200).nullable().optional(),
+    filedAt: z.string().datetime().nullable().optional(),
+  })
+  .strict();
+
+export const setEvictionCourtDateSchema = z
+  .object({
+    courtDate: z.string().datetime(),
+  })
+  .strict();
+
+export const recordEvictionJudgmentSchema = z
+  .object({
+    judgmentOutcome: z.enum(EVICTION_JUDGMENT_OUTCOMES),
+    judgmentAt: z.string().datetime().nullable().optional(),
+  })
+  .strict();
+
+export const recordEvictionWritSchema = z
+  .object({
+    writIssuedAt: z.string().datetime().nullable().optional(),
+  })
+  .strict();
+
+export const completeEvictionSchema = z
+  .object({
+    completedAt: z.string().datetime().nullable().optional(),
+  })
+  .strict();
+
+export const dismissEvictionSchema = z
+  .object({
+    dismissedReason: z.string().min(1).max(2000),
+    dismissedAt: z.string().datetime().nullable().optional(),
+  })
+  .strict();
+
+export const createStateEvictionRuleSchema = z
+  .object({
+    state: z.enum(US_STATE_CODES),
+    noticeType: z.enum(EVICTION_NOTICE_TYPES),
+    noticePeriodDays: z.number().int().min(0).max(365),
+    allowedDeliveryMethods: z.array(z.enum(EVICTION_DELIVERY_METHODS)).min(1),
+    notes: z.string().max(2000).nullable().optional(),
+    source: z.string().min(1).max(500),
+    lastVerifiedAt: z.string().date(),
+  })
+  .strict();
+
+export const updateStateEvictionRuleSchema = createStateEvictionRuleSchema
+  .omit({ state: true, noticeType: true })
+  .partial();
