@@ -1,6 +1,6 @@
 # Schema Reference
 
-Source of truth: `packages/db/prisma/schema.prisma` (23 models, PostgreSQL).
+Source of truth: `packages/db/prisma/schema.prisma` (27 models, PostgreSQL).
 Regenerate this doc by hand when the schema changes — it is a compressed
 index, not a replacement for the Prisma file.
 
@@ -24,7 +24,7 @@ Tenant-root entity; everything scopes to `organizationId`.
 - `defaultManagementFeePct: Decimal` (default `10.00`) `[Advanced Payments &
   Accounting]` — org-wide default management-fee percentage applied when a
   `Disbursement` is created; overridable per-disbursement.
-- Has many: users, properties, tenants, vendors, messages, documents, notifications, ledgerEntries, rentalApplications, screeningChecks, owners, ownerStatements, disbursements, securityDepositDispositions
+- Has many: users, properties, tenants, vendors, messages, documents, notifications, ledgerEntries, rentalApplications, screeningChecks, owners, ownerStatements, disbursements, securityDepositDispositions, inspections, inspectionTemplates
 
 ## User
 Manager-side account (owner/manager/maintenance staff).
@@ -56,9 +56,16 @@ Manager-side account (owner/manager/maintenance staff).
   Prisma's `{ increment: 1 }` compiles to `SET x = x + 1`, which stays
   `NULL` forever under Postgres NULL-propagation if never initialized).
   Still nullable for orgs that have never had `unit_intelligence` active.
-- `lastInspectionAt? [deferred: Inspections & Compliance]`
+- `lastInspectionAt?` — no longer deferred as of Inspections & Compliance
+  (2026-09-18): set to an `Inspection`'s `completedAt` whenever it transitions
+  to `completed`, via a single conditional `updateMany` (`WHERE
+  lastInspectionAt IS NULL OR lastInspectionAt < :completedAt`) so it only
+  ever advances forward — an older inspection completing after a newer one
+  never regresses it. Still nullable for orgs that have never had
+  `inspections_compliance` active or units never inspected.
 - Has many: leases, workOrders, messages, rentalApplications, appliances
-  `[Unit Intelligence & Appliance Registry]`
+  `[Unit Intelligence & Appliance Registry]`, inspections
+  `[Inspections & Compliance]`
 
 ## Appliance
 Unit Intelligence & Appliance Registry module (gated).
@@ -74,6 +81,35 @@ Unit Intelligence & Appliance Registry module (gated).
 - `notes?`
 - Has many: workOrders (via `WorkOrder.applianceId`, `ON DELETE SET NULL` — deleting an appliance keeps its work order history, just unlinks it)
 - Replacement-alert status and maintenance cost rollup are computed at read time in `appliance.service.ts`, not persisted columns — see `modules.md`. `Unit.applianceCount` only counts `status: active` appliances.
+
+## InspectionTemplate
+Inspections & Compliance module (gated) — configurable checklist template.
+- `id, organizationId(FK), name, description?`
+- `checklistItems: Json` — array of `{ section, item, description? }` objects. Real per-organization stored data with basic CRUD (`inspection-template.service.ts`), not a hardcoded checklist in code — but v1 ships a single seeded default template rather than a full property-type-aware picker (see `modules.md`).
+- `isDefault: Boolean` (default `false`) — at most one default per org; `GET .../inspection-templates` lazily seeds a default template the first time it's called for an org that has none.
+- Has many: inspections (via `Inspection.templateId`)
+
+## Inspection
+Inspections & Compliance module (gated) — move-in/move-out/scheduled/annual/semi-annual inspection records.
+- `id, organizationId(FK), unitId(FK), leaseId?(FK)` — nullable lease link so move-in/move-out inspections can be tied to the specific lease they're comparing for deposit purposes; ad hoc/annual/semi-annual inspections typically have no lease.
+- `type: InspectionType(move_in|move_out|scheduled|annual|semi_annual)`
+- `status: InspectionStatus(scheduled|in_progress|completed|cancelled)`, default `scheduled`
+- `scheduledAt?, completedAt?`
+- `inspectorUserId?(FK → User, "InspectionInspector")` — assigned staff inspector; a `maintenance`-role user may only complete an inspection where they're the assigned inspector (owner/manager may complete any).
+- `templateId?(FK → InspectionTemplate)`
+- `checklistResults: Json` (default `[]`) — array of `{ section, item, condition?, notes? }`, the filled-in checklist.
+- `notes?` — overall inspection notes.
+- Signature capture (typed-name attestation, mirrors `lease-esignature.service.ts` — **not** a canvas-drawn image; see `modules.md`): `tenantSignatureName?/tenantSignatureAt?/tenantSignatureIp?`, `managerSignatureName?/managerSignatureAt?/managerSignatureIp?`. Both are captured on the same `/complete` request (a manager/inspector-device walkthrough), not via a separate tenant-facing public signing link.
+- Has many: media (`InspectionMedia`, cascade delete), `depositsAsMoveIn`/`depositsAsMoveOut` (`SecurityDepositDisposition`, reverse of its `moveInInspectionId`/`moveOutInspectionId`)
+- Completing an inspection (`POST .../inspections/:id/complete`) advances `Unit.lastInspectionAt` forward-only — see the Unit entry above.
+
+## InspectionMedia
+Photo/video documentation attached to an `Inspection`.
+- `id, inspectionId(FK, cascade delete with its inspection)`
+- `storageKey` — Supabase Storage key, same presigned-upload pattern as `Document`/`WorkOrder` photos (`storage.service.ts`): client requests an upload URL scoped to the inspection, uploads directly, then records the key here.
+- `mediaType: InspectionMediaType(photo|video)`
+- `capturedAt` — always populated (client-supplied or server `now()` fallback).
+- `latitude?/longitude?: Decimal(9,6)` — **best-effort only**: populated when the browser's Geolocation API grants permission, left null otherwise. Built and code-path-tested in a non-mobile web session — not verified to actually populate from a real device; see `modules.md`.
 
 ## Tenant
 - `id, organizationId(FK), supabaseUserId?(unique)`
@@ -153,7 +189,8 @@ a persisted, auditable record.
 - `id, organizationId(FK), leaseId(FK, unique — one disposition per lease)`
 - `depositAmount, totalDeductions, returnAmount, status: SecurityDepositStatus` (same enum as `Lease.securityDepositStatus`)
 - `deductions: Json` (copied from `Lease.securityDepositDeductions`)
-- `moveInConditionNotes?, moveOutConditionNotes?` — manager-entered free text; **not** linked to actual inspection records, since the Inspections & Compliance module (Module 6) doesn't exist yet
+- `moveInConditionNotes?, moveOutConditionNotes?` — manager-entered free text; kept for backward compatibility and for leases with no inspection on file
+- `moveInInspectionId?(FK → Inspection, ON DELETE SET NULL), moveOutInspectionId?(FK → Inspection, ON DELETE SET NULL)` — as of Inspections & Compliance (Module 6), `reconcileSecurityDeposit` (`lease.service.ts`) looks up the lease's completed `move_in`/`move_out` inspections (if any) and links them here; the free-text notes above are never discarded even when a linked inspection exists
 - `reconciledByUserId, reconciledAt`
 
 ## Disbursement

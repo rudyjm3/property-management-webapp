@@ -5,6 +5,9 @@ vi.mock('@propflow/db', () => ({
     lease: {
       findFirst: vi.fn(),
     },
+    inspection: {
+      findFirst: vi.fn(),
+    },
     securityDepositDisposition: {
       upsert: vi.fn(),
       findFirst: vi.fn(),
@@ -28,6 +31,7 @@ const terminatedLease = {
 describe('lease.service reconcileSecurityDeposit', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    (prisma.inspection.findFirst as any).mockResolvedValue(null);
   });
 
   it('rejects a lease that has not been moved out', async () => {
@@ -70,6 +74,46 @@ describe('lease.service reconcileSecurityDeposit', () => {
       })
     );
     expect(result.totalDeductions).toBe(400);
+  });
+
+  it('links move-in/move-out inspections when completed inspections exist for the lease', async () => {
+    (prisma.lease.findFirst as any).mockResolvedValue(terminatedLease);
+    (prisma.inspection.findFirst as any)
+      .mockResolvedValueOnce({ id: 'insp-move-in' })
+      .mockResolvedValueOnce({ id: 'insp-move-out' });
+    (prisma.securityDepositDisposition.upsert as any).mockImplementation(({ create }: any) =>
+      Promise.resolve({ id: 'disp-1', ...create })
+    );
+
+    await reconcileSecurityDeposit('org-1', 'lease-1', 'user-1', {});
+
+    expect(prisma.securityDepositDisposition.upsert).toHaveBeenCalledWith(
+      expect.objectContaining({
+        create: expect.objectContaining({
+          moveInInspectionId: 'insp-move-in',
+          moveOutInspectionId: 'insp-move-out',
+        }),
+      })
+    );
+  });
+
+  it('leaves inspection links null when no completed inspections exist for the lease', async () => {
+    (prisma.lease.findFirst as any).mockResolvedValue(terminatedLease);
+    (prisma.inspection.findFirst as any).mockResolvedValue(null);
+    (prisma.securityDepositDisposition.upsert as any).mockImplementation(({ create }: any) =>
+      Promise.resolve({ id: 'disp-1', ...create })
+    );
+
+    await reconcileSecurityDeposit('org-1', 'lease-1', 'user-1', {});
+
+    expect(prisma.securityDepositDisposition.upsert).toHaveBeenCalledWith(
+      expect.objectContaining({
+        create: expect.objectContaining({
+          moveInInspectionId: null,
+          moveOutInspectionId: null,
+        }),
+      })
+    );
   });
 });
 

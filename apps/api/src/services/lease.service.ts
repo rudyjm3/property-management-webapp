@@ -460,11 +460,13 @@ export async function processMoveOut(
 // ─── Security Deposit Disposition (Advanced Payments & Accounting / Module 4) ─
 // Formalizes the deposit-vs-deductions math processMoveOut already computed
 // onto the Lease's securityDeposit* fields into a persisted, auditable
-// record. Reconciles against the itemized deductions captured at move-out —
-// NOT against move-in/move-out inspection records, since Module 6
-// (Inspections & Compliance) doesn't exist yet; moveIn/moveOutConditionNotes
-// are manager-entered free text until that module ships a real inspection
-// model to link against.
+// record. Reconciles against the itemized deductions captured at move-out.
+// As of Module 6 (Inspections & Compliance), if the lease has a completed
+// move-in and/or move-out Inspection on file, they're looked up and linked
+// via moveInInspectionId/moveOutInspectionId below; the free-text
+// moveIn/moveOutConditionNotes fields remain for backward compatibility and
+// for leases with no inspection on file — manager-entered notes are kept
+// even when a linked inspection exists.
 
 export async function reconcileSecurityDeposit(
   organizationId: string,
@@ -492,6 +494,19 @@ export async function reconcileSecurityDeposit(
   const returnAmount = Number(lease.securityDepositReturnAmount ?? 0);
   const totalDeductions = Math.round((depositAmount - returnAmount) * 100) / 100;
 
+  const [moveInInspection, moveOutInspection] = await Promise.all([
+    prisma.inspection.findFirst({
+      where: { leaseId, type: 'move_in', status: 'completed' },
+      orderBy: { completedAt: 'desc' },
+      select: { id: true },
+    }),
+    prisma.inspection.findFirst({
+      where: { leaseId, type: 'move_out', status: 'completed' },
+      orderBy: { completedAt: 'desc' },
+      select: { id: true },
+    }),
+  ]);
+
   return prisma.securityDepositDisposition.upsert({
     where: { leaseId },
     create: {
@@ -504,6 +519,8 @@ export async function reconcileSecurityDeposit(
       deductions: lease.securityDepositDeductions ?? {},
       moveInConditionNotes: data.moveInConditionNotes ?? null,
       moveOutConditionNotes: data.moveOutConditionNotes ?? null,
+      moveInInspectionId: moveInInspection?.id ?? null,
+      moveOutInspectionId: moveOutInspection?.id ?? null,
       reconciledByUserId,
     },
     update: {
@@ -514,6 +531,8 @@ export async function reconcileSecurityDeposit(
       deductions: lease.securityDepositDeductions ?? {},
       moveInConditionNotes: data.moveInConditionNotes ?? undefined,
       moveOutConditionNotes: data.moveOutConditionNotes ?? undefined,
+      moveInInspectionId: moveInInspection?.id ?? null,
+      moveOutInspectionId: moveOutInspection?.id ?? null,
       reconciledByUserId,
       reconciledAt: new Date(),
     },
@@ -523,6 +542,10 @@ export async function reconcileSecurityDeposit(
 export async function getSecurityDepositDisposition(organizationId: string, leaseId: string) {
   const disposition = await prisma.securityDepositDisposition.findFirst({
     where: { leaseId, organizationId },
+    include: {
+      moveInInspection: { select: { id: true, status: true, completedAt: true } },
+      moveOutInspection: { select: { id: true, status: true, completedAt: true } },
+    },
   });
   if (!disposition) {
     throw new AppError(404, 'DISPOSITION_NOT_FOUND', 'No security deposit disposition found for this lease.');

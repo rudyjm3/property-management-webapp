@@ -8,6 +8,7 @@ import { formatPhone } from '@/lib/phone';
 import DocumentPanel from '@/components/DocumentPanel';
 import ModuleGate from '@/components/ModuleGate';
 import ApplianceQrModal from '@/components/ApplianceQrModal';
+import InspectionsCard from '@/components/InspectionsCard';
 import { useAuth } from '@/contexts/AuthContext';
 import { MODULE_KEYS } from '@propflow/shared';
 
@@ -926,6 +927,11 @@ export default function UnitDetailPage() {
             </div>
           </div>
         )}
+      </ModuleGate>
+
+      {/* Inspections — Module 6: Inspections & Compliance */}
+      <ModuleGate module={MODULE_KEYS.INSPECTIONS_COMPLIANCE}>
+        <InspectionsCard propertyId={propertyId} unitId={unitId} leaseId={activeLease?.id ?? null} />
       </ModuleGate>
 
       {showApplianceModal && (

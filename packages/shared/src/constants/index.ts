@@ -185,6 +185,37 @@ export const OWNER_STATEMENT_STATUSES = ['draft', 'sent'] as const;
 
 export const DISBURSEMENT_STATUSES = ['pending', 'completed', 'cancelled'] as const;
 
+// ─── Inspection (Inspections & Compliance / Module 6) ─────────────────────────
+
+export const INSPECTION_TYPES = ['move_in', 'move_out', 'scheduled', 'annual', 'semi_annual'] as const;
+
+export const INSPECTION_STATUSES = ['scheduled', 'in_progress', 'completed', 'cancelled'] as const;
+
+export const INSPECTION_MEDIA_TYPES = ['photo', 'video'] as const;
+
+// One sensible default checklist template is seeded per org (see seed.ts) —
+// this is the shape of InspectionTemplate.checklistItems, not a hardcoded
+// checklist used in place of the template model. See docs/reference/modules.md
+// for the configurability level actually shipped.
+export const DEFAULT_INSPECTION_CHECKLIST: { section: string; item: string; description?: string }[] = [
+  { section: 'Kitchen', item: 'Countertops & cabinets', description: 'Check for damage, staining, proper function' },
+  { section: 'Kitchen', item: 'Sink & faucet', description: 'Check for leaks, drainage' },
+  { section: 'Kitchen', item: 'Appliances', description: 'Refrigerator, oven/range, dishwasher, microwave' },
+  { section: 'Bathrooms', item: 'Toilet, tub/shower, sink', description: 'Check for leaks, caulking, drainage' },
+  { section: 'Bathrooms', item: 'Ventilation fan', description: '' },
+  { section: 'Bedrooms', item: 'Walls, flooring, ceiling', description: 'Check for damage, stains, holes' },
+  { section: 'Bedrooms', item: 'Windows & closets', description: 'Check for proper operation, locks' },
+  { section: 'Living Areas', item: 'Walls, flooring, ceiling', description: '' },
+  { section: 'Living Areas', item: 'Windows & doors', description: 'Check locks, screens, weatherstripping' },
+  { section: 'Exterior', item: 'Doors & locks', description: '' },
+  { section: 'Exterior', item: 'Yard/grounds/parking', description: 'If applicable' },
+  { section: 'Appliances & Systems', item: 'HVAC', description: 'Filters, thermostat operation' },
+  { section: 'Appliances & Systems', item: 'Water heater', description: '' },
+  { section: 'Safety Devices', item: 'Smoke detectors', description: 'Test and confirm battery' },
+  { section: 'Safety Devices', item: 'Carbon monoxide detectors', description: 'Test and confirm battery' },
+  { section: 'Safety Devices', item: 'Fire extinguisher', description: 'If provided' },
+];
+
 // ─── Add-On Modules ───────────────────────────────────────────────────────────
 
 // Keys stored in Organization.activeModules. Gates existing functionality that
@@ -195,6 +226,7 @@ export const MODULE_KEYS = {
   ADVANCED_TENANT_ONBOARDING: 'advanced_tenant_onboarding',
   ADVANCED_PAYMENTS_ACCOUNTING: 'advanced_payments_accounting',
   UNIT_INTELLIGENCE: 'unit_intelligence',
+  INSPECTIONS_COMPLIANCE: 'inspections_compliance',
 } as const;
 
 export type ModuleKey = (typeof MODULE_KEYS)[keyof typeof MODULE_KEYS];

@@ -1432,10 +1432,12 @@ partial. Summary:
   `SecurityDepositDisposition` record (`POST`/`GET
   /leases/:leaseId/security-deposit-disposition`), built from the deposit
   amount vs. itemized deductions the existing move-out workflow already
-  captures. **Not** reconciled against move-in/move-out inspection records —
-  Module 6 (Inspections & Compliance) hasn't shipped, so there's no
-  inspection model to reconcile against yet. `moveInConditionNotes`/
-  `moveOutConditionNotes` are manager-entered free text in the meantime.
+  captures. As of Module 6 (Inspections & Compliance) shipping, it also
+  looks up the lease's completed move-in/move-out `Inspection` records (if
+  any) and links them via `moveInInspectionId`/`moveOutInspectionId`.
+  `moveInConditionNotes`/`moveOutConditionNotes` remain as manager-entered
+  free text for backward compatibility and for leases with no inspection on
+  file — they're never discarded even when a linked inspection exists.
 - **Owner disbursements** — shipped as a `Disbursement` record
   (`POST`/`GET /owners/statements/:statementId/disbursements`,
   `PATCH /owners/disbursements/:disbursementId`) computed from an
@@ -1495,20 +1497,81 @@ record rather than an actual funds transfer.
 **Target price:** $25–40/mo
 **Priority:** Medium
 
-**What it adds:**
+**Status: gated + shipped (2026-09-18).** What actually built, and exactly
+how it's simplified relative to the original spec above — read this before
+assuming any bullet below is fully built as originally scoped:
 
-- Move-in and move-out inspection templates (configurable per property type)
-- Scheduled inspection workflows (annual, semi-annual)
-- Photo and video documentation with timestamp + GPS metadata
-- Digital signature capture from tenant and manager
-- Automated inspection report PDF generation
-- Move-in vs. move-out comparison view (basis for deposit disposition)
+- **Inspection scheduling & workflow** — an `Inspection` model
+  (`type: move_in|move_out|scheduled|annual|semi_annual`,
+  `status: scheduled|in_progress|completed|cancelled`, nullable `leaseId`
+  FK so move-in/move-out inspections tie to the lease they're comparing for
+  deposit purposes, nullable `inspectorUserId` FK) with CRUD + schedule +
+  assign-inspector + complete + cancel at
+  `.../units/:unitId/inspections[/:inspectionId]`, gated behind
+  `requireModule('inspections_compliance')` at that router's mount in
+  `units.ts` (same pattern as Module 2's appliances). A `maintenance`-role
+  user may complete an inspection only if they're its assigned inspector;
+  `owner`/`manager` may complete any.
+- **Checklist templates — partially configurable, not property-type-aware.**
+  An `InspectionTemplate` model (`checklistItems: Json`, array of
+  `{section, item, description?}`) is real per-organization stored data
+  with basic CRUD (`.../organizations/:orgId/inspection-templates`) — **not**
+  a hardcoded array in code. But v1 ships with a single seeded default
+  checklist (kitchen, bathrooms, bedrooms, living areas, exterior,
+  appliances, safety devices) rather than a full property-type-aware
+  template picker UI. Do not describe this module as having shipped
+  "configurable per property type" templates — it hasn't.
+- **Photo/video documentation** — an `InspectionMedia` model reusing the
+  exact presigned-upload pattern already established for `Document`/
+  `WorkOrder` photos (`storage.service.ts`): request an upload URL scoped to
+  the inspection, upload directly to Supabase Storage, then record the
+  resulting key. `capturedAt` is always populated (client timestamp or
+  server `now()` fallback). **GPS metadata is best-effort and unverified**:
+  captured via the browser Geolocation API only when the browser grants
+  permission, and this was built and code-path-tested in a non-mobile web
+  session — there was no real device to confirm GPS actually populates from
+  a mobile browser. Treat it as "implemented, not verified" rather than
+  "working."
+- **Digital signature capture — typed name, not canvas-drawn.** Both tenant
+  and manager signatures are captured as `{name, capturedAt, IP address}` on
+  the same `POST .../inspections/:id/complete` request — the exact
+  mechanism the lease e-signature flow already uses
+  (`lease-esignature.service.ts`), not a hand-drawn canvas signature (no
+  `signature_pad`-style dependency exists in the repo, and none was added).
+  This means signing happens as a manager/inspector-device walkthrough
+  capturing both parties in one session, **not** over a separate
+  tenant-facing public signing link the way lease e-signing works. If a
+  canvas-drawn signature or a public tenant-signing link is wanted later,
+  that's a follow-up, not something silently included here.
+- **Inspection report PDF** — client-side only
+  (`apps/web/lib/exportInspectionPdf.ts`, `jspdf` — already a web
+  dependency, mirroring `exportPdf.ts`'s pagination pattern). No new
+  server-side PDF library was added to `apps/api`. Photos/videos are listed
+  by storage key/timestamp/GPS rather than downloaded and embedded as
+  images in the PDF.
+- **Move-in vs. move-out comparison** — `GET
+  .../leases/:leaseId/inspections/compare` (gated per-route in
+  `leases.ts`) diffs the two inspections' `checklistResults` by
+  section+item, flagging items whose recorded condition changed. Shown on
+  the lease detail page next to `SecurityDepositDisposition`, which this
+  module also wires up for real: `SecurityDepositDisposition` gained
+  `moveInInspectionId`/`moveOutInspectionId` FKs, and
+  `reconcileSecurityDeposit` now looks up and links the lease's completed
+  move-in/move-out inspections when present (see Module 4's write-up
+  above). The move-out workflow on the lease detail page links out to
+  scheduling/viewing the move-out inspection.
+- `Unit.lastInspectionAt` is no longer a dormant schema hook — completing
+  any inspection advances it to that inspection's `completedAt`, but only
+  forward (a single conditional `UPDATE ... WHERE last_inspection_at IS
+  NULL OR last_inspection_at < :completedAt`, so an older inspection
+  completing after a newer one never regresses it).
+- **No standalone nav page** — the "Inspections" card lives on the unit
+  detail page (mirrors Module 2's placement); the one new page,
+  `/inspections/[id]` (checklist fill, photo/signature capture,
+  completion, PDF download), is reached only by links from already-gated
+  UI and isn't itself in the sidebar nav.
 
-**Data hooks already in schema:**
-
-- `last_inspection_at` (Unit) — timestamp of most recent inspection of any type
-
-**Dependencies:** Unit management, S3
+**Dependencies:** Unit management, S3 (Supabase Storage, in this codebase)
 
 ---
 

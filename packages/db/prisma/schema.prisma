@@ -56,6 +56,8 @@ model Organization {
   screeningChecks             ScreeningCheck[]
   disbursements               Disbursement[]
   securityDepositDispositions SecurityDepositDisposition[]
+  inspections                 Inspection[]
+  inspectionTemplates         InspectionTemplate[]
 
   @@map("organizations")
 }
@@ -108,6 +110,7 @@ model User {
   uploadedDocuments Document[]     @relation("UploadedDocuments")
   notifications     Notification[]
   savedReports      SavedReport[]
+  inspectionsAssigned Inspection[] @relation("InspectionInspector")
 
   @@unique([organizationId, email])
   @@index([organizationId])
@@ -211,6 +214,7 @@ model Unit {
   messages           Message[]
   rentalApplications RentalApplication[]
   appliances         Appliance[]
+  inspections        Inspection[]
 
   @@unique([propertyId, unitNumber])
   @@index([propertyId])
@@ -287,6 +291,122 @@ enum ApplianceCategory {
   microwave
   garbage_disposal
   other
+}
+
+// ─── Inspection & Compliance (Module 6) ────────────────────────────────────────
+// Configurable move-in/move-out inspection templates, scheduled inspection
+// workflows, photo/video documentation, and signature capture. See
+// docs/reference/modules.md "Module 6" for exactly what's built vs. simplified
+// for v1 (template configurability level, signature mechanism, GPS caveats).
+
+// InspectionTemplate.checklistItems is an array of
+// { section: string, item: string, description?: string } objects — real
+// per-organization stored data (CRUD via inspection-template.service.ts), but
+// v1 ships with a single seeded default template rather than a full
+// property-type-aware template picker.
+model InspectionTemplate {
+  id             String   @id @default(uuid())
+  organizationId String   @map("organization_id")
+  name           String   @db.VarChar(200)
+  description    String?
+  checklistItems Json     @map("checklist_items")
+  isDefault      Boolean  @default(false) @map("is_default")
+  createdAt      DateTime @default(now()) @map("created_at")
+  updatedAt      DateTime @updatedAt @map("updated_at")
+
+  organization Organization  @relation(fields: [organizationId], references: [id])
+  inspections  Inspection[]
+
+  @@index([organizationId])
+  @@map("inspection_templates")
+}
+
+// Signature capture uses the same shape as the lease e-signature flow
+// (lease-esignature.service.ts): a typed attestation name + capture IP +
+// timestamp, not a canvas-drawn image — see modules.md for why. Both
+// tenant and manager signatures are captured on the same completion request,
+// i.e. a manager/inspector-device walkthrough rather than a separate
+// tenant-facing public signing link.
+model Inspection {
+  id                  String            @id @default(uuid())
+  organizationId      String            @map("organization_id")
+  unitId              String            @map("unit_id")
+  leaseId             String?           @map("lease_id")
+  type                InspectionType
+  status              InspectionStatus  @default(scheduled)
+  scheduledAt         DateTime?         @map("scheduled_at")
+  completedAt         DateTime?         @map("completed_at")
+  inspectorUserId     String?           @map("inspector_user_id")
+  templateId          String?           @map("template_id")
+  checklistResults    Json              @default("[]") @map("checklist_results")
+  notes               String?
+  tenantSignatureName String?           @map("tenant_signature_name") @db.VarChar(200)
+  tenantSignatureAt   DateTime?         @map("tenant_signature_at")
+  tenantSignatureIp   String?           @map("tenant_signature_ip") @db.VarChar(45)
+  managerSignatureName String?          @map("manager_signature_name") @db.VarChar(200)
+  managerSignatureAt  DateTime?         @map("manager_signature_at")
+  managerSignatureIp  String?           @map("manager_signature_ip") @db.VarChar(45)
+  createdAt           DateTime          @default(now()) @map("created_at")
+  updatedAt           DateTime          @updatedAt @map("updated_at")
+
+  organization Organization         @relation(fields: [organizationId], references: [id])
+  unit         Unit                 @relation(fields: [unitId], references: [id])
+  lease        Lease?               @relation(fields: [leaseId], references: [id])
+  inspector    User?                @relation("InspectionInspector", fields: [inspectorUserId], references: [id])
+  template     InspectionTemplate?  @relation(fields: [templateId], references: [id])
+  media        InspectionMedia[]
+  depositsAsMoveIn  SecurityDepositDisposition[] @relation("DepositMoveInInspection")
+  depositsAsMoveOut SecurityDepositDisposition[] @relation("DepositMoveOutInspection")
+
+  @@index([organizationId])
+  @@index([unitId])
+  @@index([leaseId])
+  @@index([status])
+  @@map("inspections")
+}
+
+enum InspectionType {
+  move_in
+  move_out
+  scheduled
+  annual
+  semi_annual
+}
+
+enum InspectionStatus {
+  scheduled
+  in_progress
+  completed
+  cancelled
+}
+
+// Photo/video documentation attached to an inspection. Follows the same
+// presigned-upload pattern as Document/WorkOrder photos (storage.service.ts):
+// the client requests an upload URL scoped to the inspection, uploads
+// directly to Supabase Storage, then records the resulting key here.
+// capturedAt always has a value (client-supplied or server now() fallback);
+// latitude/longitude are best-effort — populated only when the browser grants
+// Geolocation permission, and unverified beyond the code path since this was
+// built in a non-mobile session (see modules.md).
+model InspectionMedia {
+  id           String              @id @default(uuid())
+  inspectionId String              @map("inspection_id")
+  storageKey   String              @map("storage_key")
+  mediaType    InspectionMediaType @map("media_type")
+  capturedAt   DateTime            @map("captured_at")
+  latitude     Decimal?            @db.Decimal(9, 6)
+  longitude    Decimal?            @db.Decimal(9, 6)
+  createdAt    DateTime            @default(now()) @map("created_at")
+
+  inspection Inspection @relation(fields: [inspectionId], references: [id], onDelete: Cascade)
+
+  @@index([inspectionId])
+  @@map("inspection_media")
+}
+
+enum InspectionMediaType {
+  photo
+  video
 }
 
 // ─── Tenant ───────────────────────────────────────────────────────────────────
@@ -557,6 +677,7 @@ model Lease {
   participants               LeaseParticipant[]
   payments                   Payment[]
   securityDepositDisposition SecurityDepositDisposition?
+  inspections                Inspection[]
 
   @@index([unitId])
   @@index([status])
@@ -568,10 +689,12 @@ model Lease {
 // Formalizes the deposit-vs-deductions math the move-out workflow already
 // computes onto `Lease.securityDeposit*` into a persisted, auditable
 // disposition record. Reconciles against the itemized deductions captured at
-// move-out — NOT against move-in/move-out inspection records, since the
-// Inspections & Compliance module (Module 6) doesn't exist yet; the
-// moveIn/moveOutConditionNotes fields below are manager-entered free text
-// until that module ships a real inspection model to link against.
+// move-out. As of Module 6 (Inspections & Compliance), when the lease has a
+// completed move-in and/or move-out Inspection on file, reconcileSecurityDeposit
+// (lease.service.ts) links them via moveInInspectionId/moveOutInspectionId
+// below and prefers their checklist data; the moveIn/moveOutConditionNotes
+// free-text fields remain for backward compatibility and for leases with no
+// inspection on file.
 
 model SecurityDepositDisposition {
   id                    String                @id @default(uuid())
@@ -584,15 +707,21 @@ model SecurityDepositDisposition {
   deductions            Json
   moveInConditionNotes  String?               @map("move_in_condition_notes")
   moveOutConditionNotes String?               @map("move_out_condition_notes")
+  moveInInspectionId    String?               @map("move_in_inspection_id")
+  moveOutInspectionId   String?               @map("move_out_inspection_id")
   reconciledByUserId    String                @map("reconciled_by_user_id")
   reconciledAt          DateTime              @default(now()) @map("reconciled_at")
   createdAt             DateTime              @default(now()) @map("created_at")
   updatedAt             DateTime              @updatedAt @map("updated_at")
 
-  organization Organization @relation(fields: [organizationId], references: [id])
-  lease        Lease        @relation(fields: [leaseId], references: [id])
+  organization    Organization @relation(fields: [organizationId], references: [id])
+  lease           Lease        @relation(fields: [leaseId], references: [id])
+  moveInInspection  Inspection? @relation("DepositMoveInInspection", fields: [moveInInspectionId], references: [id], onDelete: SetNull)
+  moveOutInspection Inspection? @relation("DepositMoveOutInspection", fields: [moveOutInspectionId], references: [id], onDelete: SetNull)
 
   @@index([organizationId])
+  @@index([moveInInspectionId])
+  @@index([moveOutInspectionId])
   @@map("security_deposit_dispositions")
 }
 

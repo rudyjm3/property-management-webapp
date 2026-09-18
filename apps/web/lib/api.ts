@@ -227,6 +227,9 @@ export const api = {
         method: 'POST',
         body: JSON.stringify(data),
       }),
+    // Inspections & Compliance (Module 6) — move-in vs. move-out comparison.
+    compareInspections: (id: string) =>
+      apiFetch<any>(`/api/v1/organizations/${_orgId}/leases/${id}/inspections/compare`),
     delete: (id: string) =>
       apiFetch<void>(`/api/v1/organizations/${_orgId}/leases/${id}`, {
         method: 'DELETE',
@@ -379,6 +382,91 @@ export const api = {
         `/api/v1/organizations/${_orgId}/properties/${propertyId}/units/${unitId}/appliances/${applianceId}/replace`,
         { method: 'POST', body: JSON.stringify(data) }
       ),
+  },
+  // Inspections & Compliance (Module 6) — gated by activeModules.
+  inspections: {
+    list: (propertyId: string, unitId: string) =>
+      apiFetch<any[]>(
+        `/api/v1/organizations/${_orgId}/properties/${propertyId}/units/${unitId}/inspections`
+      ),
+    get: (propertyId: string, unitId: string, inspectionId: string) =>
+      apiFetch<any>(
+        `/api/v1/organizations/${_orgId}/properties/${propertyId}/units/${unitId}/inspections/${inspectionId}`
+      ),
+    create: (propertyId: string, unitId: string, data: any) =>
+      apiFetch<any>(
+        `/api/v1/organizations/${_orgId}/properties/${propertyId}/units/${unitId}/inspections`,
+        { method: 'POST', body: JSON.stringify(data) }
+      ),
+    update: (propertyId: string, unitId: string, inspectionId: string, data: any) =>
+      apiFetch<any>(
+        `/api/v1/organizations/${_orgId}/properties/${propertyId}/units/${unitId}/inspections/${inspectionId}`,
+        { method: 'PATCH', body: JSON.stringify(data) }
+      ),
+    complete: (propertyId: string, unitId: string, inspectionId: string, data: any) =>
+      apiFetch<any>(
+        `/api/v1/organizations/${_orgId}/properties/${propertyId}/units/${unitId}/inspections/${inspectionId}/complete`,
+        { method: 'POST', body: JSON.stringify(data) }
+      ),
+    cancel: (propertyId: string, unitId: string, inspectionId: string) =>
+      apiFetch<any>(
+        `/api/v1/organizations/${_orgId}/properties/${propertyId}/units/${unitId}/inspections/${inspectionId}/cancel`,
+        { method: 'POST' }
+      ),
+    delete: (propertyId: string, unitId: string, inspectionId: string) =>
+      apiFetch<void>(
+        `/api/v1/organizations/${_orgId}/properties/${propertyId}/units/${unitId}/inspections/${inspectionId}`,
+        { method: 'DELETE' }
+      ),
+    requestMediaUploadUrl: (propertyId: string, unitId: string, inspectionId: string, fileName: string, contentType: string) =>
+      apiFetch<{ uploadUrl: string; storageKey: string; expiresInSeconds: number }>(
+        `/api/v1/organizations/${_orgId}/properties/${propertyId}/units/${unitId}/inspections/${inspectionId}/media/upload-url`,
+        { method: 'POST', body: JSON.stringify({ fileName, contentType }) }
+      ),
+    uploadToStorage: async (uploadUrl: string, file: File, contentType: string): Promise<void> => {
+      const res = await fetch(uploadUrl, {
+        method: 'PUT',
+        headers: { 'Content-Type': contentType },
+        body: file,
+      });
+      if (!res.ok) throw new Error(`Storage upload failed: ${res.status}`);
+    },
+    attachMedia: (
+      propertyId: string,
+      unitId: string,
+      inspectionId: string,
+      data: {
+        storageKey: string;
+        mediaType: 'photo' | 'video';
+        capturedAt?: string | null;
+        latitude?: number | null;
+        longitude?: number | null;
+      }
+    ) =>
+      apiFetch<any>(
+        `/api/v1/organizations/${_orgId}/properties/${propertyId}/units/${unitId}/inspections/${inspectionId}/media`,
+        { method: 'POST', body: JSON.stringify(data) }
+      ),
+    listMedia: (propertyId: string, unitId: string, inspectionId: string) =>
+      apiFetch<any[]>(
+        `/api/v1/organizations/${_orgId}/properties/${propertyId}/units/${unitId}/inspections/${inspectionId}/media`
+      ),
+  },
+  inspectionTemplates: {
+    list: () => apiFetch<any[]>(`/api/v1/organizations/${_orgId}/inspection-templates`),
+    get: (templateId: string) => apiFetch<any>(`/api/v1/organizations/${_orgId}/inspection-templates/${templateId}`),
+    create: (data: any) =>
+      apiFetch<any>(`/api/v1/organizations/${_orgId}/inspection-templates`, {
+        method: 'POST',
+        body: JSON.stringify(data),
+      }),
+    update: (templateId: string, data: any) =>
+      apiFetch<any>(`/api/v1/organizations/${_orgId}/inspection-templates/${templateId}`, {
+        method: 'PATCH',
+        body: JSON.stringify(data),
+      }),
+    delete: (templateId: string) =>
+      apiFetch<void>(`/api/v1/organizations/${_orgId}/inspection-templates/${templateId}`, { method: 'DELETE' }),
   },
   workOrders: {
     list: (params?: {
