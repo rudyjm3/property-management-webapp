@@ -24,6 +24,9 @@ import {
   OWNER_STATEMENT_STATUSES,
   DISBURSEMENT_STATUSES,
   APPLIANCE_CATEGORIES,
+  INSPECTION_TYPES,
+  INSPECTION_STATUSES,
+  INSPECTION_MEDIA_TYPES,
 } from '../constants';
 
 // ─── Organization ─────────────────────────────────────────────────────────────
@@ -609,3 +612,72 @@ export const updateTenantProfileSchema = z.object({
   emergencyContact2Phone: z.string().max(20).nullable().optional(),
   emergencyContact2Relationship: z.string().max(100).nullable().optional(),
 }).strict();
+
+// ─── Inspection (Inspections & Compliance / Module 6) ──────────────────────────
+
+const checklistItemResultSchema = z.object({
+  section: z.string().min(1).max(200),
+  item: z.string().min(1).max(200),
+  condition: z.string().max(50).nullable().optional(),
+  notes: z.string().max(2000).nullable().optional(),
+});
+
+export const createInspectionSchema = z.object({
+  type: z.enum(INSPECTION_TYPES),
+  leaseId: z.string().uuid().nullable().optional(),
+  scheduledAt: z.string().datetime().nullable().optional(),
+  inspectorUserId: z.string().uuid().nullable().optional(),
+  templateId: z.string().uuid().nullable().optional(),
+  notes: z.string().max(4000).nullable().optional(),
+});
+
+export const updateInspectionSchema = z.object({
+  type: z.enum(INSPECTION_TYPES).optional(),
+  leaseId: z.string().uuid().nullable().optional(),
+  scheduledAt: z.string().datetime().nullable().optional(),
+  inspectorUserId: z.string().uuid().nullable().optional(),
+  templateId: z.string().uuid().nullable().optional(),
+  notes: z.string().max(4000).nullable().optional(),
+  status: z.enum(INSPECTION_STATUSES).optional(),
+});
+
+// Marks the inspection completed — captures the filled-in checklist and
+// optional tenant/manager signatures in one request (manager/inspector-device
+// walkthrough, not a separate public tenant-signing link — see modules.md).
+export const completeInspectionSchema = z.object({
+  checklistResults: z.array(checklistItemResultSchema).default([]),
+  notes: z.string().max(4000).nullable().optional(),
+  completedAt: z.string().datetime().nullable().optional(),
+  tenantSignatureName: z.string().max(200).nullable().optional(),
+  managerSignatureName: z.string().max(200).nullable().optional(),
+});
+
+export const requestInspectionMediaUploadSchema = z.object({
+  fileName: z.string().min(1).max(300),
+  contentType: z.string().min(1).max(200),
+});
+
+export const attachInspectionMediaSchema = z.object({
+  storageKey: z.string().min(1).max(1000),
+  mediaType: z.enum(INSPECTION_MEDIA_TYPES),
+  capturedAt: z.string().datetime().nullable().optional(),
+  latitude: z.number().min(-90).max(90).nullable().optional(),
+  longitude: z.number().min(-180).max(180).nullable().optional(),
+});
+
+export const createInspectionTemplateSchema = z.object({
+  name: z.string().min(1).max(200),
+  description: z.string().max(2000).nullable().optional(),
+  checklistItems: z
+    .array(
+      z.object({
+        section: z.string().min(1).max(200),
+        item: z.string().min(1).max(200),
+        description: z.string().max(1000).nullable().optional(),
+      })
+    )
+    .min(1),
+  isDefault: z.boolean().optional(),
+});
+
+export const updateInspectionTemplateSchema = createInspectionTemplateSchema.partial();
