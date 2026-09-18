@@ -61,7 +61,7 @@ fix: correct late fee calculation on grace period boundary
 
 docs: add Docker setup instructions for Windows
 
-chore: upgrade Next.js to 14.2
+chore: upgrade Next.js to 15.x
 ```
 
 ---
@@ -76,13 +76,13 @@ chore: upgrade Next.js to 14.2
    - **How to test:** Steps to verify it works
    - **Screenshots:** If any UI changes are included
 4. Request a review before merging
-5. Squash and merge — keep `main`'s history clean
+5. Merge via a merge commit (not squash) — this is current actual practice in this repo, preserving each PR's individual commits in `main`'s history rather than collapsing them
 
 ---
 
 ## Code Style
 
-Code style is enforced automatically via ESLint and Prettier. A pre-commit hook (Husky + lint-staged) runs these checks before every commit.
+Code style is enforced via ESLint and Prettier, and checked in CI (`.github/workflows/ci.yml`) on every push/PR. There is currently no local pre-commit hook (Husky/lint-staged) — run the commands below yourself before pushing.
 
 Key conventions:
 - 2-space indentation
@@ -120,12 +120,20 @@ Never edit migration files manually after they have been committed. Create a new
 
 ## Testing
 
-(Test setup will be added in Phase 1. This section will be updated with test conventions once the framework is chosen.)
+The API uses [Vitest](https://vitest.dev/) (`apps/api/tests/`, one file per service/route). Run it with:
+```bash
+npm test --workspace=apps/api        # run once
+npm run test:watch --workspace=apps/api
+npm run test:coverage --workspace=apps/api
+```
+CI runs the full suite on every push/PR alongside lint and typecheck.
 
 As a general principle:
 - Unit tests for business logic in `packages/shared` and `apps/api/src/services`
 - Integration tests for API routes that hit the real database
 - No mocking the database in integration tests — use a dedicated test database
+
+Web and mobile don't have an automated test suite yet — see `BUILD_OUTLINE.md` §12 Cross-Cutting Status for current gaps.
 
 ---
 

@@ -24,15 +24,14 @@ Property managers juggle rent collection in one tool, maintenance in another, an
                     |
          +----------v-----------+
          |   Node.js REST API   |
-         |   + WebSocket        |
          +----------+-----------+
                     |
       +-------------+---------------+
       |             |               |
- +----v----+  +-----v---+   +------v------+
- |Postgres |  | Redis   |   |  AWS S3     |
- |  (DB)   |  | (Cache) |   |  (Files)    |
- +---------+  +---------+   +-------------+
+ +----v----+  +-----v---+   +------v---------+
+ |Postgres |  | Redis   |   |Supabase Storage|
+ |  (DB)   |  |(planned)|   |   (Files)      |
+ +---------+  +---------+   +----------------+
                     |
       +-------------+---------------+
       |             |               |
@@ -48,14 +47,14 @@ Property managers juggle rent collection in one tool, maintenance in another, an
 
 | Layer | Technology | Rationale |
 |---|---|---|
-| Manager Web App | Next.js 14 (App Router) | SSR for dashboard performance, file-based routing |
-| Tenant Mobile App | React Native (Expo) | Single codebase for iOS + Android |
-| Backend API | Node.js + Express | Real-time capability, JS across full stack |
+| Manager Web App | Next.js 15 (App Router) | SSR for dashboard performance, file-based routing |
+| Tenant Mobile App | React Native (Expo SDK 54) | Single codebase for iOS + Android |
+| Backend API | Node.js + Express | JS across full stack; in-app messaging currently uses REST polling, not WebSocket |
 | Primary Database | PostgreSQL 15 | Relational integrity for lease and financial data |
-| Cache / Sessions | Redis 7 | Fast session lookup, queue for notifications |
+| Cache / Sessions | Redis 7 | Provisioned via Docker Compose for future session/cache use; not yet wired into the app — rate limiting today runs in-memory via `express-rate-limit` |
 | Auth | Supabase Auth | Managed auth with row-level security |
 | Payments | Stripe (ACH + Card) | Verified ACH, recurring billing |
-| File Storage | AWS S3 | Lease PDFs, inspection photos, document vault |
+| File Storage | Supabase Storage | Lease PDFs, inspection photos, document vault (migrated off AWS S3) |
 | Email | Resend | Transactional email |
 | SMS | Twilio | Rent reminders, work order notifications |
 | Hosting | Vercel (web) + Railway (API) | Zero-config deploys |
@@ -90,8 +89,24 @@ Property managers juggle rent collection in one tool, maintenance in another, an
 | Advanced Payments & Accounting | $30-50/mo |
 | Vendor & Contractor Management | $20-30/mo |
 | Inspections & Compliance | $25-40/mo |
+| Lease Renewal (negotiation & countersignature) | $15-25/mo |
+| Eviction Management | $30-50/mo |
+| Owner Portal | $25-40/mo |
 | Communications & Resident Engagement | $20-30/mo |
 | Reporting & Analytics | $25-40/mo |
+
+Nine of the eleven modules above now have a functional implementation
+behind module-based feature gating (`Organization.activeModules` +
+`requireModule()`/`<ModuleGate>` — see `docs/reference/modules.md`);
+**Lease Renewal's negotiation/countersignature workflow and Communications
+& Resident Engagement's broadcast/SMS features are not yet built** (each
+module's base-product overlap — one-click renewal, one-to-one messaging —
+already ships). Full Stripe Subscription Item billing per module isn't
+wired yet either, so activation today is manual rather than self-service.
+For exactly what's built vs. still partial in each module, see
+`docs/reference/modules.md` and `BUILD_OUTLINE.md` §12/§14 — those are kept
+current as modules ship and are the source of truth over this table, which
+is pricing/roadmap-oriented.
 
 ---
 
@@ -122,9 +137,11 @@ property-management-webapp/
 │   └── ui/                   # Shared component library (future)
 ├── docs/
 │   ├── SETUP.md              # Local development setup guide
-│   ├── ARCHITECTURE.md       # System design deep-dive
-│   ├── DATA_MODEL.md         # Entity-relationship documentation
-│   └── API.md                # API endpoint reference
+│   └── reference/            # Hand-maintained, kept current as code changes
+│       ├── schema.md         # Every Prisma model, key fields, FKs
+│       ├── rbac.md           # Roles, auth middleware, role-gating
+│       ├── routes.md         # API route mount points and auth chains
+│       └── modules.md        # Add-on module roadmap + build status
 ├── .env.example              # Environment variable template
 ├── .gitignore
 ├── BUILD_OUTLINE.md          # Full technical build blueprint
@@ -160,7 +177,7 @@ cp .env.example .env
 # 3. Start local database services
 docker compose up -d
 
-# 4. Install dependencies (once monorepo is scaffolded)
+# 4. Install dependencies
 npm install
 
 # 5. Run database migrations
@@ -182,9 +199,9 @@ See [docs/SETUP.md](docs/SETUP.md) for the full detailed setup guide including W
 
 ---
 
-## Build Roadmap
+## Build Roadmap & Current Status
 
-See [BUILD_OUTLINE.md](BUILD_OUTLINE.md) for the complete phased build plan, data model, screen-by-screen feature list, and module roadmap.
+See [BUILD_OUTLINE.md](BUILD_OUTLINE.md) for the complete phased build plan, data model, screen-by-screen feature list, and module roadmap — §12 tracks phase-by-phase implementation status and §14 the add-on module build status, both kept current as work ships. For a compressed, code-linked view of exactly what each add-on module does and doesn't do today, see [docs/reference/modules.md](docs/reference/modules.md).
 
 ---
 

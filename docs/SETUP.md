@@ -58,7 +58,7 @@ Open `.env` and fill in the values. For initial local development, only the data
 Services you'll need to set up for full functionality:
 - **Supabase Auth** — Create a free project at [supabase.com](https://supabase.com)
 - **Stripe** — Create a free account at [stripe.com](https://stripe.com), use test keys
-- **AWS S3** — Create a free-tier bucket (or skip for Phase 1 — file upload is Phase 1 week 9–10)
+- **Supabase Storage** — File storage (documents, photos, inspection media) uses Supabase Storage, not AWS S3 — the same Supabase project used for Auth also provides this, so no separate bucket/account is needed
 - **Resend** — Create a free account at [resend.com](https://resend.com)
 - **Twilio** — Create a free trial account at [twilio.com](https://twilio.com) (optional for Phase 1)
 
