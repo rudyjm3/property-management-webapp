@@ -5,7 +5,21 @@ import { api } from '@/lib/api';
 import { useAuth } from '@/contexts/AuthContext';
 import SettingsShell from '@/components/settings/SettingsShell';
 import ModuleGate from '@/components/ModuleGate';
-import { MODULE_KEYS, ALL_MODULE_KEYS, type ModuleKey } from '@propflow/shared';
+import { MODULE_KEYS, ALL_MODULE_KEYS, WORK_ORDER_CATEGORIES, type ModuleKey } from '@propflow/shared';
+import type { PreferredVendorAssignment, VendorListItem } from '@/lib/api';
+
+const CATEGORY_LABELS: Record<string, string> = {
+  plumbing: 'Plumbing',
+  electrical: 'Electrical',
+  hvac: 'HVAC',
+  appliance: 'Appliance',
+  pest: 'Pest',
+  structural: 'Structural',
+  cosmetic: 'Cosmetic',
+  grounds: 'Grounds',
+  general: 'General',
+  other: 'Other',
+};
 
 const MODULE_LABELS: Record<ModuleKey, string> = {
   [MODULE_KEYS.OWNER_PORTAL]: 'Owner Portal',
@@ -56,6 +70,17 @@ export default function OrganizationSettingsPage() {
   const [feeSaving, setFeeSaving] = useState(false);
   const [feeError, setFeeError] = useState<string | null>(null);
   const [feeSaved, setFeeSaved] = useState(false);
+
+  // Preferred vendor assignments (Module 5)
+  const [assignments, setAssignments] = useState<PreferredVendorAssignment[]>([]);
+  const [assignmentsLoading, setAssignmentsLoading] = useState(false);
+  const [assignmentsError, setAssignmentsError] = useState<string | null>(null);
+  const [vendorOptions, setVendorOptions] = useState<VendorListItem[]>([]);
+  const [propertyOptions, setPropertyOptions] = useState<{ id: string; name: string }[]>([]);
+  const [assignPropertyId, setAssignPropertyId] = useState('');
+  const [assignCategory, setAssignCategory] = useState('plumbing');
+  const [assignVendorId, setAssignVendorId] = useState('');
+  const [assignSubmitting, setAssignSubmitting] = useState(false);
 
   useEffect(() => {
     async function load() {
@@ -167,6 +192,65 @@ export default function OrganizationSettingsPage() {
       setFeeError(err.message || 'Failed to save management fee default.');
     } finally {
       setFeeSaving(false);
+    }
+  }
+
+  async function loadPreferredVendorAssignments() {
+    setAssignmentsLoading(true);
+    setAssignmentsError(null);
+    try {
+      const [list, vendors, properties] = await Promise.all([
+        api.vendors.preferredAssignments.list(),
+        api.vendors.list({ activeOnly: true }),
+        api.properties.list(),
+      ]);
+      setAssignments(list);
+      setVendorOptions(vendors);
+      setPropertyOptions(properties.map((p: any) => ({ id: p.id, name: p.name })));
+    } catch (err: any) {
+      setAssignmentsError(err.message || 'Failed to load preferred vendor assignments.');
+    } finally {
+      setAssignmentsLoading(false);
+    }
+  }
+
+  useEffect(() => {
+    if (activeModules.includes(MODULE_KEYS.VENDOR_MANAGEMENT)) {
+      loadPreferredVendorAssignments();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeModules.includes(MODULE_KEYS.VENDOR_MANAGEMENT)]);
+
+  async function handleAssignSubmit(e: React.FormEvent) {
+    e.preventDefault();
+    if (!assignVendorId) {
+      setAssignmentsError('Select a vendor.');
+      return;
+    }
+    setAssignSubmitting(true);
+    setAssignmentsError(null);
+    try {
+      await api.vendors.preferredAssignments.upsert({
+        propertyId: assignPropertyId || null,
+        category: assignCategory,
+        vendorId: assignVendorId,
+      });
+      setAssignVendorId('');
+      await loadPreferredVendorAssignments();
+    } catch (err: any) {
+      setAssignmentsError(err.message || 'Failed to save preferred vendor assignment.');
+    } finally {
+      setAssignSubmitting(false);
+    }
+  }
+
+  async function handleDeleteAssignment(id: string) {
+    if (!confirm('Remove this preferred vendor assignment?')) return;
+    try {
+      await api.vendors.preferredAssignments.delete(id);
+      await loadPreferredVendorAssignments();
+    } catch (err: any) {
+      setAssignmentsError(err.message || 'Failed to remove assignment.');
     }
   }
 
@@ -509,6 +593,120 @@ export default function OrganizationSettingsPage() {
           ))}
         </div>
       </div>
+
+      <ModuleGate module={MODULE_KEYS.VENDOR_MANAGEMENT}>
+        <div className="card" style={{ marginTop: '20px' }}>
+          <div className="card-body">
+            <h2 style={{ fontSize: '16px', fontWeight: 600, marginBottom: '8px' }}>
+              Preferred Vendors
+            </h2>
+            <p style={{ fontSize: '13px', color: 'var(--color-text-muted)', marginBottom: '16px' }}>
+              Set a default vendor per property + category, or an org-wide default for a category
+              (leave property blank). Used to auto-assign a vendor when a work order or grounds
+              maintenance schedule doesn&apos;t specify one.
+            </p>
+
+            {assignmentsError && (
+              <div
+                style={{
+                  background: '#fef2f2',
+                  border: '1px solid #fecaca',
+                  borderRadius: '6px',
+                  padding: '12px',
+                  marginBottom: '16px',
+                  color: '#dc2626',
+                  fontSize: '14px',
+                }}
+              >
+                {assignmentsError}
+              </div>
+            )}
+
+            {assignmentsLoading ? (
+              <p style={{ color: 'var(--color-text-muted)', fontSize: '14px' }}>Loading…</p>
+            ) : (
+              <>
+                {assignments.length === 0 ? (
+                  <p style={{ color: 'var(--color-text-muted)', fontSize: '14px', marginBottom: '16px' }}>
+                    No preferred vendor assignments yet.
+                  </p>
+                ) : (
+                  <div className="table-container" style={{ marginBottom: '16px' }}>
+                    <table>
+                      <thead>
+                        <tr>
+                          <th>Category</th>
+                          <th>Property</th>
+                          <th>Vendor</th>
+                          <th></th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {assignments.map((a) => (
+                          <tr key={a.id}>
+                            <td>{CATEGORY_LABELS[a.category] ?? a.category}</td>
+                            <td>{a.property ? a.property.name : 'Org-wide default'}</td>
+                            <td>{a.vendor.companyName}</td>
+                            <td>
+                              <button
+                                type="button"
+                                className="btn btn-sm btn-secondary"
+                                onClick={() => handleDeleteAssignment(a.id)}
+                              >
+                                Remove
+                              </button>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+
+                <form onSubmit={handleAssignSubmit} className="form-row">
+                  <div className="form-group">
+                    <label>Category</label>
+                    <select value={assignCategory} onChange={(e) => setAssignCategory(e.target.value)}>
+                      {WORK_ORDER_CATEGORIES.map((c) => (
+                        <option key={c} value={c}>
+                          {CATEGORY_LABELS[c] ?? c}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                  <div className="form-group">
+                    <label>Property (optional — blank = org-wide)</label>
+                    <select value={assignPropertyId} onChange={(e) => setAssignPropertyId(e.target.value)}>
+                      <option value="">Org-wide default</option>
+                      {propertyOptions.map((p) => (
+                        <option key={p.id} value={p.id}>
+                          {p.name}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                  <div className="form-group">
+                    <label>Vendor</label>
+                    <select value={assignVendorId} onChange={(e) => setAssignVendorId(e.target.value)}>
+                      <option value="">Select a vendor…</option>
+                      {vendorOptions.map((v) => (
+                        <option key={v.id} value={v.id}>
+                          {v.companyName}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                  <div className="form-group" style={{ alignSelf: 'flex-end' }}>
+                    <button type="submit" className="btn btn-primary" disabled={assignSubmitting}>
+                      {assignSubmitting ? 'Saving...' : 'Set as Preferred'}
+                    </button>
+                  </div>
+                </form>
+              </>
+            )}
+          </div>
+        </div>
+      </ModuleGate>
 
       <ModuleGate module={MODULE_KEYS.ADVANCED_PAYMENTS_ACCOUNTING}>
         <div className="card" style={{ marginTop: '20px' }}>

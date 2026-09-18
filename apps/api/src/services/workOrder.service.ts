@@ -43,6 +43,10 @@ const workOrderIncludeBase = {
   assignedTo: { select: { id: true, name: true, email: true } },
   submittedByUser: { select: { id: true, name: true, role: true } },
   vendor: { select: { id: true, companyName: true, contactName: true, phonePrimary: true } },
+  // Vendor & Contractor Management (Module 5) — lets the web UI know
+  // whether this work order already has a rating on file, without a
+  // separate request; the field is simply absent/null pre-Module 5 data.
+  vendorRating: { select: { id: true, rating: true, note: true, createdAt: true } },
 };
 
 const workOrderIncludeWithAppliance = {

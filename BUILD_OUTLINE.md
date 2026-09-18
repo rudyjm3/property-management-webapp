@@ -1625,14 +1625,43 @@ assuming any bullet below is fully built as originally scoped:
   fallback). CRUD for assignments lives at
   `GET`/`POST`/`DELETE .../vendors/preferred-assignments[/:assignmentId]`,
   gated.
-- **No dedicated vendor management web page.** Before this change there was
-  no vendor UI in `apps/web` at all beyond an unused list API call. This
-  change adds the gated dashboard alert widget described above but does
-  not add a vendor list/detail/CRUD page — that was cut from scope in favor
-  of getting the schema, gating, and aggregation logic right. Base vendor
-  CRUD and the work-history/rating/preferred-assignment endpoints are real,
-  tested, and gated correctly, but reachable only via direct API calls
-  today, not from any page in the web app.
+- **Vendor management web UI — added as a follow-up on this PR.** The
+  gated dashboard alert widget described above shipped first; a dedicated
+  vendor list/detail/CRUD page followed in the same PR:
+  - `/vendors` — vendor list (ungated base CRUD): search/filter by
+    status and specialty, a create form, and license/insurance expiry
+    badges (the list endpoint's `select` was extended to include
+    `licenseExpiresAt`/`insuranceExpiresAt`, which weren't previously
+    selected there).
+  - `/vendors/[vendorId]` — vendor detail (ungated base CRUD for
+    view/edit/delete), plus two sections gated behind
+    `<ModuleGate module="vendor_management">`: a work-history/spend view
+    (`GET .../vendors/:vendorId/work-history?months=`, selectable
+    3/6/12/24-month range) and a "Preferred For" list (reads
+    `GET .../vendors/preferred-assignments`, filtered client-side to the
+    current vendor).
+  - Preferred-vendor-assignment CRUD itself lives on
+    `/settings/organization` (a new gated "Preferred Vendors" card), not
+    the vendor detail page — it's a property/category × vendor matrix,
+    a better fit next to the existing module-toggle settings than
+    duplicated per-vendor UI.
+  - The work-order detail page (`/work-orders/[id]`) gained a gated
+    "Vendor Rating" sidebar card, shown only when the order has an
+    assigned vendor and is `completed`/`closed`, posting to
+    `POST .../work-orders/:workOrderId/vendor-rating`.
+    `workOrder.service.ts`'s `getWorkOrder`/`getWorkOrders` `include` was
+    extended with a `vendorRating` select so the UI knows whether a
+    rating already exists without an extra request.
+  - A "Vendors" nav link was added (ungated, shown to `maintenance` too,
+    matching that role's existing access to `vendors.ts`), with an
+    expiry-alert count badge next to it, gated.
+  - **What's still not covered**: there is no endpoint to list a vendor's
+    full rating history. The detail page's work-history/spend view only
+    surfaces the up-to-10 most recent ratings *within the selected month
+    range* (`getVendorWorkHistory`'s existing `ratings.recent` field) plus
+    the all-time rolling `Vendor.rating` average — a dedicated "list every
+    rating for this vendor" endpoint would be new backend work and was
+    judged out of scope for this UI follow-up.
 
 **Data hooks already in schema:**
 

@@ -37,6 +37,8 @@ export async function listVendors(organizationId: string, opts: { activeOnly?: b
       status: true,
       preferred: true,
       rating: true,
+      licenseExpiresAt: true,
+      insuranceExpiresAt: true,
     },
     orderBy: [{ preferred: 'desc' }, { companyName: 'asc' }],
   });

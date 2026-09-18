@@ -15,6 +15,7 @@ const allNavItems: { href: string; label: string; icon: string; module?: ModuleK
   { href: '/leases', label: 'Leases', icon: 'file-text' },
   { href: '/payments', label: 'Payments', icon: 'dollar' },
   { href: '/work-orders', label: 'Work Orders', icon: 'wrench' },
+  { href: '/vendors', label: 'Vendors', icon: 'vendor-truck' },
   { href: '/messages', label: 'Messages', icon: 'mail' },
   { href: '/documents', label: 'Documents', icon: 'folder' },
   { href: '/owners', label: 'Owners', icon: 'owner', module: MODULE_KEYS.OWNER_PORTAL },
@@ -26,6 +27,7 @@ const allNavItems: { href: string; label: string; icon: string; module?: ModuleK
 const maintenanceNavItems: typeof allNavItems = [
   { href: '/dashboard', label: 'Dashboard', icon: 'grid' },
   { href: '/work-orders', label: 'Work Orders', icon: 'wrench' },
+  { href: '/vendors', label: 'Vendors', icon: 'vendor-truck' },
 ];
 
 const icons: Record<string, React.ReactNode> = {
@@ -114,6 +116,14 @@ const icons: Record<string, React.ReactNode> = {
       <line x1="2" y1="20" x2="22" y2="20" />
     </svg>
   ),
+  'vendor-truck': (
+    <svg className="sidebar-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+      <rect x="1" y="7" width="14" height="10" rx="1" />
+      <path d="M15 10h4l3 3v4h-7z" />
+      <circle cx="6" cy="19" r="2" />
+      <circle cx="17" cy="19" r="2" />
+    </svg>
+  ),
 };
 
 export default function Sidebar() {
@@ -125,6 +135,7 @@ export default function Sidebar() {
   );
   const [unreadCount, setUnreadCount] = useState(0);
   const [pendingAppCount, setPendingAppCount] = useState(0);
+  const [vendorAlertCount, setVendorAlertCount] = useState(0);
 
   function refreshBadge(userId: string) {
     api.notifications.list({ userId, limit: 50 })
@@ -142,7 +153,18 @@ export default function Sidebar() {
     if (!profile?.userId) return;
     refreshBadge(profile.userId);
     refreshAppBadge();
-  }, [profile?.userId, pathname]);
+    // Module 5 — vendor license/insurance expiry alert badge, only when the
+    // module is active (endpoint 403s otherwise).
+    if (activeModules.includes(MODULE_KEYS.VENDOR_MANAGEMENT)) {
+      api.vendors
+        .expiryAlerts()
+        .then((alerts) => setVendorAlertCount(alerts.length))
+        .catch(() => setVendorAlertCount(0));
+    } else {
+      setVendorAlertCount(0);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [profile?.userId, pathname, activeModules.includes(MODULE_KEYS.VENDOR_MANAGEMENT)]);
 
   // Also refresh immediately when messages page marks notifications read
   useEffect(() => {
@@ -199,6 +221,27 @@ export default function Sidebar() {
                 padding: '0 4px',
               }}>
                 {pendingAppCount > 99 ? '99+' : pendingAppCount}
+              </span>
+            )}
+            {item.icon === 'vendor-truck' && vendorAlertCount > 0 && (
+              <span style={{
+                position: 'absolute',
+                right: '12px',
+                top: '50%',
+                transform: 'translateY(-50%)',
+                background: 'var(--color-warning, #d97706)',
+                color: 'white',
+                borderRadius: '999px',
+                fontSize: '11px',
+                fontWeight: 600,
+                minWidth: '18px',
+                height: '18px',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                padding: '0 4px',
+              }}>
+                {vendorAlertCount > 99 ? '99+' : vendorAlertCount}
               </span>
             )}
             {item.icon === 'bell' && unreadCount > 0 && (
