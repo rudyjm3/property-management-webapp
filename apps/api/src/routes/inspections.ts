@@ -167,7 +167,8 @@ router.post(
         req.params.unitId as string,
         req.params.inspectionId as string,
         req.body.fileName,
-        req.body.contentType
+        req.body.contentType,
+        req.user ? { userId: req.user.userId, role: req.user.role } : null
       );
       res.json({ data: result });
     } catch (err) {
@@ -190,7 +191,8 @@ router.post(
         req.params.propertyId as string,
         req.params.unitId as string,
         req.params.inspectionId as string,
-        req.body
+        req.body,
+        req.user ? { userId: req.user.userId, role: req.user.role } : null
       );
       res.status(201).json({ data: media });
     } catch (err) {

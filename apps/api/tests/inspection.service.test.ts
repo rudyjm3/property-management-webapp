@@ -9,11 +9,18 @@ vi.mock('@propflow/db', () => ({
     lease: {
       findFirst: vi.fn(),
     },
+    user: {
+      findFirst: vi.fn(),
+    },
+    inspectionTemplate: {
+      findFirst: vi.fn(),
+    },
     inspection: {
       findMany: vi.fn(),
       findFirst: vi.fn(),
       create: vi.fn(),
       update: vi.fn(),
+      updateMany: vi.fn(),
       delete: vi.fn(),
     },
     inspectionMedia: {
@@ -37,15 +44,18 @@ import {
   listInspections,
   getInspection,
   createInspection,
+  updateInspection,
   completeInspection,
   compareLeaseInspections,
   requestMediaUploadUrl,
+  attachMedia,
 } from '../src/services/inspection.service';
 
-function mockTx() {
+function mockTx(opts: { completeCount?: number } = {}) {
   const tx = {
     inspection: {
-      update: vi.fn().mockImplementation(({ data }: any) => Promise.resolve({ id: 'insp-1', ...data })),
+      updateMany: vi.fn().mockResolvedValue({ count: opts.completeCount ?? 1 }),
+      findFirst: vi.fn().mockImplementation(() => Promise.resolve({ id: 'insp-1', status: 'completed' })),
     },
     unit: {
       updateMany: vi.fn().mockResolvedValue({ count: 1 }),
@@ -203,7 +213,7 @@ describe('inspection.service completeInspection', () => {
       { userId: 'user-1', role: 'manager' }
     );
 
-    expect(tx.inspection.update).toHaveBeenCalledWith(
+    expect(tx.inspection.updateMany).toHaveBeenCalledWith(
       expect.objectContaining({
         data: expect.objectContaining({
           tenantSignatureName: 'Jane Tenant',
@@ -213,6 +223,153 @@ describe('inspection.service completeInspection', () => {
         }),
       })
     );
+  });
+
+  it('rejects when a concurrent request already finalized the inspection inside the transaction', async () => {
+    (prisma.unit.findFirst as any).mockResolvedValue({ id: 'unit-1' });
+    (prisma.inspection.findFirst as any).mockResolvedValue(existingInspection);
+    mockTx({ completeCount: 0 });
+
+    await expect(
+      completeInspection('org-1', 'prop-1', 'unit-1', 'insp-1', { checklistResults: [] }, '127.0.0.1', {
+        userId: 'user-1',
+        role: 'manager',
+      })
+    ).rejects.toMatchObject({ code: 'INSPECTION_FINALIZED' });
+  });
+});
+
+describe('inspection.service updateInspection status guard', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  const existingInspection = {
+    id: 'insp-1',
+    unitId: 'unit-1',
+    status: 'in_progress',
+    notes: null,
+    inspectorUserId: null,
+  };
+
+  it('rejects a direct PATCH to status: completed (must use the /complete endpoint)', async () => {
+    (prisma.unit.findFirst as any).mockResolvedValue({ id: 'unit-1' });
+    (prisma.inspection.findFirst as any).mockResolvedValue(existingInspection);
+
+    await expect(
+      updateInspection('org-1', 'prop-1', 'unit-1', 'insp-1', { status: 'completed' })
+    ).rejects.toMatchObject({ code: 'INVALID_STATUS_TRANSITION' });
+    expect(prisma.inspection.update).not.toHaveBeenCalled();
+  });
+
+  it('rejects a direct PATCH to status: cancelled (must use the /cancel endpoint)', async () => {
+    (prisma.unit.findFirst as any).mockResolvedValue({ id: 'unit-1' });
+    (prisma.inspection.findFirst as any).mockResolvedValue(existingInspection);
+
+    await expect(
+      updateInspection('org-1', 'prop-1', 'unit-1', 'insp-1', { status: 'cancelled' })
+    ).rejects.toMatchObject({ code: 'INVALID_STATUS_TRANSITION' });
+    expect(prisma.inspection.update).not.toHaveBeenCalled();
+  });
+});
+
+describe('inspection.service cross-org inspector/template validation', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it('rejects creating an inspection with an inspectorUserId from another org', async () => {
+    (prisma.unit.findFirst as any).mockResolvedValue({ id: 'unit-1' });
+    (prisma.user.findFirst as any).mockResolvedValue(null);
+
+    await expect(
+      createInspection('org-1', 'prop-1', 'unit-1', { type: 'annual', inspectorUserId: 'user-from-org-b' })
+    ).rejects.toMatchObject({ code: 'USER_NOT_FOUND' });
+    expect(prisma.user.findFirst).toHaveBeenCalledWith(
+      expect.objectContaining({ where: expect.objectContaining({ id: 'user-from-org-b', organizationId: 'org-1' }) })
+    );
+  });
+
+  it('rejects creating an inspection with a templateId from another org', async () => {
+    (prisma.unit.findFirst as any).mockResolvedValue({ id: 'unit-1' });
+    (prisma.inspectionTemplate.findFirst as any).mockResolvedValue(null);
+
+    await expect(
+      createInspection('org-1', 'prop-1', 'unit-1', { type: 'annual', templateId: 'template-from-org-b' })
+    ).rejects.toMatchObject({ code: 'TEMPLATE_NOT_FOUND' });
+  });
+
+  it('rejects reassigning an inspection to an inspectorUserId from another org via update', async () => {
+    (prisma.unit.findFirst as any).mockResolvedValue({ id: 'unit-1' });
+    (prisma.inspection.findFirst as any).mockResolvedValue({
+      id: 'insp-1',
+      unitId: 'unit-1',
+      status: 'scheduled',
+    });
+    (prisma.user.findFirst as any).mockResolvedValue(null);
+
+    await expect(
+      updateInspection('org-1', 'prop-1', 'unit-1', 'insp-1', { inspectorUserId: 'user-from-org-b' })
+    ).rejects.toMatchObject({ code: 'USER_NOT_FOUND' });
+  });
+});
+
+describe('inspection.service media inspector-assignment enforcement', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  const existingInspection = {
+    id: 'insp-1',
+    unitId: 'unit-1',
+    status: 'in_progress',
+    inspectorUserId: 'user-2',
+  };
+
+  it('rejects requestMediaUploadUrl from a maintenance user who is not the assigned inspector', async () => {
+    (prisma.unit.findFirst as any).mockResolvedValue({ id: 'unit-1' });
+    (prisma.inspection.findFirst as any).mockResolvedValue(existingInspection);
+
+    await expect(
+      requestMediaUploadUrl('org-1', 'prop-1', 'unit-1', 'insp-1', 'photo.jpg', 'image/jpeg', {
+        userId: 'user-1',
+        role: 'maintenance',
+      })
+    ).rejects.toMatchObject({ code: 'FORBIDDEN' });
+  });
+
+  it('rejects attachMedia from a maintenance user who is not the assigned inspector', async () => {
+    (prisma.unit.findFirst as any).mockResolvedValue({ id: 'unit-1' });
+    (prisma.inspection.findFirst as any).mockResolvedValue(existingInspection);
+
+    await expect(
+      attachMedia(
+        'org-1',
+        'prop-1',
+        'unit-1',
+        'insp-1',
+        { storageKey: 'org/org-1/inspection/insp-1/uuid-file.jpg', mediaType: 'photo' },
+        { userId: 'user-1', role: 'maintenance' }
+      )
+    ).rejects.toMatchObject({ code: 'FORBIDDEN' });
+    expect(prisma.inspectionMedia.create).not.toHaveBeenCalled();
+  });
+
+  it('allows the assigned maintenance inspector to attach media', async () => {
+    (prisma.unit.findFirst as any).mockResolvedValue({ id: 'unit-1' });
+    (prisma.inspection.findFirst as any).mockResolvedValue(existingInspection);
+    (prisma.inspectionMedia.create as any).mockResolvedValue({ id: 'media-1' });
+
+    const result = await attachMedia(
+      'org-1',
+      'prop-1',
+      'unit-1',
+      'insp-1',
+      { storageKey: 'org/org-1/inspection/insp-1/uuid-file.jpg', mediaType: 'photo' },
+      { userId: 'user-2', role: 'maintenance' }
+    );
+
+    expect(result.id).toBe('media-1');
   });
 });
 
@@ -273,7 +430,10 @@ describe('inspection.service media', () => {
     (prisma.unit.findFirst as any).mockResolvedValue({ id: 'unit-1' });
     (prisma.inspection.findFirst as any).mockResolvedValue({ id: 'insp-1', unitId: 'unit-1' });
 
-    const result = await requestMediaUploadUrl('org-1', 'prop-1', 'unit-1', 'insp-1', 'photo.jpg', 'image/jpeg');
+    const result = await requestMediaUploadUrl('org-1', 'prop-1', 'unit-1', 'insp-1', 'photo.jpg', 'image/jpeg', {
+      userId: 'user-1',
+      role: 'manager',
+    });
 
     expect(result.storageKey).toContain('inspection');
     expect(result.uploadUrl).toBeTruthy();

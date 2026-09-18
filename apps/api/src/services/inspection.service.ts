@@ -27,6 +27,30 @@ async function verifyLease(organizationId: string, leaseId: string, unitId: stri
   }
 }
 
+// Verify caller-supplied inspectorUserId/templateId belong to this org before
+// writing them — otherwise another org's staff/template could be attached to
+// (and leaked via) this inspection. Mirrors workOrder.service.ts's
+// vendorId/assignedToUserId scoping check.
+async function verifyInspector(organizationId: string, inspectorUserId: string) {
+  const user = await prisma.user.findFirst({
+    where: { id: inspectorUserId, organizationId },
+    select: { id: true },
+  });
+  if (!user) {
+    throw new AppError(404, 'USER_NOT_FOUND', 'Inspector not found in your organization.');
+  }
+}
+
+async function verifyTemplate(organizationId: string, templateId: string) {
+  const template = await prisma.inspectionTemplate.findFirst({
+    where: { id: templateId, organizationId },
+    select: { id: true },
+  });
+  if (!template) {
+    throw new AppError(404, 'TEMPLATE_NOT_FOUND', 'Inspection template not found in your organization.');
+  }
+}
+
 const inspectionInclude = {
   inspector: { select: { id: true, name: true, role: true } },
   template: { select: { id: true, name: true } },
@@ -81,6 +105,12 @@ export async function createInspection(
   await verifyUnit(organizationId, propertyId, unitId);
   if (data.leaseId) {
     await verifyLease(organizationId, data.leaseId, unitId);
+  }
+  if (data.inspectorUserId) {
+    await verifyInspector(organizationId, data.inspectorUserId);
+  }
+  if (data.templateId) {
+    await verifyTemplate(organizationId, data.templateId);
   }
 
   return prisma.inspection.create({
@@ -137,6 +167,25 @@ export async function updateInspection(
   if (data.leaseId !== undefined && data.leaseId !== null) {
     await verifyLease(organizationId, data.leaseId, unitId);
   }
+  if (data.inspectorUserId !== undefined && data.inspectorUserId !== null) {
+    await verifyInspector(organizationId, data.inspectorUserId);
+  }
+  if (data.templateId !== undefined && data.templateId !== null) {
+    await verifyTemplate(organizationId, data.templateId);
+  }
+
+  // 'completed' and 'cancelled' are terminal states with their own dedicated
+  // endpoints (POST /complete, POST /cancel) that apply required side-effects
+  // (completedAt, checklist/signatures, Unit.lastInspectionAt bump for
+  // completion). The generic update path must not be able to set either
+  // directly, or an inspection could end up "completed" with none of that.
+  if (data.status === 'completed' || data.status === 'cancelled') {
+    throw new AppError(
+      400,
+      'INVALID_STATUS_TRANSITION',
+      `Use the ${data.status === 'completed' ? 'completion' : 'cancellation'} endpoint to mark an inspection ${data.status}.`
+    );
+  }
 
   return prisma.inspection.update({
     where: { id: inspectionId },
@@ -186,6 +235,19 @@ export async function deleteInspection(
   await prisma.inspection.delete({ where: { id: inspectionId } });
 }
 
+// A maintenance-role actor may only act on an inspection they were assigned
+// to (owner/manager may act on any inspection in their org). Used for both
+// completion and media writes, so a maintenance user can't forge/attach
+// evidence on an inspection assigned to a different inspector.
+function requireInspectorAssignment(
+  existing: { inspectorUserId: string | null },
+  actor: { userId?: string; role?: string } | null
+) {
+  if (actor?.role === 'maintenance' && existing.inspectorUserId !== actor.userId) {
+    throw new AppError(403, 'FORBIDDEN', 'You are not the assigned inspector for this inspection.');
+  }
+}
+
 // ─── Complete (checklist results + signatures) ─────────────────────────────
 // Captures both tenant and manager signatures in one request — a
 // manager/inspector-device walkthrough, not a separate tenant-facing public
@@ -218,18 +280,19 @@ export async function completeInspection(
     throw new AppError(400, 'INSPECTION_FINALIZED', 'This inspection has already been finalized.');
   }
 
-  // A maintenance-role actor may only complete an inspection they were
-  // assigned to (owner/manager can complete any inspection).
-  if (actor?.role === 'maintenance' && existing.inspectorUserId !== actor.userId) {
-    throw new AppError(403, 'FORBIDDEN', 'You are not the assigned inspector for this inspection.');
-  }
+  requireInspectorAssignment(existing, actor);
 
   const completedAt = data.completedAt ? new Date(data.completedAt) : new Date();
   const now = new Date();
 
   const updated = await prisma.$transaction(async (tx) => {
-    const result = await tx.inspection.update({
-      where: { id: inspectionId },
+    // Conditional update guards against a concurrent completion request: the
+    // pre-transaction status check above can race with another request's
+    // transaction, so the WHERE here (status not already finalized) is the
+    // real guard, evaluated atomically by Postgres. If another request won
+    // the race, count is 0 and we must not overwrite its checklist/signatures.
+    const { count } = await tx.inspection.updateMany({
+      where: { id: inspectionId, status: { notIn: ['completed', 'cancelled'] } },
       data: {
         status: 'completed',
         completedAt,
@@ -242,8 +305,11 @@ export async function completeInspection(
           ? { managerSignatureName: data.managerSignatureName, managerSignatureAt: now, managerSignatureIp: actorIp }
           : {}),
       },
-      include: inspectionInclude,
     });
+
+    if (count === 0) {
+      throw new AppError(400, 'INSPECTION_FINALIZED', 'This inspection has already been finalized.');
+    }
 
     // Forward-only: only advances lastInspectionAt if it's null or older than
     // this inspection's completedAt, so an older inspection completing after a
@@ -256,7 +322,7 @@ export async function completeInspection(
       data: { lastInspectionAt: completedAt },
     });
 
-    return result;
+    return tx.inspection.findFirst({ where: { id: inspectionId }, include: inspectionInclude });
   });
 
   return updated;
@@ -270,10 +336,12 @@ export async function requestMediaUploadUrl(
   unitId: string,
   inspectionId: string,
   fileName: string,
-  contentType: string
+  contentType: string,
+  actor: { userId?: string; role?: string } | null
 ) {
   await verifyUnit(organizationId, propertyId, unitId);
-  await getExistingInspection(unitId, inspectionId);
+  const existing = await getExistingInspection(unitId, inspectionId);
+  requireInspectorAssignment(existing, actor);
 
   const storageKey = buildStorageKey(organizationId, 'inspection', inspectionId, fileName);
   const { uploadUrl } = await generateUploadPresignedUrl(storageKey, contentType);
@@ -293,10 +361,12 @@ export async function attachMedia(
   propertyId: string,
   unitId: string,
   inspectionId: string,
-  data: AttachMediaInput
+  data: AttachMediaInput,
+  actor: { userId?: string; role?: string } | null
 ) {
   await verifyUnit(organizationId, propertyId, unitId);
-  await getExistingInspection(unitId, inspectionId);
+  const existing = await getExistingInspection(unitId, inspectionId);
+  requireInspectorAssignment(existing, actor);
 
   return prisma.inspectionMedia.create({
     data: {

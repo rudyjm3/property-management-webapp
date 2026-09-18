@@ -931,7 +931,7 @@ export default function UnitDetailPage() {
 
       {/* Inspections — Module 6: Inspections & Compliance */}
       <ModuleGate module={MODULE_KEYS.INSPECTIONS_COMPLIANCE}>
-        <InspectionsCard propertyId={propertyId} unitId={unitId} />
+        <InspectionsCard propertyId={propertyId} unitId={unitId} leaseId={activeLease?.id ?? null} />
       </ModuleGate>
 
       {showApplianceModal && (
