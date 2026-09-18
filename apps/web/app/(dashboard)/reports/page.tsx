@@ -324,6 +324,11 @@ function ReportsPageContent() {
                 {loading ? 'Loading…' : 'Run Report'}
               </button>
             )}
+            {activeTab === 'groundsMaintenance' && (
+              <button className="btn btn-primary" onClick={loadGroundsMaintenance} disabled={groundsLoading}>
+                {groundsLoading ? 'Loading…' : 'Run Report'}
+              </button>
+            )}
           </div>
 
           {/* Quick date range presets */}

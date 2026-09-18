@@ -140,32 +140,46 @@ export async function updateMaintenanceSchedule(
 // (active: false) for a while and reactivated resumes on its original cadence
 // alignment rather than drifting to the reactivation date.
 
+const CADENCE_MONTHS: Record<Exclude<MaintenanceCadence, 'weekly'>, number> = {
+  monthly: 1,
+  quarterly: 3,
+  semi_annual: 6,
+  annual: 12,
+};
+
+function daysInMonth(year: number, monthIndex0: number): number {
+  // Day 0 of the *next* month is the last day of monthIndex0.
+  return new Date(Date.UTC(year, monthIndex0 + 1, 0)).getUTCDate();
+}
+
+// Operates entirely in UTC (nextDueDate is a date-only column, so there's no
+// meaningful "local time" to shift by) and clamps the day-of-month to the
+// target month's last valid day instead of letting it overflow — plain
+// `setMonth`/`setFullYear` on a month-end date (e.g. Jan 31 + 1 month) rolls
+// into the following month (Mar 3) rather than landing on Feb's last day.
 export function advanceDueDate(from: Date, cadence: MaintenanceCadence): Date {
-  const next = new Date(from);
-  switch (cadence) {
-    case 'weekly':
-      next.setDate(next.getDate() + 7);
-      break;
-    case 'monthly':
-      next.setMonth(next.getMonth() + 1);
-      break;
-    case 'quarterly':
-      next.setMonth(next.getMonth() + 3);
-      break;
-    case 'semi_annual':
-      next.setMonth(next.getMonth() + 6);
-      break;
-    case 'annual':
-      next.setFullYear(next.getFullYear() + 1);
-      break;
+  if (cadence === 'weekly') {
+    const next = new Date(from);
+    next.setUTCDate(next.getUTCDate() + 7);
+    return next;
   }
-  return next;
+
+  const monthsToAdd = CADENCE_MONTHS[cadence];
+  const day = from.getUTCDate();
+  const totalMonths = from.getUTCFullYear() * 12 + from.getUTCMonth() + monthsToAdd;
+  const targetYear = Math.floor(totalMonths / 12);
+  const targetMonth = totalMonths % 12;
+  const clampedDay = Math.min(day, daysInMonth(targetYear, targetMonth));
+
+  return new Date(Date.UTC(targetYear, targetMonth, clampedDay));
 }
 
 // Generates a WorkOrder for a single due schedule and advances its
 // nextDueDate. Exported separately from the job loop (groundsMaintenanceJob.ts)
 // so it's independently testable and reusable (e.g. a future "generate now"
-// manual trigger).
+// manual trigger). Returns null if a concurrent call already claimed this
+// occurrence (see the optimistic-concurrency guard below) — the caller
+// should treat that as "nothing to do", not an error.
 export async function generateWorkOrderForSchedule(
   schedule: {
     id: string;
@@ -182,6 +196,23 @@ export async function generateWorkOrderForSchedule(
   const now = new Date();
 
   return prisma.$transaction(async (tx) => {
+    // Claim this occurrence before creating its work order: if two job runs
+    // (or two API instances) race on the same due schedule, only the update
+    // whose WHERE clause still matches the schedule's current nextDueDate
+    // succeeds — the loser's count is 0 and it must not also create a
+    // duplicate work order for the same occurrence.
+    const { count } = await tx.maintenanceSchedule.updateMany({
+      where: { id: schedule.id, nextDueDate: schedule.nextDueDate },
+      data: {
+        nextDueDate: advanceDueDate(schedule.nextDueDate, schedule.cadence),
+        lastGeneratedAt: now,
+      },
+    });
+
+    if (count === 0) {
+      return null;
+    }
+
     const workOrder = await tx.workOrder.create({
       data: {
         propertyId: schedule.propertyId,
@@ -199,14 +230,6 @@ export async function generateWorkOrderForSchedule(
       },
     });
 
-    await tx.maintenanceSchedule.update({
-      where: { id: schedule.id },
-      data: {
-        nextDueDate: advanceDueDate(schedule.nextDueDate, schedule.cadence),
-        lastGeneratedAt: now,
-      },
-    });
-
     return workOrder;
   });
 }
@@ -215,7 +238,21 @@ export async function generateWorkOrderForSchedule(
 
 export async function deleteMaintenanceSchedule(organizationId: string, propertyId: string, scheduleId: string) {
   await getMaintenanceSchedule(organizationId, propertyId, scheduleId); // throws if not found
-  // WorkOrder.scheduleId is onDelete: SetNull, so previously-generated work
-  // orders are kept and simply unlinked from the deleted schedule.
+
+  // WorkOrder.scheduleId is onDelete: SetNull, so a hard delete would keep
+  // previously-generated work orders but unlink them — which silently drops
+  // them out of the grounds-maintenance compliance report (it only counts
+  // work orders with scheduleId still set). Block the delete once a schedule
+  // has generated history; pausing (active: false) is the way to stop it
+  // without losing that history.
+  const generatedCount = await prisma.workOrder.count({ where: { scheduleId } });
+  if (generatedCount > 0) {
+    throw new AppError(
+      400,
+      'SCHEDULE_HAS_HISTORY',
+      'This schedule has already generated work orders and cannot be deleted — pause it instead to stop future generation without losing its history.'
+    );
+  }
+
   await prisma.maintenanceSchedule.delete({ where: { id: scheduleId } });
 }

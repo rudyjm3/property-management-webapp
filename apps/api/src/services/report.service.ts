@@ -731,6 +731,12 @@ export async function getScheduleEExport(
 // inspection log are two independent mechanisms in this v1, not linked to
 // each other. Grounds inspection counts are reported separately alongside.
 
+function endOfDueDate(d: Date): Date {
+  const end = new Date(d);
+  end.setUTCHours(23, 59, 59, 999);
+  return end;
+}
+
 export interface GroundsMaintenanceComplianceRow {
   propertyId: string;
   propertyName: string;
@@ -778,14 +784,20 @@ export async function getGroundsMaintenanceCompliance(
 
     for (const wo of workOrders) {
       const isCompleted = wo.status === 'completed' || wo.status === 'closed';
+      // scheduledAt is copied from MaintenanceSchedule.nextDueDate, a
+      // date-only column that lands at UTC midnight — comparing directly
+      // against it would call anything completed later the same day "late"
+      // and any still-open order "overdue" the instant it's generated.
+      // Compare against the end of the due date instead.
+      const dueDateEnd = wo.scheduledAt ? endOfDueDate(wo.scheduledAt) : null;
       if (isCompleted) {
-        if (wo.completedAt && wo.scheduledAt && wo.completedAt <= wo.scheduledAt) {
+        if (wo.completedAt && dueDateEnd && wo.completedAt <= dueDateEnd) {
           completedOnTime++;
         } else {
           completedLate++;
         }
         if (wo.photosAfter.length > 0) completedWithPhoto++;
-      } else if (wo.scheduledAt && wo.scheduledAt < now) {
+      } else if (dueDateEnd && dueDateEnd < now) {
         openOverdue++;
       }
     }

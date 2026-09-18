@@ -41,8 +41,12 @@ export async function generateGroundsMaintenanceWorkOrders(
 
   for (const schedule of dueSchedules) {
     try {
-      await generateWorkOrderForSchedule(schedule);
-      result.created++;
+      // null means a concurrent job run/process already claimed this
+      // occurrence (see the optimistic-concurrency guard in
+      // maintenance-schedule.service.ts) — not a failure, just nothing left
+      // to do here.
+      const workOrder = await generateWorkOrderForSchedule(schedule);
+      if (workOrder) result.created++;
     } catch (err) {
       console.error(`[GroundsMaintenance] Failed to generate work order for schedule ${schedule.id}:`, err);
       result.failed++;

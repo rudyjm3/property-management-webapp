@@ -50,7 +50,12 @@ CREATE INDEX "inspections_property_id_idx" ON "inspections"("property_id");
 CREATE INDEX "work_orders_schedule_id_idx" ON "work_orders"("schedule_id");
 
 -- AddForeignKey
-ALTER TABLE "inspections" ADD CONSTRAINT "inspections_unit_id_fkey" FOREIGN KEY ("unit_id") REFERENCES "units"("id") ON DELETE SET NULL ON UPDATE CASCADE;
+-- ON DELETE RESTRICT preserves Module 6's original behavior (a unit with
+-- inspections on file can't be deleted) — Prisma's implicit default for a
+-- newly-optional relation is SET NULL, which would let deleting a unit null
+-- out unitId on a unit-scoped inspection with no propertyId either,
+-- orphaning it (and its media) from both inspection routes.
+ALTER TABLE "inspections" ADD CONSTRAINT "inspections_unit_id_fkey" FOREIGN KEY ("unit_id") REFERENCES "units"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
 
 -- AddForeignKey
 ALTER TABLE "inspections" ADD CONSTRAINT "inspections_property_id_fkey" FOREIGN KEY ("property_id") REFERENCES "properties"("id") ON DELETE SET NULL ON UPDATE CASCADE;

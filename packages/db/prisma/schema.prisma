@@ -1097,7 +1097,12 @@ model Message {
   organization Organization @relation(fields: [organizationId], references: [id])
   sender       User?        @relation("SentMessages", fields: [senderUserId], references: [id])
   recipient    Tenant?      @relation("ReceivedMessages", fields: [recipientTenantId], references: [id])
-  unit         Unit?        @relation(fields: [unitId], references: [id])
+  // onDelete: Restrict preserves Module 6's original behavior (a unit with
+  // inspections on file can't be deleted) — Prisma's implicit default for an
+  // optional relation is SetNull, which would let a unit delete null out
+  // unitId on a unit-scoped inspection that has no propertyId either,
+  // orphaning it (and its media) from both inspection routes.
+  unit         Unit?        @relation(fields: [unitId], references: [id], onDelete: Restrict)
   workOrder    WorkOrder?   @relation(fields: [workOrderId], references: [id])
 
   @@index([organizationId])
