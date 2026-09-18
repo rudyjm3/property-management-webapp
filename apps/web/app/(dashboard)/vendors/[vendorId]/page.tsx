@@ -26,8 +26,11 @@ const SPECIALTY_LABELS: Record<string, string> = {
 
 const MONTHS_OPTIONS = [3, 6, 12, 24];
 
+// Formats a date-only (@db.Date) ISO value, e.g. licenseExpiresAt /
+// insuranceExpiresAt — always in UTC so the calendar date shown doesn't
+// shift for viewers west of UTC.
 function fmtDate(d: string | null) {
-  return d ? new Date(d).toLocaleDateString() : '—';
+  return d ? new Date(d).toLocaleDateString('en-US', { timeZone: 'UTC' }) : '—';
 }
 
 function expiryBadge(dateStr: string | null): { label: string; className: string } | null {
@@ -36,9 +39,13 @@ function expiryBadge(dateStr: string | null): { label: string; className: string
   const now = new Date();
   const in30 = new Date(now);
   in30.setDate(now.getDate() + 30);
-  if (date < now) return { label: `Expired ${date.toLocaleDateString()}`, className: 'badge-danger' };
-  if (date <= in30) return { label: `Expires ${date.toLocaleDateString()}`, className: 'badge-notice' };
-  return { label: `Expires ${date.toLocaleDateString()}`, className: 'badge-vacant' };
+  // licenseExpiresAt/insuranceExpiresAt are @db.Date fields, serialized as
+  // UTC-midnight ISO timestamps — format in the UTC timezone so viewers west
+  // of UTC don't see the previous calendar day.
+  const formatted = date.toLocaleDateString('en-US', { timeZone: 'UTC' });
+  if (date < now) return { label: `Expired ${formatted}`, className: 'badge-danger' };
+  if (date <= in30) return { label: `Expires ${formatted}`, className: 'badge-notice' };
+  return { label: `Expires ${formatted}`, className: 'badge-vacant' };
 }
 
 function toFormInput(vendor: Vendor): VendorInput {

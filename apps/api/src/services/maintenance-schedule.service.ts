@@ -1,4 +1,4 @@
-import { prisma, MaintenanceCadence, WorkOrderCategory, WorkOrderLocationType } from '@propflow/db';
+import { prisma, MaintenanceCadence, WorkOrderCategory, WorkOrderLocationType, VendorStatus } from '@propflow/db';
 import { AppError } from '../middleware/error-handler';
 import { isVendorManagementActive, resolvePreferredVendor } from './vendor.service';
 
@@ -204,8 +204,25 @@ export async function generateWorkOrderForSchedule(
   // assignments change rarely, and it doesn't participate in the
   // occurrence-claiming race the transaction guards against). A schedule's
   // own explicit vendorId (Module 3's original "single vendor per schedule")
-  // still always wins over the preferred-vendor default.
+  // still always wins over the preferred-vendor default — but only while
+  // that vendor is still active. A vendor can be marked inactive well after
+  // it was set directly on a schedule, and the schedule's recurrence job
+  // would otherwise keep generating new work orders assigned to it
+  // indefinitely (resolvePreferredVendor's active-only filter only covers
+  // the fallback path, since it's never called when schedule.vendorId is
+  // set). So an explicit-but-now-inactive vendor is treated the same as "no
+  // vendor set" and falls through to the preferred-vendor resolution (or to
+  // unassigned, if that also yields nothing).
   let vendorId = schedule.vendorId;
+  if (vendorId) {
+    const explicitVendor = await prisma.vendor.findFirst({
+      where: { id: vendorId },
+      select: { status: true },
+    });
+    if (!explicitVendor || explicitVendor.status !== VendorStatus.active) {
+      vendorId = null;
+    }
+  }
   if (!vendorId && (await isVendorManagementActive(schedule.organizationId))) {
     vendorId = await resolvePreferredVendor(schedule.organizationId, schedule.propertyId, schedule.category);
   }

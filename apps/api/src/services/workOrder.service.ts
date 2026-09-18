@@ -365,6 +365,28 @@ export async function updateWorkOrder(
       throw new AppError(404, 'USER_NOT_FOUND', 'Assignee not found in your organization.');
     }
   }
+
+  // A VendorWorkOrderRating "locks in" the vendor it was submitted for — a
+  // rating always points at a single vendorId, and there's no reassignment
+  // workflow elsewhere in the codebase that depends on being able to move a
+  // rated work order to a different vendor. Rather than transactionally
+  // deleting/detaching the old rating and recomputing its average (option
+  // (b) from the review finding), we take the simpler option (a): reject the
+  // vendor change outright while a rating exists. To reassign, the rating
+  // must be removed first (there's currently no delete-rating endpoint,
+  // which is an intentional product choice — a submitted rating is
+  // permanent history).
+  if (
+    data.vendorId !== undefined &&
+    data.vendorId !== existing.vendorId &&
+    existing.vendorRating
+  ) {
+    throw new AppError(
+      400,
+      'VENDOR_LOCKED_BY_RATING',
+      'This work order already has a vendor rating on file and its vendor assignment cannot be changed.'
+    );
+  }
   const moduleActive = await isUnitIntelligenceActive(organizationId);
   if (data.applianceId) {
     if (!moduleActive) {

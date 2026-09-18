@@ -136,6 +136,9 @@ describe('generateWorkOrderForSchedule', () => {
     // the schedule's own explicit vendorId, not the Module 5 preferred-vendor
     // fallback (covered separately below).
     (prisma.organization.findUnique as any).mockResolvedValue({ activeModules: [] });
+    // The schedule's explicit vendor is active by default — the
+    // inactive-explicit-vendor fallback case overrides this per-test.
+    (prisma.vendor.findFirst as any).mockResolvedValue({ status: 'active' });
   });
 
   const schedule = {
@@ -287,6 +290,52 @@ describe('generateWorkOrderForSchedule', () => {
 
     expect(result).toBeNull();
     expect(txWorkOrderCreate).not.toHaveBeenCalled();
+  });
+
+  it('falls through to the org preferred vendor when the schedule\'s explicit vendor has since gone inactive', async () => {
+    (prisma.vendor.findFirst as any).mockResolvedValue({ status: 'inactive' });
+    (prisma.organization.findUnique as any).mockResolvedValue({ activeModules: ['vendor_management'] });
+    (prisma.preferredVendorAssignment.findFirst as any).mockResolvedValueOnce({ vendorId: 'preferred-vendor-1' });
+
+    const txWorkOrderCreate = vi.fn().mockResolvedValue({ id: 'wo-5' });
+    (prisma.$transaction as any).mockImplementation(async (fn: any) =>
+      fn({
+        workOrder: { create: txWorkOrderCreate },
+        maintenanceSchedule: { updateMany: vi.fn().mockResolvedValue({ count: 1 }) },
+      })
+    );
+
+    // schedule has its own explicit vendorId ('vendor-1'), but that vendor is
+    // now inactive — the recurrence job must not keep assigning it.
+    await generateWorkOrderForSchedule(schedule);
+
+    expect(prisma.vendor.findFirst).toHaveBeenCalledWith(
+      expect.objectContaining({ where: { id: 'vendor-1' } })
+    );
+    expect(txWorkOrderCreate).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({ status: 'assigned', vendorId: 'preferred-vendor-1' }),
+      })
+    );
+  });
+
+  it('leaves the work order unassigned when the explicit vendor is inactive and vendor_management is not active', async () => {
+    (prisma.vendor.findFirst as any).mockResolvedValue({ status: 'inactive' });
+    (prisma.organization.findUnique as any).mockResolvedValue({ activeModules: [] });
+
+    const txWorkOrderCreate = vi.fn().mockResolvedValue({ id: 'wo-6' });
+    (prisma.$transaction as any).mockImplementation(async (fn: any) =>
+      fn({
+        workOrder: { create: txWorkOrderCreate },
+        maintenanceSchedule: { updateMany: vi.fn().mockResolvedValue({ count: 1 }) },
+      })
+    );
+
+    await generateWorkOrderForSchedule(schedule);
+
+    expect(txWorkOrderCreate).toHaveBeenCalledWith(
+      expect.objectContaining({ data: expect.objectContaining({ status: 'new_order', vendorId: null }) })
+    );
   });
 });
 

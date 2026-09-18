@@ -51,9 +51,13 @@ function expiryLabel(dateStr: string | null): { label: string; badge: string } |
   const now = new Date();
   const in30 = new Date(now);
   in30.setDate(now.getDate() + 30);
-  if (date < now) return { label: `Expired ${date.toLocaleDateString()}`, badge: 'badge-danger' };
-  if (date <= in30) return { label: `Expires ${date.toLocaleDateString()}`, badge: 'badge-notice' };
-  return { label: `Expires ${date.toLocaleDateString()}`, badge: 'badge-vacant' };
+  // licenseExpiresAt/insuranceExpiresAt are @db.Date fields, serialized as
+  // UTC-midnight ISO timestamps — format in the UTC timezone so viewers west
+  // of UTC don't see the previous calendar day.
+  const formatted = date.toLocaleDateString('en-US', { timeZone: 'UTC' });
+  if (date < now) return { label: `Expired ${formatted}`, badge: 'badge-danger' };
+  if (date <= in30) return { label: `Expires ${formatted}`, badge: 'badge-notice' };
+  return { label: `Expires ${formatted}`, badge: 'badge-vacant' };
 }
 
 export default function VendorsPage() {

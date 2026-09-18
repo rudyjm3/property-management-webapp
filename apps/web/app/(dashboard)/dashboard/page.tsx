@@ -573,12 +573,12 @@ export default function DashboardPage() {
                       <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', alignItems: 'flex-end' }}>
                         {v.licenseStatus && (
                           <span style={{ fontSize: '12px', fontWeight: 600, color: v.licenseStatus === 'expired' ? 'var(--color-danger)' : '#ca8a04' }}>
-                            License {v.licenseStatus === 'expired' ? 'expired' : 'expiring'} {v.licenseExpiresAt ? new Date(v.licenseExpiresAt).toLocaleDateString() : ''}
+                            License {v.licenseStatus === 'expired' ? 'expired' : 'expiring'} {v.licenseExpiresAt ? new Date(v.licenseExpiresAt).toLocaleDateString('en-US', { timeZone: 'UTC' }) : ''}
                           </span>
                         )}
                         {v.insuranceStatus && (
                           <span style={{ fontSize: '12px', fontWeight: 600, color: v.insuranceStatus === 'expired' ? 'var(--color-danger)' : '#ca8a04' }}>
-                            Insurance {v.insuranceStatus === 'expired' ? 'expired' : 'expiring'} {v.insuranceExpiresAt ? new Date(v.insuranceExpiresAt).toLocaleDateString() : ''}
+                            Insurance {v.insuranceStatus === 'expired' ? 'expired' : 'expiring'} {v.insuranceExpiresAt ? new Date(v.insuranceExpiresAt).toLocaleDateString('en-US', { timeZone: 'UTC' }) : ''}
                           </span>
                         )}
                       </div>

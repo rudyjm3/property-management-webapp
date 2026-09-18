@@ -1094,7 +1094,21 @@ model PreferredVendorAssignment {
   updatedAt      DateTime          @updatedAt @map("updated_at")
 
   organization Organization @relation(fields: [organizationId], references: [id])
-  property     Property?    @relation(fields: [propertyId], references: [id])
+  // onDelete: Cascade — deleting a property removes its property-scoped
+  // preferred-vendor assignments outright rather than promoting them to
+  // org-wide defaults (the prior ON DELETE SET NULL behavior). Promoting a
+  // deleted property's assignment to org-wide would (a) silently apply that
+  // vendor to unrelated properties in the same category, and (b) can outright
+  // fail the property deletion with a raw DB constraint error if an org-wide
+  // assignment for that category already exists, since
+  // PreferredVendorAssignment_org_category_orgwide_unique only allows one
+  // org-wide row per (organization, category). deleteProperty() in
+  // property.service.ts has no explicit guard for this — the cascade alone
+  // is intentional here, since (unlike vendor deletion) there's no "set
+  // inactive instead" alternative for a deleted property, and losing a
+  // property-specific preference is an expected, harmless side effect of
+  // deleting the property itself.
+  property     Property?    @relation(fields: [propertyId], references: [id], onDelete: Cascade)
   vendor       Vendor       @relation(fields: [vendorId], references: [id])
 
   // One preferred vendor per (property, category) combo. Postgres treats
