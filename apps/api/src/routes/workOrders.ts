@@ -1,8 +1,10 @@
 import { Router, Request, Response, NextFunction } from 'express';
-import { createWorkOrderSchema, updateWorkOrderSchema } from '@propflow/shared';
+import { createWorkOrderSchema, updateWorkOrderSchema, rateVendorWorkOrderSchema, MODULE_KEYS } from '@propflow/shared';
 import { validate } from '../middleware/validate';
 import * as workOrderService from '../services/workOrder.service';
+import * as vendorService from '../services/vendor.service';
 import { requireRoles } from '../middleware/auth';
+import { requireModule } from '../middleware/module-gate';
 
 const router = Router({ mergeParams: true });
 
@@ -66,6 +68,30 @@ router.patch('/:workOrderId', validate(updateWorkOrderSchema), async (req: Reque
     next(err);
   }
 });
+
+// POST /api/v1/organizations/:orgId/work-orders/:workOrderId/vendor-rating
+// Vendor & Contractor Management (Module 5) — captures a 1-5 star rating +
+// optional note for a completed/closed work order's assigned vendor, and
+// rolls it into Vendor.rating. Per-route gated (the rest of this router
+// ships ungated as base product), mirroring the pattern used for e.g.
+// payments.ts's card-payment endpoints.
+router.post(
+  '/:workOrderId/vendor-rating',
+  requireModule(MODULE_KEYS.VENDOR_MANAGEMENT),
+  validate(rateVendorWorkOrderSchema),
+  async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const rating = await vendorService.rateVendorWorkOrder(
+        req.params.orgId as string,
+        req.params.workOrderId as string,
+        req.body
+      );
+      res.status(201).json({ data: rating });
+    } catch (err) {
+      next(err);
+    }
+  }
+);
 
 // DELETE /api/v1/organizations/:orgId/work-orders/:workOrderId
 router.delete('/:workOrderId', requireManagerAccess, async (req: Request, res: Response, next: NextFunction) => {

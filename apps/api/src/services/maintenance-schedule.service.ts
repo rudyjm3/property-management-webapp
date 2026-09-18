@@ -1,5 +1,6 @@
 import { prisma, MaintenanceCadence, WorkOrderCategory, WorkOrderLocationType } from '@propflow/db';
 import { AppError } from '../middleware/error-handler';
+import { isVendorManagementActive, resolvePreferredVendor } from './vendor.service';
 
 // Grounds & Property Maintenance (Module 3). See docs/reference/modules.md
 // for what "recurring" covers in v1: a fixed cadence set
@@ -183,6 +184,7 @@ export function advanceDueDate(from: Date, cadence: MaintenanceCadence): Date {
 export async function generateWorkOrderForSchedule(
   schedule: {
     id: string;
+    organizationId: string;
     propertyId: string;
     vendorId: string | null;
     title: string;
@@ -194,6 +196,19 @@ export async function generateWorkOrderForSchedule(
   }
 ) {
   const now = new Date();
+
+  // Vendor & Contractor Management (Module 5): a schedule with no vendor of
+  // its own defaults to the org's preferred vendor for this property+
+  // category, if vendor_management is active and one is set. This is a
+  // read-only lookup done outside the transaction below (preferred-vendor
+  // assignments change rarely, and it doesn't participate in the
+  // occurrence-claiming race the transaction guards against). A schedule's
+  // own explicit vendorId (Module 3's original "single vendor per schedule")
+  // still always wins over the preferred-vendor default.
+  let vendorId = schedule.vendorId;
+  if (!vendorId && (await isVendorManagementActive(schedule.organizationId))) {
+    vendorId = await resolvePreferredVendor(schedule.organizationId, schedule.propertyId, schedule.category);
+  }
 
   return prisma.$transaction(async (tx) => {
     // Claim this occurrence before creating its work order: if two job runs
@@ -217,11 +232,11 @@ export async function generateWorkOrderForSchedule(
       data: {
         propertyId: schedule.propertyId,
         scheduleId: schedule.id,
-        vendorId: schedule.vendorId,
+        vendorId,
         title: schedule.title,
         category: schedule.category,
         priority: 'routine',
-        status: schedule.vendorId ? 'assigned' : 'new_order',
+        status: vendorId ? 'assigned' : 'new_order',
         locationType: schedule.locationType,
         description: schedule.description || `Recurring ${schedule.title} (auto-generated)`,
         scheduledAt: schedule.nextDueDate,

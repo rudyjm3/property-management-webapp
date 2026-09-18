@@ -4,6 +4,8 @@ vi.mock('@propflow/db', () => ({
   prisma: {
     property: { findFirst: vi.fn() },
     vendor: { findFirst: vi.fn() },
+    organization: { findUnique: vi.fn() },
+    preferredVendorAssignment: { findFirst: vi.fn() },
     maintenanceSchedule: {
       findMany: vi.fn(),
       findFirst: vi.fn(),
@@ -129,10 +131,15 @@ describe('createMaintenanceSchedule', () => {
 describe('generateWorkOrderForSchedule', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    // vendor_management inactive by default — most of these tests exercise
+    // the schedule's own explicit vendorId, not the Module 5 preferred-vendor
+    // fallback (covered separately below).
+    (prisma.organization.findUnique as any).mockResolvedValue({ activeModules: [] });
   });
 
   const schedule = {
     id: 'sched-1',
+    organizationId: 'org-1',
     propertyId: 'prop-1',
     vendorId: 'vendor-1',
     title: 'Monthly landscaping',
@@ -188,6 +195,69 @@ describe('generateWorkOrderForSchedule', () => {
 
     await generateWorkOrderForSchedule({
       id: 'sched-2',
+      organizationId: 'org-1',
+      propertyId: 'prop-1',
+      vendorId: null,
+      title: 'Pest control',
+      category: 'pest' as any,
+      locationType: null,
+      description: null,
+      cadence: 'quarterly' as any,
+      nextDueDate: new Date('2026-02-01T00:00:00.000Z'),
+    });
+
+    expect(txWorkOrderCreate).toHaveBeenCalledWith(
+      expect.objectContaining({ data: expect.objectContaining({ status: 'new_order', vendorId: null }) })
+    );
+  });
+
+  it('defaults to the org preferred vendor for the property+category when vendor_management is active and the schedule has no vendor of its own', async () => {
+    (prisma.organization.findUnique as any).mockResolvedValue({ activeModules: ['vendor_management'] });
+    (prisma.preferredVendorAssignment.findFirst as any).mockResolvedValueOnce({ vendorId: 'preferred-vendor-1' });
+
+    const txWorkOrderCreate = vi.fn().mockResolvedValue({ id: 'wo-3' });
+    (prisma.$transaction as any).mockImplementation(async (fn: any) =>
+      fn({
+        workOrder: { create: txWorkOrderCreate },
+        maintenanceSchedule: { updateMany: vi.fn().mockResolvedValue({ count: 1 }) },
+      })
+    );
+
+    await generateWorkOrderForSchedule({
+      id: 'sched-3',
+      organizationId: 'org-1',
+      propertyId: 'prop-1',
+      vendorId: null,
+      title: 'Pest control',
+      category: 'pest' as any,
+      locationType: null,
+      description: null,
+      cadence: 'quarterly' as any,
+      nextDueDate: new Date('2026-02-01T00:00:00.000Z'),
+    });
+
+    expect(txWorkOrderCreate).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({ status: 'assigned', vendorId: 'preferred-vendor-1' }),
+      })
+    );
+  });
+
+  it('leaves the schedule vendorless when vendor_management is active but no preferred vendor matches', async () => {
+    (prisma.organization.findUnique as any).mockResolvedValue({ activeModules: ['vendor_management'] });
+    (prisma.preferredVendorAssignment.findFirst as any).mockResolvedValue(null);
+
+    const txWorkOrderCreate = vi.fn().mockResolvedValue({ id: 'wo-4' });
+    (prisma.$transaction as any).mockImplementation(async (fn: any) =>
+      fn({
+        workOrder: { create: txWorkOrderCreate },
+        maintenanceSchedule: { updateMany: vi.fn().mockResolvedValue({ count: 1 }) },
+      })
+    );
+
+    await generateWorkOrderForSchedule({
+      id: 'sched-4',
+      organizationId: 'org-1',
       propertyId: 'prop-1',
       vendorId: null,
       title: 'Pest control',

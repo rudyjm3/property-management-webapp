@@ -7,6 +7,7 @@ import {
 } from '@propflow/db';
 import { MODULE_KEYS } from '@propflow/shared';
 import { AppError } from '../middleware/error-handler';
+import { isVendorManagementActive, resolvePreferredVendor } from './vendor.service';
 
 // ─── SLA deadline helpers ──────────────────────────────────────────────────────
 
@@ -148,6 +149,10 @@ interface CreateWorkOrderData {
   preferredContactWindow?: string | null;
   tenantId?: string | null;
   submittedByUserId?: string | null;
+  // Optional explicit vendor assignment (Module 5). When omitted, defaults
+  // from a matching PreferredVendorAssignment if vendor_management is active
+  // — see the preferred-vendor resolution below.
+  vendorId?: string | null;
 }
 
 export async function createWorkOrder(organizationId: string, data: CreateWorkOrderData) {
@@ -244,6 +249,26 @@ export async function createWorkOrder(organizationId: string, data: CreateWorkOr
     tenantId = null;
   }
 
+  // Vendor assignment (Module 5): an explicit vendorId is verified against
+  // the org; when none is supplied and vendor_management is active, default
+  // from a matching PreferredVendorAssignment (property+category, falling
+  // back to the org-wide default for that category). A deactivated module
+  // simply stops auto-assigning — an explicitly-passed vendorId still works
+  // either way, same as Module 2's applianceId handling above.
+  let vendorId: string | null = null;
+  if (data.vendorId) {
+    const vendor = await prisma.vendor.findFirst({
+      where: { id: data.vendorId, organizationId },
+      select: { id: true },
+    });
+    if (!vendor) {
+      throw new AppError(404, 'VENDOR_NOT_FOUND', 'Vendor not found in your organization.');
+    }
+    vendorId = vendor.id;
+  } else if (await isVendorManagementActive(organizationId)) {
+    vendorId = await resolvePreferredVendor(organizationId, propertyId, data.category);
+  }
+
   const requestedPriority = data.priority ?? 'routine';
   const dbPriority = toDbPriority(requestedPriority);
 
@@ -254,7 +279,10 @@ export async function createWorkOrder(organizationId: string, data: CreateWorkOr
       title: data.title ?? null,
       category: data.category as WorkOrderCategory,
       priority: dbPriority,
-      status: WorkOrderStatus.new_order,
+      // Auto-transition to 'assigned' when a vendor is set at creation time,
+      // mirroring updateWorkOrder's auto-transition and
+      // generateWorkOrderForSchedule's status logic.
+      status: vendorId ? WorkOrderStatus.assigned : WorkOrderStatus.new_order,
       locationType: (data.locationType ?? null) as WorkOrderLocationType | null,
       isCapitalProject: data.isCapitalProject ?? false,
       description: data.description,
@@ -263,6 +291,7 @@ export async function createWorkOrder(organizationId: string, data: CreateWorkOr
       slaDeadlineAt: computeSlaDeadline(requestedPriority),
       tenantId,
       applianceId,
+      vendorId,
       submittedByUserId: data.submittedByUserId ?? null,
       // Some local DB states have NOT NULL without default on these columns.
       photosBefore: [],
