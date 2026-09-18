@@ -1816,10 +1816,16 @@ relative to the original spec above:
   every eviction-facing screen in the web app (the creation form, the
   detail page, and the jurisdiction-lookup preview) precisely because of
   this. A manager can override the looked-up notice period or delivery
-  method with a required reason, and can correct a seeded row going
-  forward via `PATCH`/`POST .../state-eviction-rules` once they've
-  actually verified it against current law — that's the intended
-  mechanism for keeping the table current, not an automatic refresh.
+  method on an individual eviction with a required reason. **The reference
+  table itself has no API write endpoint, by design** — `StateEvictionRule`
+  has no `organizationId` (it's shared across every tenant), and this
+  codebase's RBAC has no platform-admin concept, so an owner/manager route
+  to edit it would let one customer overwrite the data every other
+  customer's deadline computations depend on (a real finding from review on
+  this module's first PR — fixed by removing the endpoint, not by bolting
+  on auth this codebase doesn't have). Correcting a seeded row today
+  requires direct database/ops access; `eviction.service.ts` has the
+  functions to do it, just not wired to a route.
   **Delivery methods are not modeled per state** — every seeded row allows
   all three values rather than asserting a state disallows one, since
   per-state service requirements often hinge on nuances (e.g. "posting
@@ -1879,6 +1885,9 @@ relative to the original spec above:
 - Delivery-method eligibility is not modeled per state.
 - No dedicated `notifEviction` preference — deadline reminders ride on
   `notifLeaseExpiry`.
+- No self-service way to correct the jurisdiction reference table —
+  `.../state-eviction-rules` is read-only; fixing a row requires direct
+  database/ops access until a platform-admin auth layer exists.
 
 **Dependencies:** Lease management, Property jurisdiction data (`state` field)
 

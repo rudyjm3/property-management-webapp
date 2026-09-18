@@ -73,20 +73,20 @@ just because `index.ts` doesn't gate it. As of this writing:
   property. `eviction_management` (Module 8) gates both `evictions.ts` and
   `state-eviction-rules.ts` at their router mounts in `index.ts` — entirely
   net-new functionality, same router-mount pattern as `unit_intelligence`.
-  See `modules.md` for the full module-gating picture.
+  `state-eviction-rules.ts` is `GET`-only — see `routes.md` for why it has
+  no write endpoint. See `modules.md` for the full module-gating picture.
 - **Partially gated** (mutations require `owner`/`manager`, reads are open to
   any org role): `properties.ts`, `tenants.ts`, `units.ts`, `appliances.ts`
   (on top of its `unit_intelligence` module gate); `organizations.ts`
   gates only its settings-update and one settings-read endpoint (and is
   mounted in `index.ts` with no `requireAuth`/`requireOrg` at all — see
-  `routes.md`); `state-eviction-rules.ts` (Module 8) — `GET` list/get is
-  open to any org role (generic jurisdiction reference data, not
-  tenant-specific), `POST`/`PATCH` (correcting a seeded rule) require
-  `owner`/`manager`
+  `routes.md`)
 - **Not role-gated beyond `requireAuth` + `requireOrg`** — any authenticated
   org member, including `maintenance`, can hit every endpoint:
   `workOrders.ts` (except one manager-only `DELETE`), `vendors.ts`,
-  `notifications.ts`
+  `notifications.ts`, `state-eviction-rules.ts` (Module 8 — `GET`-only,
+  generic jurisdiction reference data rather than tenant-specific, so open
+  reads are fine; there is no write endpoint at all, see `routes.md`)
 
 Net effect: `maintenance` users can freely reach work orders, vendors, and
 notifications; nearly everything else requires `owner` or `manager`. This

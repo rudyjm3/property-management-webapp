@@ -9,7 +9,7 @@ import {
   sendEvictionDeadlineToManager,
 } from './email.service';
 import { sendSms } from './sms.service';
-import { EVICTION_DEADLINE_REMINDER_THRESHOLDS } from '@propflow/shared';
+import { EVICTION_DEADLINE_REMINDER_THRESHOLDS, MODULE_KEYS } from '@propflow/shared';
 
 // ─── Config ───────────────────────────────────────────────────────────────────
 
@@ -659,6 +659,7 @@ export async function runEvictionDeadlineJob(organizationId?: string) {
         where: {
           status: 'notice_served',
           deadlineDate: { gte: startOfTarget, lte: endOfTarget },
+          organization: { activeModules: { has: MODULE_KEYS.EVICTION_MANAGEMENT } },
           ...(organizationId ? { organizationId } : {}),
         },
         include: evictionAlertInclude,
@@ -667,6 +668,7 @@ export async function runEvictionDeadlineJob(organizationId?: string) {
         where: {
           status: 'court_date_set',
           courtDate: { gte: startOfTarget, lte: endOfTarget },
+          organization: { activeModules: { has: MODULE_KEYS.EVICTION_MANAGEMENT } },
           ...(organizationId ? { organizationId } : {}),
         },
         include: evictionAlertInclude,

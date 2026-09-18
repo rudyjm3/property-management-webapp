@@ -1247,23 +1247,12 @@ export const api = {
       }),
   },
 
+  // Read-only — StateEvictionRule is shared across every org, and this
+  // codebase's RBAC has no platform-admin concept, so there is no
+  // customer-facing write endpoint for it (see routes/state-eviction-rules.ts).
   stateEvictionRules: {
     list: (state?: string) =>
       apiFetch<StateEvictionRule[]>(`/api/v1/organizations/${_orgId}/state-eviction-rules${state ? `?state=${state}` : ''}`),
     get: (id: string) => apiFetch<StateEvictionRule>(`/api/v1/organizations/${_orgId}/state-eviction-rules/${id}`),
-    update: (
-      id: string,
-      data: Partial<{
-        noticePeriodDays: number;
-        allowedDeliveryMethods: EvictionDeliveryMethod[];
-        notes: string | null;
-        source: string;
-        lastVerifiedAt: string;
-      }>
-    ) =>
-      apiFetch<StateEvictionRule>(`/api/v1/organizations/${_orgId}/state-eviction-rules/${id}`, {
-        method: 'PATCH',
-        body: JSON.stringify(data),
-      }),
   },
 };

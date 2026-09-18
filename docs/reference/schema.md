@@ -376,8 +376,13 @@ the eviction detail page).
   notice types = 153 rows, from `STATE_EVICTION_RULES_SEED` in
   `packages/shared/src/constants/eviction-rules-data.ts`.
 - Has many: evictions (via `Eviction.stateRuleId`)
-- A manager who has actually verified a jurisdiction's current law/counsel
-  can correct a seeded row via `PATCH .../state-eviction-rules/:id` (or
-  `POST` to upsert one that doesn't exist yet) — this is the mechanism for
-  keeping the table current beyond its initial seed; it does not run on any
-  automatic schedule.
+- **No API write path, by design.** `.../state-eviction-rules` is `GET`-only
+  — this table has no `organizationId` (it's shared across every tenant),
+  and this codebase's RBAC has no platform-admin concept, so an
+  owner/manager write endpoint would let one customer overwrite the data
+  every other customer's deadlines depend on (a real finding from review on
+  this module's first PR). `eviction.service.ts`'s
+  `createOrUpdateStateEvictionRule`/`updateStateEvictionRule` exist for
+  correcting a seeded row once someone has actually verified it, but are
+  intentionally not wired to a route — direct database/ops access (or a
+  future platform-admin surface) is the only way to update this table today.

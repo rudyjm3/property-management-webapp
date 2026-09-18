@@ -86,9 +86,16 @@ interface StateEvictionRuleInput {
   lastVerifiedAt: string;
 }
 
-// Lets a manager correct a seeded reference row once they've actually
-// verified it against current law/counsel — the seeded table is a starting
-// point, not a claim of ongoing legal review (see modules.md).
+// Corrects a seeded reference row once someone has actually verified it
+// against current law/counsel — the seeded table is a starting point, not a
+// claim of ongoing legal review (see modules.md). NOT wired to an HTTP
+// route: StateEvictionRule has no organizationId (it's shared across every
+// tenant), and this codebase's RBAC has no platform-admin concept, so
+// exposing this to any owner/manager would let one customer overwrite the
+// data every other customer's deadline computations depend on. Intended
+// for direct database/ops use (a script, `prisma studio`, or a future
+// platform-admin surface) until that auth layer exists — see
+// routes/state-eviction-rules.ts and modules.md for the full reasoning.
 export async function createOrUpdateStateEvictionRule(data: StateEvictionRuleInput) {
   await ensureStateEvictionRulesSeeded();
   const state = data.state.toUpperCase();
@@ -113,6 +120,8 @@ export async function createOrUpdateStateEvictionRule(data: StateEvictionRuleInp
   });
 }
 
+// Same ops-only caveat as createOrUpdateStateEvictionRule above — not wired
+// to an HTTP route.
 export async function updateStateEvictionRule(id: string, data: Partial<Omit<StateEvictionRuleInput, 'state' | 'noticeType'>>) {
   const existing = await getStateEvictionRule(id);
   return prisma.stateEvictionRule.update({
@@ -237,6 +246,14 @@ function resolveNoticePeriod(
   return { noticePeriodDays, overrideReason: input.overrideReason ?? null };
 }
 
+async function assertServedByUserInOrg(organizationId: string, servedByUserId: string | null | undefined) {
+  if (!servedByUserId) return;
+  const servedBy = await prisma.user.findFirst({ where: { id: servedByUserId, organizationId } });
+  if (!servedBy) {
+    throw new AppError(404, 'USER_NOT_FOUND', 'servedByUserId does not belong to your organization.');
+  }
+}
+
 export async function createEviction(organizationId: string, data: CreateEvictionData) {
   const lease = await getLeaseForOrg(organizationId, data.leaseId);
   const rule = await lookupStateEvictionRule(lease.unit.property.state, data.noticeType);
@@ -250,12 +267,7 @@ export async function createEviction(organizationId: string, data: CreateEvictio
   const noticeDate = toDateOnly(data.noticeDate);
   const deadlineDate = addDaysUTC(noticeDate, noticePeriodDays);
 
-  if (data.servedByUserId) {
-    const servedBy = await prisma.user.findFirst({ where: { id: data.servedByUserId, organizationId } });
-    if (!servedBy) {
-      throw new AppError(404, 'USER_NOT_FOUND', 'servedByUserId does not belong to your organization.');
-    }
-  }
+  await assertServedByUserInOrg(organizationId, data.servedByUserId);
 
   return prisma.eviction.create({
     data: {
@@ -307,6 +319,10 @@ export async function updateEviction(organizationId: string, evictionId: string,
       'EVICTION_NOTICE_LOCKED',
       'Notice details can only be edited while the eviction is still at notice_served.'
     );
+  }
+
+  if (data.servedByUserId !== undefined) {
+    await assertServedByUserInOrg(organizationId, data.servedByUserId);
   }
 
   const updateData: Prisma.EvictionUncheckedUpdateInput = {
@@ -374,6 +390,17 @@ export async function resolveEvictionNotice(
   }
   if (outcome === 'paid' && existing.noticeType !== 'pay_or_quit') {
     throw new AppError(400, 'INVALID_OUTCOME', '"paid" only applies to a pay_or_quit notice.');
+  }
+  // "expired" means the notice period lapsed without compliance — only
+  // reachable once deadlineDate has actually arrived, so a manager can't
+  // mark a notice expired (and then file with the court) before the
+  // jurisdiction-required notice period has elapsed.
+  if (outcome === 'expired' && new Date() < existing.deadlineDate) {
+    throw new AppError(
+      400,
+      'DEADLINE_NOT_REACHED',
+      `The notice period runs through ${existing.deadlineDate.toISOString().slice(0, 10)} — it cannot be marked expired before then.`
+    );
   }
 
   return prisma.eviction.update({
