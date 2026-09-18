@@ -10,6 +10,7 @@ const MODULE_LABELS: Record<ModuleKey, string> = {
   advanced_tenant_onboarding: 'Advanced Tenant Onboarding',
   advanced_payments_accounting: 'Advanced Payments & Accounting',
   unit_intelligence: 'Unit Intelligence & Appliance Registry',
+  inspections_compliance: 'Inspections & Compliance',
 };
 
 interface ModuleGateProps {

@@ -6,6 +6,9 @@ import Link from 'next/link';
 import { api } from '@/lib/api';
 import DocumentPanel from '@/components/DocumentPanel';
 import SecurityDepositDisposition from '@/components/SecurityDepositDisposition';
+import InspectionComparison from '@/components/InspectionComparison';
+import ModuleGate from '@/components/ModuleGate';
+import { MODULE_KEYS } from '@propflow/shared';
 
 function localDateStr() {
   const d = new Date();
@@ -544,7 +547,17 @@ export default function LeaseDetailPage() {
               {lease.moveOutDate && (
                 <div className="detail-item">
                   <label>Move-Out Date</label>
-                  <span>{new Date(lease.moveOutDate).toLocaleDateString()}</span>
+                  <span>
+                    {new Date(lease.moveOutDate).toLocaleDateString()}{' '}
+                    <ModuleGate module={MODULE_KEYS.INSPECTIONS_COMPLIANCE}>
+                      <Link
+                        href={`/properties/${lease.unit.propertyId}/units/${lease.unit.id}`}
+                        style={{ fontSize: '12px' }}
+                      >
+                        (schedule/view move-out inspection)
+                      </Link>
+                    </ModuleGate>
+                  </span>
                 </div>
               )}
               <div className="detail-item">
@@ -1213,6 +1226,8 @@ export default function LeaseDetailPage() {
         leaseId={leaseId}
         canReconcile={lease.status === 'terminated' && Boolean(lease.moveOutDate)}
       />
+
+      <InspectionComparison leaseId={leaseId} propertyId={lease.unit.propertyId} unitId={lease.unit.id} />
 
       <DocumentPanel entityType="lease" entityId={leaseId} />
     </>
