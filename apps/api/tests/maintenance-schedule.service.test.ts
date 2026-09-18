@@ -19,6 +19,7 @@ vi.mock('@propflow/db', () => ({
   MaintenanceCadence: {},
   WorkOrderCategory: {},
   WorkOrderLocationType: {},
+  VendorStatus: { active: 'active', inactive: 'inactive' },
 }));
 
 import { prisma } from '@propflow/db';

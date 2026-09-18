@@ -1,4 +1,4 @@
-import { prisma, VendorStatus, WorkOrderStatus, WorkOrderCategory } from '@propflow/db';
+import { prisma, Prisma, VendorStatus, WorkOrderStatus, WorkOrderCategory } from '@propflow/db';
 import { MODULE_KEYS, VENDOR_EXPIRY_ALERT_LOOKAHEAD_DAYS } from '@propflow/shared';
 import { AppError } from '../middleware/error-handler';
 
@@ -119,20 +119,23 @@ export async function updateVendor(organizationId: string, vendorId: string, dat
 export async function deleteVendor(organizationId: string, vendorId: string) {
   await getVendor(organizationId, vendorId); // throws if not found
 
-  // Block deletion once a vendor has any linked work-order or
-  // maintenance-schedule history — deleting it would either fail on the FK
-  // (schedules) or silently orphan cost/rating history (work orders' vendor
-  // relation has no explicit onDelete, so Prisma's default for an optional
-  // FK is Restrict, but we want a clear error rather than a raw DB one).
-  const [workOrderCount, scheduleCount] = await Promise.all([
+  // Block deletion once a vendor has any linked work-order history,
+  // maintenance-schedule history, or a preferred-vendor assignment —
+  // deleting it would either fail on the FK (schedules, preferred
+  // assignments — both Restrict) or silently orphan cost/rating history
+  // (work orders' vendor relation has no explicit onDelete, so Prisma's
+  // default for an optional FK is Restrict, but we want a clear error
+  // rather than a raw DB one).
+  const [workOrderCount, scheduleCount, preferredAssignmentCount] = await Promise.all([
     prisma.workOrder.count({ where: { vendorId } }),
     prisma.maintenanceSchedule.count({ where: { vendorId } }),
+    prisma.preferredVendorAssignment.count({ where: { vendorId } }),
   ]);
-  if (workOrderCount > 0 || scheduleCount > 0) {
+  if (workOrderCount > 0 || scheduleCount > 0 || preferredAssignmentCount > 0) {
     throw new AppError(
       400,
       'VENDOR_HAS_HISTORY',
-      'This vendor has associated work orders or maintenance schedules and cannot be deleted — set it to inactive instead.'
+      'This vendor has associated work orders, maintenance schedules, or preferred-vendor assignments and cannot be deleted — set it to inactive instead.'
     );
   }
 
@@ -273,6 +276,32 @@ export async function getVendorWorkHistory(organizationId: string, vendorId: str
 // average, recomputed from all VendorWorkOrderRating rows every time one is
 // created, rather than replacing it outright.
 
+// Recomputes Vendor.rating as the average of all its VendorWorkOrderRating
+// rows, inside the caller's transaction. Concurrent rating submissions for
+// the same vendor (or a rating create racing a rating delete, e.g. from
+// workOrder.service.ts's deleteWorkOrder) can each read a stale _avg before
+// the other commits, undercounting whichever update lands last — so this
+// takes a session-level advisory lock keyed by vendorId first, mirroring the
+// pattern in appliance.service.ts's syncApplianceCount, to serialize the
+// read-aggregate-write against any other in-flight recompute for the same
+// vendor.
+export async function recomputeVendorRating(
+  tx: Prisma.TransactionClient,
+  vendorId: string
+): Promise<void> {
+  await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${vendorId})::bigint)`;
+
+  const agg = await tx.vendorWorkOrderRating.aggregate({
+    where: { vendorId },
+    _avg: { rating: true },
+  });
+
+  await tx.vendor.update({
+    where: { id: vendorId },
+    data: { rating: agg._avg.rating ?? null },
+  });
+}
+
 export async function rateVendorWorkOrder(
   organizationId: string,
   workOrderId: string,
@@ -308,15 +337,7 @@ export async function rateVendorWorkOrder(
       data: { workOrderId, vendorId, rating: data.rating, note: data.note ?? null },
     });
 
-    const agg = await tx.vendorWorkOrderRating.aggregate({
-      where: { vendorId },
-      _avg: { rating: true },
-    });
-
-    await tx.vendor.update({
-      where: { id: vendorId },
-      data: { rating: agg._avg.rating ?? null },
-    });
+    await recomputeVendorRating(tx, vendorId);
 
     return created;
   });
@@ -379,15 +400,31 @@ export async function upsertPreferredVendorAssignment(
     });
   }
 
-  return prisma.preferredVendorAssignment.create({
-    data: {
-      organizationId,
-      propertyId,
-      category: data.category as WorkOrderCategory,
-      vendorId: data.vendorId,
-    },
-    include: { vendor: { select: { id: true, companyName: true } }, property: { select: { id: true, name: true } } },
-  });
+  try {
+    return await prisma.preferredVendorAssignment.create({
+      data: {
+        organizationId,
+        propertyId,
+        category: data.category as WorkOrderCategory,
+        vendorId: data.vendorId,
+      },
+      include: { vendor: { select: { id: true, companyName: true } }, property: { select: { id: true, name: true } } },
+    });
+  } catch (err) {
+    // Backstop for the race between the findFirst above and this create:
+    // the DB-level partial unique index (organization_id, category) WHERE
+    // property_id IS NULL — see migration 20260918022840_fix_module5_fk_drift
+    // — rejects a concurrent duplicate org-wide assignment with P2002. Turn
+    // that into the same clean application error rather than a raw 500.
+    if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === 'P2002') {
+      throw new AppError(
+        400,
+        'PREFERRED_ASSIGNMENT_EXISTS',
+        'A preferred vendor assignment for this property/category already exists.'
+      );
+    }
+    throw err;
+  }
 }
 
 export async function deletePreferredVendorAssignment(organizationId: string, assignmentId: string) {
@@ -413,16 +450,30 @@ export async function resolvePreferredVendor(
   propertyId: string | null,
   category: string
 ): Promise<string | null> {
+  // Filters to vendor.status === active so an inactive vendor (the
+  // documented alternative to deletion when it has work history) doesn't
+  // keep getting auto-assigned to new work orders — an inactive match just
+  // falls through to the next fallback tier (or to null, "no default").
   if (propertyId) {
     const propertyMatch = await prisma.preferredVendorAssignment.findFirst({
-      where: { organizationId, propertyId, category: category as WorkOrderCategory },
+      where: {
+        organizationId,
+        propertyId,
+        category: category as WorkOrderCategory,
+        vendor: { status: VendorStatus.active },
+      },
       select: { vendorId: true },
     });
     if (propertyMatch) return propertyMatch.vendorId;
   }
 
   const orgWideMatch = await prisma.preferredVendorAssignment.findFirst({
-    where: { organizationId, propertyId: null, category: category as WorkOrderCategory },
+    where: {
+      organizationId,
+      propertyId: null,
+      category: category as WorkOrderCategory,
+      vendor: { status: VendorStatus.active },
+    },
     select: { vendorId: true },
   });
 

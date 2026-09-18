@@ -7,16 +7,32 @@ vi.mock('@propflow/db', () => ({
     workOrder: { findMany: vi.fn(), findFirst: vi.fn(), count: vi.fn() },
     maintenanceSchedule: { count: vi.fn() },
     vendorWorkOrderRating: { findUnique: vi.fn(), create: vi.fn(), aggregate: vi.fn() },
-    preferredVendorAssignment: { findFirst: vi.fn(), findMany: vi.fn(), create: vi.fn(), update: vi.fn(), delete: vi.fn() },
+    preferredVendorAssignment: {
+      findFirst: vi.fn(),
+      findMany: vi.fn(),
+      create: vi.fn(),
+      update: vi.fn(),
+      delete: vi.fn(),
+      count: vi.fn(),
+    },
     property: { findFirst: vi.fn() },
     $transaction: vi.fn(),
+  },
+  Prisma: {
+    PrismaClientKnownRequestError: class PrismaClientKnownRequestError extends Error {
+      code: string;
+      constructor(message: string, opts: { code: string }) {
+        super(message);
+        this.code = opts.code;
+      }
+    },
   },
   VendorStatus: { active: 'active', inactive: 'inactive' },
   WorkOrderStatus: {},
   WorkOrderCategory: {},
 }));
 
-import { prisma } from '@propflow/db';
+import { prisma, Prisma } from '@propflow/db';
 import {
   isVendorManagementActive,
   getVendorExpiryAlerts,
@@ -28,7 +44,12 @@ import {
 } from '../src/services/vendor.service';
 
 beforeEach(() => {
-  vi.clearAllMocks();
+  // resetAllMocks (not clearAllMocks) also drops queued mockResolvedValueOnce
+  // implementations between tests — a test earlier in this file that queues
+  // an Once() value its own assertions never consume (e.g. because the code
+  // under test returns early) would otherwise leak that value into the next
+  // test's first call.
+  vi.resetAllMocks();
 });
 
 describe('isVendorManagementActive', () => {
@@ -161,10 +182,12 @@ describe('rateVendorWorkOrder', () => {
     const txCreate = vi.fn().mockResolvedValue({ id: 'rating-1', workOrderId: 'wo-1', vendorId: 'v-1', rating: 5 });
     const txAggregate = vi.fn().mockResolvedValue({ _avg: { rating: 4.5 } });
     const txVendorUpdate = vi.fn().mockResolvedValue({ id: 'v-1', rating: 4.5 });
+    const txExecuteRaw = vi.fn().mockResolvedValue(undefined);
     (prisma.$transaction as any).mockImplementation(async (fn: any) =>
       fn({
         vendorWorkOrderRating: { create: txCreate, aggregate: txAggregate },
         vendor: { update: txVendorUpdate },
+        $executeRaw: txExecuteRaw,
       })
     );
 
@@ -183,6 +206,17 @@ describe('deleteVendor', () => {
     (prisma.vendor.findFirst as any).mockResolvedValue({ id: 'v-1' });
     (prisma.workOrder.count as any).mockResolvedValue(2);
     (prisma.maintenanceSchedule.count as any).mockResolvedValue(0);
+    (prisma.preferredVendorAssignment.count as any).mockResolvedValue(0);
+
+    await expect(deleteVendor('org-1', 'v-1')).rejects.toMatchObject({ code: 'VENDOR_HAS_HISTORY' });
+    expect(prisma.vendor.delete).not.toHaveBeenCalled();
+  });
+
+  it('blocks deletion when the vendor has no work history but an active preferred-vendor assignment', async () => {
+    (prisma.vendor.findFirst as any).mockResolvedValue({ id: 'v-1' });
+    (prisma.workOrder.count as any).mockResolvedValue(0);
+    (prisma.maintenanceSchedule.count as any).mockResolvedValue(0);
+    (prisma.preferredVendorAssignment.count as any).mockResolvedValue(1);
 
     await expect(deleteVendor('org-1', 'v-1')).rejects.toMatchObject({ code: 'VENDOR_HAS_HISTORY' });
     expect(prisma.vendor.delete).not.toHaveBeenCalled();
@@ -192,6 +226,7 @@ describe('deleteVendor', () => {
     (prisma.vendor.findFirst as any).mockResolvedValue({ id: 'v-1' });
     (prisma.workOrder.count as any).mockResolvedValue(0);
     (prisma.maintenanceSchedule.count as any).mockResolvedValue(0);
+    (prisma.preferredVendorAssignment.count as any).mockResolvedValue(0);
 
     await deleteVendor('org-1', 'v-1');
     expect(prisma.vendor.delete).toHaveBeenCalledWith({ where: { id: 'v-1' } });
@@ -240,6 +275,11 @@ describe('upsertPreferredVendorAssignment / resolvePreferredVendor', () => {
 
     const result = await resolvePreferredVendor('org-1', 'prop-1', 'plumbing');
     expect(result).toBe('property-specific-vendor');
+    expect(prisma.preferredVendorAssignment.findFirst).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: expect.objectContaining({ vendor: { status: 'active' } }),
+      })
+    );
   });
 
   it('resolvePreferredVendor falls back to the org-wide default when no property match exists', async () => {
@@ -255,5 +295,32 @@ describe('upsertPreferredVendorAssignment / resolvePreferredVendor', () => {
     (prisma.preferredVendorAssignment.findFirst as any).mockResolvedValue(null);
     const result = await resolvePreferredVendor('org-1', null, 'plumbing');
     expect(result).toBeNull();
+  });
+
+  it('resolvePreferredVendor skips an inactive vendor\'s assignment (the findFirst filters by vendor.status: active, so the DB returns no match)', async () => {
+    // Simulates the DB-level `vendor: { status: 'active' }` filter excluding
+    // an inactive vendor's assignment row — the query itself returns null
+    // rather than the service needing to post-filter.
+    (prisma.preferredVendorAssignment.findFirst as any).mockResolvedValue(null);
+
+    const result = await resolvePreferredVendor('org-1', 'prop-1', 'plumbing');
+    expect(result).toBeNull();
+    expect(prisma.preferredVendorAssignment.findFirst).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: expect.objectContaining({ vendor: { status: 'active' } }),
+      })
+    );
+  });
+
+  it('rejects creating a duplicate org-wide preferred assignment when the DB partial unique index raises P2002', async () => {
+    (prisma.vendor.findFirst as any).mockResolvedValue({ id: 'vendor-3' });
+    (prisma.preferredVendorAssignment.findFirst as any).mockResolvedValue(null);
+    (prisma.preferredVendorAssignment.create as any).mockRejectedValue(
+      new Prisma.PrismaClientKnownRequestError('Unique constraint failed', { code: 'P2002' })
+    );
+
+    await expect(
+      upsertPreferredVendorAssignment('org-1', { category: 'plumbing', vendorId: 'vendor-3' })
+    ).rejects.toMatchObject({ code: 'PREFERRED_ASSIGNMENT_EXISTS' });
   });
 });

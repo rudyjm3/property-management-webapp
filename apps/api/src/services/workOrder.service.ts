@@ -7,7 +7,7 @@ import {
 } from '@propflow/db';
 import { MODULE_KEYS } from '@propflow/shared';
 import { AppError } from '../middleware/error-handler';
-import { isVendorManagementActive, resolvePreferredVendor } from './vendor.service';
+import { isVendorManagementActive, resolvePreferredVendor, recomputeVendorRating } from './vendor.service';
 
 // ─── SLA deadline helpers ──────────────────────────────────────────────────────
 
@@ -424,5 +424,19 @@ export async function updateWorkOrder(
 export async function deleteWorkOrder(organizationId: string, workOrderId: string) {
   await getWorkOrder(organizationId, workOrderId); // throws if not found
 
-  await prisma.workOrder.delete({ where: { id: workOrderId } });
+  // A completed work order can have a VendorWorkOrderRating (Module 5),
+  // whose FK to work_orders is Restrict — deleting the work order directly
+  // would fail on that constraint with an unhandled DB error. Delete the
+  // rating first and recompute the vendor's rolling average (reusing the
+  // same rollup used on rating create/other paths) inside the same
+  // transaction as the work order delete, so the two never diverge.
+  await prisma.$transaction(async (tx) => {
+    const rating = await tx.vendorWorkOrderRating.findUnique({ where: { workOrderId } });
+    if (rating) {
+      await tx.vendorWorkOrderRating.delete({ where: { id: rating.id } });
+      await recomputeVendorRating(tx, rating.vendorId);
+    }
+
+    await tx.workOrder.delete({ where: { id: workOrderId } });
+  });
 }

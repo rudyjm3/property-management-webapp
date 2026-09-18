@@ -367,7 +367,14 @@ model Inspection {
   updatedAt            DateTime         @updatedAt @map("updated_at")
 
   organization      Organization                 @relation(fields: [organizationId], references: [id])
-  unit              Unit?                        @relation(fields: [unitId], references: [id])
+  // onDelete: Restrict — a unit with inspections on file can't be deleted;
+  // Prisma's implicit default for an optional relation is SetNull, which
+  // would let a unit delete null out unitId on a unit-scoped inspection that
+  // has no propertyId either, orphaning it (and its media) from the
+  // inspection routes. Made explicit after a `prisma migrate dev` drift fix
+  // silently flipped this to SetNull in migration 20260918020344 — see
+  // 20260918022840_fix_module5_fk_drift for the corrective migration.
+  unit              Unit?                        @relation(fields: [unitId], references: [id], onDelete: Restrict)
   property          Property?                    @relation(fields: [propertyId], references: [id])
   lease             Lease?                       @relation(fields: [leaseId], references: [id])
   inspector         User?                        @relation("InspectionInspector", fields: [inspectorUserId], references: [id])
@@ -1093,8 +1100,13 @@ model PreferredVendorAssignment {
   // One preferred vendor per (property, category) combo. Postgres treats
   // each NULL in a unique index as distinct, so this does NOT by itself
   // prevent duplicate org-wide (propertyId: null) rows for the same
-  // category — that's enforced at the service layer instead (see
-  // vendor.service.ts upsertPreferredVendorAssignment).
+  // category. Prisma's schema DSL can't express a partial unique index, so
+  // the org-wide case is additionally enforced at the DB layer by a raw-SQL
+  // partial unique index (organization_id, category) WHERE property_id IS
+  // NULL, added in migration 20260918022840_fix_module5_fk_drift — the
+  // service layer (vendor.service.ts upsertPreferredVendorAssignment) still
+  // does a find-then-write for a clean error message, but also catches the
+  // P2002 unique-violation from this index as a race-condition backstop.
   @@unique([organizationId, propertyId, category])
   @@index([organizationId])
   @@index([propertyId])
@@ -1170,12 +1182,15 @@ model Message {
   organization Organization @relation(fields: [organizationId], references: [id])
   sender       User?        @relation("SentMessages", fields: [senderUserId], references: [id])
   recipient    Tenant?      @relation("ReceivedMessages", fields: [recipientTenantId], references: [id])
-  // onDelete: Restrict preserves Module 6's original behavior (a unit with
-  // inspections on file can't be deleted) — Prisma's implicit default for an
-  // optional relation is SetNull, which would let a unit delete null out
-  // unitId on a unit-scoped inspection that has no propertyId either,
-  // orphaning it (and its media) from both inspection routes.
-  unit         Unit?        @relation(fields: [unitId], references: [id], onDelete: Restrict)
+  // onDelete: SetNull is the original, intended behavior here — a message
+  // thread survives its unit being deleted, just losing the unit
+  // association, rather than blocking the unit delete outright the way
+  // Inspection.unit does. Made explicit after a `prisma migrate dev` drift
+  // fix silently flipped this to Restrict in migration 20260918020344 (which
+  // also broke deleteUnit(), which does not handle a FK RESTRICT failure
+  // here) — see 20260918022840_fix_module5_fk_drift for the corrective
+  // migration.
+  unit         Unit?        @relation(fields: [unitId], references: [id], onDelete: SetNull)
   workOrder    WorkOrder?   @relation(fields: [workOrderId], references: [id])
 
   @@index([organizationId])
