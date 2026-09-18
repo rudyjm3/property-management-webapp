@@ -74,7 +74,7 @@ Property managers juggle rent collection in one tool, maintenance in another, an
 - **Lease Management** -- Terms, renewal tracking, document attachments, expiration alerts
 - **Rent Collection** -- Online ACH payments via Stripe, autopay, late fee automation, payment history
 - **Work Orders** -- Tenant-submitted requests with photos, priority triage, status tracking
-- **In-App Messaging** -- Manager to tenant threads, broadcast announcements
+- **In-App Messaging** -- One-to-one manager-to-tenant threads (broadcast/bulk announcements are a Communications & Resident Engagement module feature, not yet built -- see below)
 - **Document Storage** -- Per-property, per-unit, per-tenant document vault
 - **Notifications & Alerts** -- Automated alerts for late rent, expiring leases, new work orders
 - **Settings & Admin** -- Org profile, team members, roles, billing
@@ -129,7 +129,7 @@ Per-unit fee applies above 20 units on Base plan.
 property-management-webapp/
 ├── apps/
 │   ├── web/                  # Next.js manager dashboard
-│   ├── api/                  # Node.js REST + WebSocket API
+│   ├── api/                  # Node.js REST API (messaging uses REST polling, not WebSocket)
 │   └── mobile/               # Expo React Native tenant app
 ├── packages/
 │   ├── db/                   # Prisma schema, migrations, seed

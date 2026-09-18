@@ -82,7 +82,7 @@ chore: upgrade Next.js to 15.x
 
 ## Code Style
 
-Code style is enforced via ESLint and Prettier, and checked in CI (`.github/workflows/ci.yml`) on every push/PR. There is currently no local pre-commit hook (Husky/lint-staged) — run the commands below yourself before pushing.
+Code style is enforced via ESLint and Prettier. ESLint runs in CI (`.github/workflows/ci.yml`); **Prettier formatting is not currently checked in CI** (`format:check` isn't wired into the workflow), so it's on you to run it locally before pushing. There is also no local pre-commit hook (Husky/lint-staged) — run the commands below yourself.
 
 Key conventions:
 - 2-space indentation
@@ -126,7 +126,7 @@ npm test --workspace=apps/api        # run once
 npm run test:watch --workspace=apps/api
 npm run test:coverage --workspace=apps/api
 ```
-CI runs the full suite on every push/PR alongside lint and typecheck.
+CI runs the full suite alongside lint and typecheck on every PR against `main`/`master`, and on direct pushes to `main`, `master`, or a `claude/**` branch — pushes to `feature/**`/`fix/**`/`chore/**`/`docs/**` branches only get a CI run once a PR is opened against `main` (see `.github/workflows/ci.yml`'s `on:` triggers).
 
 As a general principle:
 - Unit tests for business logic in `packages/shared` and `apps/api/src/services`

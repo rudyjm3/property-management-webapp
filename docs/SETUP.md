@@ -58,7 +58,7 @@ Open `.env` and fill in the values. For initial local development, only the data
 Services you'll need to set up for full functionality:
 - **Supabase Auth** — Create a free project at [supabase.com](https://supabase.com)
 - **Stripe** — Create a free account at [stripe.com](https://stripe.com), use test keys
-- **Supabase Storage** — File storage (documents, photos, inspection media) uses Supabase Storage, not AWS S3 — the same Supabase project used for Auth also provides this, so no separate bucket/account is needed
+- **Supabase Storage** — File storage (documents, photos, inspection media) uses Supabase Storage, not AWS S3, so no separate AWS account is needed — but on a fresh Supabase project you still need to create a **private storage bucket** named to match `SUPABASE_STORAGE_BUCKET` in `.env.example` (default `propflow-documents`); `storage.service.ts` calls `.from(SUPABASE_STORAGE_BUCKET).createSignedUploadUrl()` and does not provision the bucket itself, so uploads will fail with a "bucket not found" error until it exists
 - **Resend** — Create a free account at [resend.com](https://resend.com)
 - **Twilio** — Create a free trial account at [twilio.com](https://twilio.com) (optional for Phase 1)
 
