@@ -9,6 +9,7 @@ import {
 } from '@propflow/shared';
 import { validate } from '../middleware/validate';
 import * as leaseService from '../services/lease.service';
+import * as inspectionService from '../services/inspection.service';
 import { requireRoles } from '../middleware/auth';
 import { requireModule } from '../middleware/module-gate';
 
@@ -19,6 +20,9 @@ const requireManagerAccess = requireRoles(['owner', 'manager']);
 // (Module 4) feature layered on top of the base move-out workflow, which
 // stays ungated — gated per-route rather than at the router mount.
 const requireAccountingModule = requireModule(MODULE_KEYS.ADVANCED_PAYMENTS_ACCOUNTING);
+// Move-in vs. move-out comparison is an Inspections & Compliance (Module 6)
+// feature layered on top of the same base lease router — gated per-route.
+const requireInspectionsModule = requireModule(MODULE_KEYS.INSPECTIONS_COMPLIANCE);
 
 // GET /api/v1/organizations/:orgId/leases
 router.get('/', requireManagerAccess, async (req: Request, res: Response, next: NextFunction) => {
@@ -126,6 +130,26 @@ router.post('/:leaseId/security-deposit-disposition', requireManagerAccess, requ
     next(err);
   }
 });
+
+// GET /api/v1/organizations/:orgId/leases/:leaseId/inspections/compare
+// Inspections & Compliance (Module 6) — move-in vs. move-out diff, the
+// basis for deposit disposition.
+router.get(
+  '/:leaseId/inspections/compare',
+  requireManagerAccess,
+  requireInspectionsModule,
+  async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const comparison = await inspectionService.compareLeaseInspections(
+        req.params.orgId as string,
+        req.params.leaseId as string
+      );
+      res.json({ data: comparison });
+    } catch (err) {
+      next(err);
+    }
+  }
+);
 
 // POST /api/v1/organizations/:orgId/leases/:leaseId/participants
 router.post('/:leaseId/participants', requireManagerAccess, async (req: Request, res: Response, next: NextFunction) => {

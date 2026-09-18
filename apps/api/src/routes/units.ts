@@ -5,6 +5,7 @@ import * as unitService from '../services/unit.service';
 import { requireRoles } from '../middleware/auth';
 import { requireModule } from '../middleware/module-gate';
 import applianceRoutes from './appliances';
+import inspectionRoutes from './inspections';
 
 const router = Router({ mergeParams: true });
 
@@ -13,6 +14,11 @@ const requireManagerAccess = requireRoles(['owner', 'manager']);
 // Appliance registry — Module 2 (Unit Intelligence & Appliance Registry),
 // gated by activeModules at the router mount (mirrors /owners and /reports).
 router.use('/:unitId/appliances', requireModule(MODULE_KEYS.UNIT_INTELLIGENCE), applianceRoutes);
+
+// Inspections — Module 6 (Inspections & Compliance), same mount-level
+// gating pattern as appliances above (a wholly new domain model nested
+// under the unit).
+router.use('/:unitId/inspections', requireModule(MODULE_KEYS.INSPECTIONS_COMPLIANCE), inspectionRoutes);
 
 // GET /api/v1/organizations/:orgId/properties/:propertyId/units
 router.get('/', async (req: Request, res: Response, next: NextFunction) => {

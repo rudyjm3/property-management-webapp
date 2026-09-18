@@ -26,6 +26,7 @@ import signRoutes from './sign';
 import ownerRoutes from './owners';
 import reportRoutes from './reports';
 import ownerPortalRoutes from './owner-portal';
+import inspectionTemplateRoutes from './inspection-templates';
 
 const router = Router();
 
@@ -80,6 +81,17 @@ router.use(
   requireOrg,
   requireModule(MODULE_KEYS.REPORTING_ANALYTICS),
   reportRoutes
+);
+
+// Inspection checklist templates — Module 6, gated by activeModules
+// (per-unit inspection CRUD itself is gated a level deeper, at the
+// /:unitId/inspections mount inside units.ts — see routes.md)
+router.use(
+  '/organizations/:orgId/inspection-templates',
+  requireAuth,
+  requireOrg,
+  requireModule(MODULE_KEYS.INSPECTIONS_COMPLIANCE),
+  inspectionTemplateRoutes
 );
 
 // Tenant portal routes — protected by tenant auth (separate from manager auth)
