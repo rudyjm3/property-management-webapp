@@ -13,6 +13,7 @@ const MODULE_LABELS: Record<ModuleKey, string> = {
   inspections_compliance: 'Inspections & Compliance',
   grounds_maintenance: 'Grounds & Property Maintenance',
   vendor_management: 'Vendor & Contractor Management',
+  eviction_management: 'Eviction Management',
 };
 
 interface ModuleGateProps {

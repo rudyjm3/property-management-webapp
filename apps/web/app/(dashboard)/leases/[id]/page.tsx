@@ -7,6 +7,7 @@ import { api } from '@/lib/api';
 import DocumentPanel from '@/components/DocumentPanel';
 import SecurityDepositDisposition from '@/components/SecurityDepositDisposition';
 import InspectionComparison from '@/components/InspectionComparison';
+import EvictionsCard from '@/components/EvictionsCard';
 import ModuleGate from '@/components/ModuleGate';
 import { MODULE_KEYS } from '@propflow/shared';
 
@@ -1228,6 +1229,8 @@ export default function LeaseDetailPage() {
       />
 
       <InspectionComparison leaseId={leaseId} propertyId={lease.unit.propertyId} unitId={lease.unit.id} />
+
+      <EvictionsCard leaseId={leaseId} />
 
       <DocumentPanel entityType="lease" entityId={leaseId} />
     </>

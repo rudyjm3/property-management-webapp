@@ -5,7 +5,7 @@ import { usePathname } from 'next/navigation';
 import { useEffect, useState } from 'react';
 import { api } from '@/lib/api';
 import { useAuth } from '@/contexts/AuthContext';
-import { MODULE_KEYS, type ModuleKey } from '@propflow/shared';
+import { MODULE_KEYS, EVICTION_DEADLINE_WARNING_DAYS, type ModuleKey } from '@propflow/shared';
 
 const allNavItems: { href: string; label: string; icon: string; module?: ModuleKey }[] = [
   { href: '/dashboard', label: 'Dashboard', icon: 'grid' },
@@ -19,6 +19,7 @@ const allNavItems: { href: string; label: string; icon: string; module?: ModuleK
   { href: '/messages', label: 'Messages', icon: 'mail' },
   { href: '/documents', label: 'Documents', icon: 'folder' },
   { href: '/owners', label: 'Owners', icon: 'owner', module: MODULE_KEYS.OWNER_PORTAL },
+  { href: '/evictions', label: 'Evictions', icon: 'gavel', module: MODULE_KEYS.EVICTION_MANAGEMENT },
   { href: '/reports', label: 'Reports', icon: 'chart', module: MODULE_KEYS.REPORTING_ANALYTICS },
   { href: '/notifications', label: 'Notifications', icon: 'bell' },
   { href: '/settings/organization', label: 'Settings', icon: 'settings' },
@@ -116,6 +117,13 @@ const icons: Record<string, React.ReactNode> = {
       <line x1="2" y1="20" x2="22" y2="20" />
     </svg>
   ),
+  gavel: (
+    <svg className="sidebar-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+      <path d="M14 13l-8.5 8.5a1.5 1.5 0 01-2-2L12 11" />
+      <path d="M16.5 4.5l3 3L15 12l-3-3z" />
+      <path d="M13 8l-4-4M20 15l-4-4" />
+    </svg>
+  ),
   'vendor-truck': (
     <svg className="sidebar-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
       <rect x="1" y="7" width="14" height="10" rx="1" />
@@ -136,6 +144,7 @@ export default function Sidebar() {
   const [unreadCount, setUnreadCount] = useState(0);
   const [pendingAppCount, setPendingAppCount] = useState(0);
   const [vendorAlertCount, setVendorAlertCount] = useState(0);
+  const [evictionAlertCount, setEvictionAlertCount] = useState(0);
 
   function refreshBadge(userId: string) {
     api.notifications.list({ userId, limit: 50 })
@@ -163,8 +172,37 @@ export default function Sidebar() {
     } else {
       setVendorAlertCount(0);
     }
+    // Module 8 — evictions with a cure/pay deadline or court date inside the
+    // "yellow" warning window (including overdue), only when the module is
+    // active (endpoint 403s otherwise).
+    if (activeModules.includes(MODULE_KEYS.EVICTION_MANAGEMENT)) {
+      api.evictions
+        .list()
+        .then((evictions) => {
+          const now = new Date();
+          const withinWarning = (dateStr: string | null) => {
+            if (!dateStr) return false;
+            const days = (new Date(dateStr).getTime() - now.getTime()) / (1000 * 60 * 60 * 24);
+            return days <= EVICTION_DEADLINE_WARNING_DAYS.yellow;
+          };
+          const flagged = evictions.filter(
+            (e) =>
+              (e.status === 'notice_served' && withinWarning(e.deadlineDate)) ||
+              (e.status === 'court_date_set' && withinWarning(e.courtDate))
+          );
+          setEvictionAlertCount(flagged.length);
+        })
+        .catch(() => setEvictionAlertCount(0));
+    } else {
+      setEvictionAlertCount(0);
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [profile?.userId, pathname, activeModules.includes(MODULE_KEYS.VENDOR_MANAGEMENT)]);
+  }, [
+    profile?.userId,
+    pathname,
+    activeModules.includes(MODULE_KEYS.VENDOR_MANAGEMENT),
+    activeModules.includes(MODULE_KEYS.EVICTION_MANAGEMENT),
+  ]);
 
   // Also refresh immediately when messages page marks notifications read
   useEffect(() => {
@@ -242,6 +280,27 @@ export default function Sidebar() {
                 padding: '0 4px',
               }}>
                 {vendorAlertCount > 99 ? '99+' : vendorAlertCount}
+              </span>
+            )}
+            {item.icon === 'gavel' && evictionAlertCount > 0 && (
+              <span style={{
+                position: 'absolute',
+                right: '12px',
+                top: '50%',
+                transform: 'translateY(-50%)',
+                background: 'var(--color-danger)',
+                color: 'white',
+                borderRadius: '999px',
+                fontSize: '11px',
+                fontWeight: 600,
+                minWidth: '18px',
+                height: '18px',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                padding: '0 4px',
+              }}>
+                {evictionAlertCount > 99 ? '99+' : evictionAlertCount}
               </span>
             )}
             {item.icon === 'bell' && unreadCount > 0 && (

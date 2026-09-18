@@ -27,6 +27,8 @@ import ownerRoutes from './owners';
 import reportRoutes from './reports';
 import ownerPortalRoutes from './owner-portal';
 import inspectionTemplateRoutes from './inspection-templates';
+import evictionRoutes from './evictions';
+import stateEvictionRuleRoutes from './state-eviction-rules';
 
 const router = Router();
 
@@ -92,6 +94,28 @@ router.use(
   requireOrg,
   requireModule(MODULE_KEYS.INSPECTIONS_COMPLIANCE),
   inspectionTemplateRoutes
+);
+
+// Eviction notice tracking, timeline, and jurisdiction lookup — Module 8,
+// gated by activeModules. Entirely net-new (no ungated base functionality to
+// carve out), so the whole router is gated at its mount, same pattern as
+// Modules 2/4/6.
+router.use(
+  '/organizations/:orgId/evictions',
+  requireAuth,
+  requireOrg,
+  requireModule(MODULE_KEYS.EVICTION_MANAGEMENT),
+  evictionRoutes
+);
+
+// Jurisdiction reference-data table Module 8's notice-period lookup reads
+// from — same module gate as /evictions.
+router.use(
+  '/organizations/:orgId/state-eviction-rules',
+  requireAuth,
+  requireOrg,
+  requireModule(MODULE_KEYS.EVICTION_MANAGEMENT),
+  stateEvictionRuleRoutes
 );
 
 // Tenant portal routes — protected by tenant auth (separate from manager auth)

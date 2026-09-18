@@ -1778,13 +1778,107 @@ assuming any bullet below is fully built as originally scoped:
 **Target price:** $30–50/mo
 **Priority:** Medium
 
-**What it adds:**
+**Status: gated + shipped (2026-09-18).** This is the first module in this
+series flagged as legally sensitive — read the disclaimer bullet below
+before assuming the jurisdiction data is anything more than a reference
+starting point. What actually built, and exactly how it's simplified
+relative to the original spec above:
 
-- Notice type tracking: pay-or-quit, cure-or-quit, unconditional quit
-- Delivery method logging: certified mail, personal service, posting
-- Court date and case number tracking
-- Jurisdiction-specific notice period lookup by state
-- Eviction timeline dashboard with deadline flags
+- **Notice type tracking, delivery-method logging, deadline computation** —
+  a net-new `Eviction` model (`leaseId` FK, `noticeType:
+  pay_or_quit|cure_or_quit|unconditional_quit`, `noticeDate`,
+  `noticePeriodDays`, `deadlineDate` computed as `noticeDate +
+  noticePeriodDays` via simple calendar-day addition, `deliveryMethod:
+  certified_mail|personal_service|posting` + `deliveryDate`, `servedByUserId`/
+  `servedByName`) with CRUD at `.../organizations/:orgId/evictions[/:id]`,
+  gated behind `requireModule('eviction_management')` at that router's
+  mount — entirely net-new functionality, same gating pattern as Modules
+  2/4/6.
+- **Jurisdiction-specific notice-period lookup — real, but explicitly
+  unverified reference data, not legal advice.** A `StateEvictionRule`
+  model (`state`, `noticeType`, `noticePeriodDays`,
+  `allowedDeliveryMethods`, `source`, `lastVerifiedAt`) is seeded with 51
+  jurisdictions (50 states + DC) × 3 notice types = 153 rows, looked up
+  automatically from the lease's property `state` when creating a notice.
+  **This data was not independently verified against primary statute
+  text** — this build's sandboxed environment returned a network-egress
+  error on every legal-reference site it attempted to fetch (nolo.com,
+  ipropertymanagement.com, law.cornell.edu, evictionrules.com), so the
+  table was assembled from general trained knowledge of US landlord-tenant
+  law, cross-checked only against reachable search-result snippets. Every
+  row carries a `source` citation and a `notes` field flagging known
+  low-confidence figures (states with no fixed statutory minimum for
+  nonpayment notice, unusually complex structures like Virginia's 21/30
+  cure window or Oregon's graduated nonpayment schedule, etc.).
+  `lastVerifiedAt` records when the row was *compiled*, not when it was
+  legally reviewed — do not describe this table as "verified" or
+  "compliance-ready." A persistent "not legal advice" banner is shown on
+  every eviction-facing screen in the web app (the creation form, the
+  detail page, and the jurisdiction-lookup preview) precisely because of
+  this. A manager can override the looked-up notice period or delivery
+  method with a required reason, and can correct a seeded row going
+  forward via `PATCH`/`POST .../state-eviction-rules` once they've
+  actually verified it against current law — that's the intended
+  mechanism for keeping the table current, not an automatic refresh.
+  **Delivery methods are not modeled per state** — every seeded row allows
+  all three values rather than asserting a state disallows one, since
+  per-state service requirements often hinge on nuances (e.g. "posting
+  alone" vs. "posting plus mailing") a single enum value can't safely
+  capture without real verification.
+- **Delivery method logging, "who served it"** — `deliveryDate`,
+  `servedByUserId` (FK to `User`, for staff-served notices), and
+  `servedByName` (free text, for third-party service like a process
+  server) are all captured on the notice record.
+- **Notice generation workflow, full lifecycle tracking** — `status:
+  notice_served → (cured|paid|expired) → filed → court_date_set →
+  judgment → writ_issued → completed`, or `dismissed` at any point once
+  filed. Each transition is its own endpoint
+  (`.../evictions/:id/{resolve,file,court-date,judgment,writ,complete,dismiss}`),
+  not a generic status field a manager can hand-edit — enforced in
+  `eviction.service.ts`. `cured`/`paid` only apply to their matching notice
+  type (`cure_or_quit`/`pay_or_quit` respectively); a writ of possession can
+  only be issued after a judgment awarding possession to the landlord.
+- **Court date and case number tracking through judgment** — once a notice
+  expires uncured, filing captures a case number, optional court name, and
+  filing date; a court date can then be set (and rescheduled); judgment
+  captures an outcome (`possession_landlord|possession_tenant|dismissed|settled`)
+  and timestamp; a writ of possession and final completion follow from
+  there. A case can be dismissed at any point after filing, with a
+  required reason.
+- **Eviction timeline dashboard with deadline flags** — unlike most
+  modules in this series (which fold their gated feature into an existing
+  page), this one gets a real standalone nav page: `/evictions`, a
+  portfolio-wide list with search/status filtering and color-coded
+  deadline flags (red/yellow, `EVICTION_DEADLINE_WARNING_DAYS`), computed
+  client-side from `deadlineDate`/`courtDate` the same way `/leases`
+  already color-codes `endDate` — plus `/evictions/[id]` for full detail
+  and every lifecycle action. A `<ModuleGate>`-wrapped card on the lease
+  detail page (`/leases/[id]`) also lists any evictions on file for that
+  lease and links to start a new one, so the feature is reachable from
+  both places.
+- **Notifications** — `runEvictionDeadlineJob` (`notification.service.ts`)
+  reuses the existing notification system, mirroring `runLeaseExpiryJob`'s
+  threshold-scan pattern (7/3/1 days out) for both the cure/pay deadline
+  and the court date, triggered the same cron-endpoint way as
+  `lease-expiry`/`rent-reminders`
+  (`POST .../notifications/jobs/eviction-deadlines`). It reuses
+  `User.notifLeaseExpiry` as the closest existing "date-driven manager
+  alert" preference rather than adding a new `notifEviction` column — a
+  manager who has muted lease-expiry alerts will also miss eviction
+  deadline alerts, a real (if narrow) gap worth knowing about rather than
+  silently accepted.
+
+**Not built / explicitly simplified — do not describe as complete:**
+
+- Jurisdiction data is not verified against primary statute text for any
+  of the 51 seeded jurisdictions (see above) — it needs legal review
+  before an org relies on it for a real eviction.
+- Deadline computation is plain calendar-day addition, not adjusted for
+  the weekend/court-holiday exclusion rules some states apply to some
+  notice types (flagged per-state in the seed data's `notes` where known).
+- Delivery-method eligibility is not modeled per state.
+- No dedicated `notifEviction` preference — deadline reminders ride on
+  `notifLeaseExpiry`.
 
 **Dependencies:** Lease management, Property jurisdiction data (`state` field)
 

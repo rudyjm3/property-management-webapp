@@ -231,6 +231,59 @@ export const DEFAULT_INSPECTION_CHECKLIST: { section: string; item: string; desc
   { section: 'Safety Devices', item: 'Fire extinguisher', description: 'If provided' },
 ];
 
+// ─── Eviction Management (Module 8) ────────────────────────────────────────
+
+export const EVICTION_NOTICE_TYPES = ['pay_or_quit', 'cure_or_quit', 'unconditional_quit'] as const;
+export type EvictionNoticeType = (typeof EVICTION_NOTICE_TYPES)[number];
+
+export const EVICTION_DELIVERY_METHODS = ['certified_mail', 'personal_service', 'posting'] as const;
+export type EvictionDeliveryMethod = (typeof EVICTION_DELIVERY_METHODS)[number];
+
+export const EVICTION_STATUSES = [
+  'notice_served',
+  'cured',
+  'paid',
+  'expired',
+  'filed',
+  'court_date_set',
+  'judgment',
+  'writ_issued',
+  'completed',
+  'dismissed',
+] as const;
+export type EvictionStatus = (typeof EVICTION_STATUSES)[number];
+
+export const EVICTION_JUDGMENT_OUTCOMES = [
+  'possession_landlord',
+  'possession_tenant',
+  'dismissed',
+  'settled',
+] as const;
+export type EvictionJudgmentOutcome = (typeof EVICTION_JUDGMENT_OUTCOMES)[number];
+
+// Deadline-flag thresholds (days out) for the eviction timeline dashboard and
+// the deadline-reminder notification job — mirrors LEASE_EXPIRY_WARNING_DAYS'
+// red/yellow pattern.
+export const EVICTION_DEADLINE_WARNING_DAYS = {
+  red: 3,
+  yellow: 7,
+} as const;
+
+// Thresholds (days before) at which the eviction-deadline notification job
+// sends a reminder for an approaching cure/pay deadline or court date —
+// mirrors LEASE_EXPIRY_THRESHOLDS in notification.service.ts.
+export const EVICTION_DEADLINE_REMINDER_THRESHOLDS = [7, 3, 1] as const;
+
+// All 50 states + DC, 2-letter USPS codes — matches Property.state's format.
+// Used to validate StateEvictionRule.state and drive the jurisdiction lookup.
+export const US_STATE_CODES = [
+  'AL', 'AK', 'AZ', 'AR', 'CA', 'CO', 'CT', 'DE', 'DC', 'FL',
+  'GA', 'HI', 'ID', 'IL', 'IN', 'IA', 'KS', 'KY', 'LA', 'ME',
+  'MD', 'MA', 'MI', 'MN', 'MS', 'MO', 'MT', 'NE', 'NV', 'NH',
+  'NJ', 'NM', 'NY', 'NC', 'ND', 'OH', 'OK', 'OR', 'PA', 'RI',
+  'SC', 'SD', 'TN', 'TX', 'UT', 'VT', 'VA', 'WA', 'WV', 'WI', 'WY',
+] as const;
+
 // ─── Add-On Modules ───────────────────────────────────────────────────────────
 
 // Keys stored in Organization.activeModules. Gates existing functionality that
@@ -244,11 +297,14 @@ export const MODULE_KEYS = {
   INSPECTIONS_COMPLIANCE: 'inspections_compliance',
   GROUNDS_MAINTENANCE: 'grounds_maintenance',
   VENDOR_MANAGEMENT: 'vendor_management',
+  EVICTION_MANAGEMENT: 'eviction_management',
 } as const;
 
 export type ModuleKey = (typeof MODULE_KEYS)[keyof typeof MODULE_KEYS];
 
 export const ALL_MODULE_KEYS = Object.values(MODULE_KEYS) as ModuleKey[];
+
+export * from './eviction-rules-data';
 
 // ─── API ──────────────────────────────────────────────────────────────────────
 
