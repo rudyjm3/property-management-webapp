@@ -59,6 +59,106 @@ async function apiFetch<T>(path: string, options?: RequestInit): Promise<T> {
   return json.data;
 }
 
+// ─── Vendor & Contractor Management (Module 5) ─────────────────────────────
+// Shapes mirror apps/api/src/services/vendor.service.ts and
+// packages/shared/src/validators/index.ts exactly — see docs/reference/schema.md
+// for the underlying Vendor/VendorWorkOrderRating/PreferredVendorAssignment models.
+
+export interface VendorListItem {
+  id: string;
+  companyName: string;
+  contactName: string;
+  phonePrimary: string;
+  email: string;
+  specialties: string[];
+  status: 'active' | 'inactive';
+  preferred: boolean | null;
+  rating: string | null;
+  licenseExpiresAt: string | null;
+  insuranceExpiresAt: string | null;
+}
+
+export interface Vendor {
+  id: string;
+  organizationId: string;
+  companyName: string;
+  contactName: string;
+  email: string;
+  phonePrimary: string;
+  phoneEmergency: string | null;
+  specialties: string[];
+  status: 'active' | 'inactive';
+  preferred: boolean | null;
+  rating: string | null;
+  notes: string | null;
+  licenseNumber: string | null;
+  licenseExpiresAt: string | null;
+  insuranceOnFile: boolean;
+  insuranceExpiresAt: string | null;
+  w9OnFile: boolean | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface VendorInput {
+  companyName: string;
+  contactName: string;
+  email: string;
+  phonePrimary: string;
+  phoneEmergency?: string | null;
+  specialties: string[];
+  status?: 'active' | 'inactive';
+  preferred?: boolean | null;
+  notes?: string | null;
+  licenseNumber?: string | null;
+  licenseExpiresAt?: string | null;
+  insuranceOnFile?: boolean;
+  insuranceExpiresAt?: string | null;
+}
+
+export interface VendorExpiryAlert {
+  id: string;
+  companyName: string;
+  contactName: string;
+  licenseNumber: string | null;
+  licenseExpiresAt: string | null;
+  licenseStatus: 'expired' | 'expiring' | null;
+  insuranceExpiresAt: string | null;
+  insuranceStatus: 'expired' | 'expiring' | null;
+}
+
+export interface VendorWorkHistory {
+  range: { since: string; months: number };
+  count: number;
+  scheduleGeneratedCount: number;
+  totalSpend: number;
+  byCategory: { category: string; count: number; spend: number }[];
+  ratings: {
+    count: number;
+    average: number | null;
+    recent: { rating: number; note: string | null; createdAt: string }[];
+  };
+}
+
+export interface VendorWorkOrderRating {
+  id: string;
+  workOrderId: string;
+  vendorId: string;
+  rating: number;
+  note: string | null;
+  createdAt: string;
+}
+
+export interface PreferredVendorAssignment {
+  id: string;
+  organizationId: string;
+  propertyId: string | null;
+  category: string;
+  vendorId: string;
+  vendor: { id: string; companyName: string; contactName?: string };
+  property: { id: string; name: string } | null;
+}
+
 export const api = {
   auth: {
     me: () =>
@@ -654,8 +754,44 @@ export const api = {
   vendors: {
     list: (params?: { activeOnly?: boolean }) => {
       const qs = params?.activeOnly ? '?status=active' : '';
-      return apiFetch<any[]>(`/api/v1/organizations/${_orgId}/vendors${qs}`);
+      return apiFetch<VendorListItem[]>(`/api/v1/organizations/${_orgId}/vendors${qs}`);
     },
+    get: (id: string) => apiFetch<Vendor>(`/api/v1/organizations/${_orgId}/vendors/${id}`),
+    create: (data: VendorInput) =>
+      apiFetch<Vendor>(`/api/v1/organizations/${_orgId}/vendors`, {
+        method: 'POST',
+        body: JSON.stringify(data),
+      }),
+    update: (id: string, data: Partial<VendorInput>) =>
+      apiFetch<Vendor>(`/api/v1/organizations/${_orgId}/vendors/${id}`, {
+        method: 'PATCH',
+        body: JSON.stringify(data),
+      }),
+    delete: (id: string) =>
+      apiFetch<void>(`/api/v1/organizations/${_orgId}/vendors/${id}`, {
+        method: 'DELETE',
+      }),
+    // Vendor & Contractor Management (Module 5) — gated behind vendor_management
+    expiryAlerts: () => apiFetch<VendorExpiryAlert[]>(`/api/v1/organizations/${_orgId}/vendors/expiry-alerts`),
+    workHistory: (id: string, months?: number) =>
+      apiFetch<VendorWorkHistory>(`/api/v1/organizations/${_orgId}/vendors/${id}/work-history${months ? `?months=${months}` : ''}`),
+    preferredAssignments: {
+      list: () => apiFetch<PreferredVendorAssignment[]>(`/api/v1/organizations/${_orgId}/vendors/preferred-assignments`),
+      upsert: (data: { propertyId?: string | null; category: string; vendorId: string }) =>
+        apiFetch<PreferredVendorAssignment>(`/api/v1/organizations/${_orgId}/vendors/preferred-assignments`, {
+          method: 'POST',
+          body: JSON.stringify(data),
+        }),
+      delete: (id: string) =>
+        apiFetch<void>(`/api/v1/organizations/${_orgId}/vendors/preferred-assignments/${id}`, {
+          method: 'DELETE',
+        }),
+    },
+    rateWorkOrder: (workOrderId: string, data: { rating: number; note?: string | null }) =>
+      apiFetch<VendorWorkOrderRating>(`/api/v1/organizations/${_orgId}/work-orders/${workOrderId}/vendor-rating`, {
+        method: 'POST',
+        body: JSON.stringify(data),
+      }),
   },
   documents: {
     requestUploadUrl: (data: {

@@ -25,9 +25,9 @@ file directly for per-endpoint behavior.
 | `/organizations/:orgId/payments` | `routes/payments.ts` | `requireAuth`, `requireOrg`, plus `requireModule('advanced_payments_accounting')` applied only to `POST .../payments/:paymentId/initiate-card` and `.../record-partial` (rest of the router, including ACH, is ungated) |
 | `/organizations/:orgId/documents` | `routes/documents.ts` | `requireAuth`, `requireOrg` |
 | `/organizations/:orgId/notifications` | `routes/notifications.ts` | `requireAuth`, `requireOrg` |
-| `/organizations/:orgId/work-orders` | `routes/workOrders.ts` | `requireAuth`, `requireOrg` |
+| `/organizations/:orgId/work-orders` | `routes/workOrders.ts` | `requireAuth`, `requireOrg`, plus `requireModule('vendor_management')` applied only to `POST .../work-orders/:workOrderId/vendor-rating` (rest of the router, including base vendor assignment via `PATCH`, is ungated) |
 | `/organizations/:orgId/staff` | `routes/staff.ts` | `requireAuth`, `requireOrg` |
-| `/organizations/:orgId/vendors` | `routes/vendors.ts` | `requireAuth`, `requireOrg` |
+| `/organizations/:orgId/vendors` | `routes/vendors.ts` | `requireAuth`, `requireOrg`, plus `requireModule('vendor_management')` applied only to `GET .../vendors/expiry-alerts`, `GET .../vendors/:vendorId/work-history`, and the `GET`/`POST`/`DELETE .../vendors/preferred-assignments[/:assignmentId]` routes (base vendor CRUD — list/get/create/update/delete — is ungated) |
 | `/organizations/:orgId/messages` | `routes/messages.ts` | `requireAuth`, `requireOrg` |
 | `/organizations/:orgId/connect` | `routes/connect.ts` | `requireAuth`, `requireOrg` (Stripe Connect status/account-link/sync) |
 | `/organizations/:orgId/ledger` | `routes/ledger.ts` | `requireAuth`, `requireOrg` |

@@ -5,6 +5,7 @@ import { useParams } from 'next/navigation';
 import Link from 'next/link';
 import { api } from '@/lib/api';
 import { useAuth } from '@/contexts/AuthContext';
+import ModuleGate from '@/components/ModuleGate';
 
 interface WorkOrder {
   id: string;
@@ -39,6 +40,7 @@ interface WorkOrder {
   assignedTo: { id: string; name: string; email: string } | null;
   submittedByUser: { id: string; name: string; role: string } | null;
   vendor: { id: string; companyName: string; contactName: string; phonePrimary: string } | null;
+  vendorRating: { id: string; rating: number; note: string | null; createdAt: string } | null;
 }
 
 interface StaffMember {
@@ -152,6 +154,12 @@ export default function WorkOrderDetailPage() {
   const [assignError, setAssignError] = useState('');
   const [assignSubmitting, setAssignSubmitting] = useState(false);
   const [assignLoading, setAssignLoading] = useState(false);
+
+  // Vendor rating capture (Module 5)
+  const [ratingValue, setRatingValue] = useState(5);
+  const [ratingNote, setRatingNote] = useState('');
+  const [ratingError, setRatingError] = useState('');
+  const [ratingSubmitting, setRatingSubmitting] = useState(false);
 
   async function load() {
     try {
@@ -273,6 +281,21 @@ export default function WorkOrderDetailPage() {
       setAssignError(err.message || 'Failed to assign');
     } finally {
       setAssignSubmitting(false);
+    }
+  }
+
+  async function handleSubmitRating(e: React.FormEvent) {
+    e.preventDefault();
+    if (!workOrder) return;
+    setRatingError('');
+    setRatingSubmitting(true);
+    try {
+      await api.vendors.rateWorkOrder(workOrder.id, { rating: ratingValue, note: ratingNote || null });
+      await load();
+    } catch (err: any) {
+      setRatingError(err.message || 'Failed to submit rating');
+    } finally {
+      setRatingSubmitting(false);
     }
   }
 
@@ -506,6 +529,69 @@ export default function WorkOrderDetailPage() {
               )}
             </div>
           </div>
+
+          {/* Vendor rating capture (Module 5) — only for a completed/closed
+              work order with a vendor assigned */}
+          {workOrder.vendor && ['completed', 'closed'].includes(workOrder.status) && (
+            <ModuleGate module="vendor_management">
+              <div className="card">
+                <div className="card-body">
+                  <h3 style={{ fontSize: '13px', fontWeight: 600, color: 'var(--color-text-muted)', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: '12px' }}>
+                    Vendor Rating
+                  </h3>
+                  {workOrder.vendorRating ? (
+                    <div style={{ fontSize: '13px' }}>
+                      <div style={{ fontWeight: 600, marginBottom: '4px' }}>
+                        {workOrder.vendorRating.rating} / 5
+                      </div>
+                      {workOrder.vendorRating.note && (
+                        <div style={{ color: 'var(--color-text-muted)', marginBottom: '4px' }}>
+                          {workOrder.vendorRating.note}
+                        </div>
+                      )}
+                      <div style={{ color: 'var(--color-text-muted)', fontSize: '12px' }}>
+                        Rated {new Date(workOrder.vendorRating.createdAt).toLocaleDateString()}
+                      </div>
+                    </div>
+                  ) : (
+                    <form onSubmit={handleSubmitRating}>
+                      {ratingError && (
+                        <div style={{ color: 'var(--color-danger)', marginBottom: '8px', fontSize: '13px' }}>
+                          {ratingError}
+                        </div>
+                      )}
+                      <div className="form-group">
+                        <label>Rating</label>
+                        <select
+                          value={ratingValue}
+                          onChange={(e) => setRatingValue(Number(e.target.value))}
+                          style={{ fontSize: '13px' }}
+                        >
+                          {[5, 4, 3, 2, 1].map((n) => (
+                            <option key={n} value={n}>
+                              {n} / 5
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+                      <div className="form-group">
+                        <label>Note (optional)</label>
+                        <textarea
+                          rows={2}
+                          value={ratingNote}
+                          onChange={(e) => setRatingNote(e.target.value)}
+                          placeholder="How did this vendor perform?"
+                        />
+                      </div>
+                      <button type="submit" className="btn btn-sm btn-primary" disabled={ratingSubmitting}>
+                        {ratingSubmitting ? 'Submitting...' : 'Submit Rating'}
+                      </button>
+                    </form>
+                  )}
+                </div>
+              </div>
+            </ModuleGate>
+          )}
 
           {/* Tenant */}
           {workOrder.tenant && (

@@ -59,6 +59,7 @@ model Organization {
   inspections                 Inspection[]
   inspectionTemplates         InspectionTemplate[]
   maintenanceSchedules        MaintenanceSchedule[]
+  preferredVendorAssignments  PreferredVendorAssignment[]
 
   @@map("organizations")
 }
@@ -166,6 +167,7 @@ model Property {
   // the property level, not the unit level.
   inspections          Inspection[]
   maintenanceSchedules MaintenanceSchedule[]
+  preferredVendorAssignments PreferredVendorAssignment[]
 
   @@index([organizationId])
   @@map("properties")
@@ -365,7 +367,14 @@ model Inspection {
   updatedAt            DateTime         @updatedAt @map("updated_at")
 
   organization      Organization                 @relation(fields: [organizationId], references: [id])
-  unit              Unit?                        @relation(fields: [unitId], references: [id])
+  // onDelete: Restrict — a unit with inspections on file can't be deleted;
+  // Prisma's implicit default for an optional relation is SetNull, which
+  // would let a unit delete null out unitId on a unit-scoped inspection that
+  // has no propertyId either, orphaning it (and its media) from the
+  // inspection routes. Made explicit after a `prisma migrate dev` drift fix
+  // silently flipped this to SetNull in migration 20260918020344 — see
+  // 20260918022840_fix_module5_fk_drift for the corrective migration.
+  unit              Unit?                        @relation(fields: [unitId], references: [id], onDelete: Restrict)
   property          Property?                    @relation(fields: [propertyId], references: [id])
   lease             Lease?                       @relation(fields: [leaseId], references: [id])
   inspector         User?                        @relation("InspectionInspector", fields: [inspectorUserId], references: [id])
@@ -938,6 +947,9 @@ model WorkOrder {
   appliance       Appliance?           @relation(fields: [applianceId], references: [id])
   schedule        MaintenanceSchedule? @relation(fields: [scheduleId], references: [id], onDelete: SetNull)
   messages        Message[]
+  // Vendor & Contractor Management (Module 5) — at most one rating per work
+  // order completion (unique on VendorWorkOrderRating.workOrderId).
+  vendorRating    VendorWorkOrderRating?
 
   @@index([unitId])
   @@index([propertyId])
@@ -1015,9 +1027,12 @@ model Vendor {
   createdAt          DateTime     @default(now()) @map("created_at")
   updatedAt          DateTime     @updatedAt @map("updated_at")
 
-  organization         Organization          @relation(fields: [organizationId], references: [id])
+  organization         Organization                @relation(fields: [organizationId], references: [id])
   workOrders           WorkOrder[]
   maintenanceSchedules MaintenanceSchedule[]
+  // Vendor & Contractor Management (Module 5)
+  workOrderRatings     VendorWorkOrderRating[]
+  preferredAssignments PreferredVendorAssignment[]
 
   @@index([organizationId])
   @@map("vendors")
@@ -1026,6 +1041,90 @@ model Vendor {
 enum VendorStatus {
   active
   inactive
+}
+
+// ─── Vendor & Contractor Management (Module 5) ─────────────────────────────
+// Two net-new models for this module. See docs/reference/modules.md for the
+// gating decisions (what's ungated base vendor CRUD vs. gated Module 5
+// functionality) and for exactly what's simplified here.
+
+// Per-work-order-completion rating, captured via a dedicated endpoint
+// (POST .../work-orders/:workOrderId/vendor-rating) rather than baked into
+// the general WorkOrder PATCH — a work order must already be
+// completed/closed and have a vendorId before a rating can be recorded, and
+// at most one rating exists per work order (workOrderId is unique). The
+// existing single running `Vendor.rating` field is kept (approach (a) in the
+// module spec) and recomputed as the average of all of a vendor's ratings
+// each time one is created, so `Vendor.rating`'s existing consumers (vendor
+// list ordering, etc.) keep working unchanged.
+model VendorWorkOrderRating {
+  id          String   @id @default(uuid())
+  workOrderId String   @unique @map("work_order_id")
+  vendorId    String   @map("vendor_id")
+  rating      Int // 1-5, validated at the service layer (no DB check constraint)
+  note        String?
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  workOrder WorkOrder @relation(fields: [workOrderId], references: [id])
+  vendor    Vendor    @relation(fields: [vendorId], references: [id])
+
+  @@index([vendorId])
+  @@map("vendor_work_order_ratings")
+}
+
+// Preferred-vendor-by-category assignment, replacing the old global
+// `Vendor.preferred` boolean (kept as a column for backward compatibility /
+// display, but no longer the source of truth for auto-assignment). `category`
+// is required — an assignment always names a WorkOrderCategory; `propertyId`
+// is optional and narrows it to one property, with a null propertyId acting
+// as the org-wide default for that category. This is a simplification of the
+// "per property or category" spec: there is no property-scoped-but-
+// category-agnostic assignment (i.e. "always use this vendor for property X
+// regardless of category") — every assignment is keyed by category, since
+// the auto-assignment lookup at work-order-creation time always has a
+// category to match on and a category-less assignment would have no
+// deterministic way to pick among multiple vendors for the same property.
+model PreferredVendorAssignment {
+  id             String            @id @default(uuid())
+  organizationId String            @map("organization_id")
+  propertyId     String?           @map("property_id")
+  category       WorkOrderCategory
+  vendorId       String            @map("vendor_id")
+  createdAt      DateTime          @default(now()) @map("created_at")
+  updatedAt      DateTime          @updatedAt @map("updated_at")
+
+  organization Organization @relation(fields: [organizationId], references: [id])
+  // onDelete: Cascade — deleting a property removes its property-scoped
+  // preferred-vendor assignments outright rather than promoting them to
+  // org-wide defaults (the prior ON DELETE SET NULL behavior). Promoting a
+  // deleted property's assignment to org-wide would (a) silently apply that
+  // vendor to unrelated properties in the same category, and (b) can outright
+  // fail the property deletion with a raw DB constraint error if an org-wide
+  // assignment for that category already exists, since
+  // PreferredVendorAssignment_org_category_orgwide_unique only allows one
+  // org-wide row per (organization, category). deleteProperty() in
+  // property.service.ts has no explicit guard for this — the cascade alone
+  // is intentional here, since (unlike vendor deletion) there's no "set
+  // inactive instead" alternative for a deleted property, and losing a
+  // property-specific preference is an expected, harmless side effect of
+  // deleting the property itself.
+  property     Property?    @relation(fields: [propertyId], references: [id], onDelete: Cascade)
+  vendor       Vendor       @relation(fields: [vendorId], references: [id])
+
+  // One preferred vendor per (property, category) combo. Postgres treats
+  // each NULL in a unique index as distinct, so this does NOT by itself
+  // prevent duplicate org-wide (propertyId: null) rows for the same
+  // category. Prisma's schema DSL can't express a partial unique index, so
+  // the org-wide case is additionally enforced at the DB layer by a raw-SQL
+  // partial unique index (organization_id, category) WHERE property_id IS
+  // NULL, added in migration 20260918022840_fix_module5_fk_drift — the
+  // service layer (vendor.service.ts upsertPreferredVendorAssignment) still
+  // does a find-then-write for a clean error message, but also catches the
+  // P2002 unique-violation from this index as a race-condition backstop.
+  @@unique([organizationId, propertyId, category])
+  @@index([organizationId])
+  @@index([propertyId])
+  @@map("preferred_vendor_assignments")
 }
 
 // ─── Maintenance Schedule (Grounds & Property Maintenance / Module 3) ─────────
@@ -1097,12 +1196,15 @@ model Message {
   organization Organization @relation(fields: [organizationId], references: [id])
   sender       User?        @relation("SentMessages", fields: [senderUserId], references: [id])
   recipient    Tenant?      @relation("ReceivedMessages", fields: [recipientTenantId], references: [id])
-  // onDelete: Restrict preserves Module 6's original behavior (a unit with
-  // inspections on file can't be deleted) — Prisma's implicit default for an
-  // optional relation is SetNull, which would let a unit delete null out
-  // unitId on a unit-scoped inspection that has no propertyId either,
-  // orphaning it (and its media) from both inspection routes.
-  unit         Unit?        @relation(fields: [unitId], references: [id], onDelete: Restrict)
+  // onDelete: SetNull is the original, intended behavior here — a message
+  // thread survives its unit being deleted, just losing the unit
+  // association, rather than blocking the unit delete outright the way
+  // Inspection.unit does. Made explicit after a `prisma migrate dev` drift
+  // fix silently flipped this to Restrict in migration 20260918020344 (which
+  // also broke deleteUnit(), which does not handle a FK RESTRICT failure
+  // here) — see 20260918022840_fix_module5_fk_drift for the corrective
+  // migration.
+  unit         Unit?        @relation(fields: [unitId], references: [id], onDelete: SetNull)
   workOrder    WorkOrder?   @relation(fields: [workOrderId], references: [id])
 
   @@index([organizationId])

@@ -15,6 +15,7 @@ import { startSlaBreachJob } from './jobs/slaBreachCheck';
 import { startLateFeeJob } from './jobs/lateFeeJob';
 import { startRentGenerationJob } from './jobs/rentGenerationJob';
 import { startGroundsMaintenanceJob } from './jobs/groundsMaintenanceJob';
+import { startVendorExpiryAlertJob } from './jobs/vendorExpiryAlertJob';
 import stripeWebhookHandler from './webhooks/stripe';
 
 const app = express();
@@ -64,6 +65,7 @@ app.listen(PORT, () => {
   startRentGenerationJob();
   startLateFeeJob();
   startGroundsMaintenanceJob();
+  startVendorExpiryAlertJob();
 });
 
 export default app;

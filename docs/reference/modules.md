@@ -15,8 +15,9 @@ gating infrastructure" below — and is wired to the two modules that had
 shipped ahead of it, Module 9 (Owner Portal) and Module 11 (Reporting &
 Analytics), the screening step of Module 1 (Advanced Tenant Onboarding),
 Module 4 (Advanced Payments & Accounting), Module 2 (Unit Intelligence &
-Appliance Registry), Module 6 (Inspections & Compliance), and now Module 3
-(Grounds & Property Maintenance), all built across this and prior updates.
+Appliance Registry), Module 6 (Inspections & Compliance), Module 3
+(Grounds & Property Maintenance), and now Module 5 (Vendor & Contractor
+Management), all built across this and prior updates.
 No other module has functionality built yet, so no other module needs
 gating today. Full Stripe Subscription Item
 billing is still
@@ -33,8 +34,8 @@ with what a module will later extend.
   Holds module keys, defined in `packages/shared/src/constants/index.ts` as
   `MODULE_KEYS` (`owner_portal`, `reporting_analytics`,
   `advanced_tenant_onboarding`, `advanced_payments_accounting`,
-  `unit_intelligence`, `inspections_compliance`, `grounds_maintenance`) /
-  `ALL_MODULE_KEYS`.
+  `unit_intelligence`, `inspections_compliance`, `grounds_maintenance`,
+  `vendor_management`) / `ALL_MODULE_KEYS`.
 - **API middleware**: `requireModule(moduleKey)`
   (`apps/api/src/middleware/module-gate.ts`) — looks up the requesting org's
   `activeModules` fresh per request and returns `403 MODULE_NOT_ACTIVE` if
@@ -98,7 +99,19 @@ with what a module will later extend.
     `reporting_analytics` mount-level gate the same way Schedule E export
     is — an org needs both `grounds_maintenance` and `reporting_analytics`
     active to see it. See Module 3's row below for why this report sits
-    under `reports.ts` rather than its own module's route file.
+    under `reports.ts` rather than its own module's route file. Module 5
+    (Vendor & Contractor Management) adds three more per-route instances,
+    all inside `routes/vendors.ts` (which otherwise ships ungated — see
+    below): `GET .../vendors/expiry-alerts`, `GET
+    .../vendors/:vendorId/work-history`, and the
+    `GET`/`POST`/`DELETE .../vendors/preferred-assignments[/:assignmentId]`
+    routes; plus one inside `routes/workOrders.ts` (also otherwise ungated):
+    `POST .../work-orders/:workOrderId/vendor-rating`. Base vendor CRUD
+    (list/get/create/update/delete, all in `vendors.ts`) and base work-order
+    CRUD (`workOrders.ts`, including assigning a vendor via `PATCH`) stay
+    ungated — see Module 5's row below for the full reasoning on where this
+    line is drawn, since the module's spec bundled "vendor database" (base
+    CRUD) together with the gated features in one bullet list.
   The public, unauthenticated screening-consent capture on
   `POST /apply/:token` (no `req.user`/`req.owner`/`req.tenant` to resolve an
   org from) is instead checked directly in
@@ -150,7 +163,46 @@ with what a module will later extend.
   uses). Photo upload for a grounds inspection is handled inline in that
   card (file input → presigned upload URL → attach) rather than reusing the
   unit-scoped `/inspections/[id]` page, since that page assumes a unitId
-  throughout.
+  throughout. Module 5 (Vendor & Contractor Management) adds one dashboard
+  widget — a "Vendor License/Insurance Alerts" card on `/dashboard`, wrapped
+  in `<ModuleGate module="vendor_management">`, listing vendors flagged by
+  `GET .../vendors/expiry-alerts` (fetched only when the org's
+  `activeModules` already includes the key, to avoid a guaranteed 403 for
+  everyone else) — **plus a full vendor management web UI**, added as a
+  follow-up on the same PR: a "Vendors" nav link (ungated, visible to
+  `maintenance` too, matching the base CRUD route's own role-gating) with an
+  expiry-alert count badge next to it (`<ModuleGate module="vendor_management">`),
+  a vendor list page (`/vendors`, ungated base CRUD — search/filter by
+  status/specialty, create form, license/insurance expiry badges — the
+  list endpoint's `select` was extended to include `licenseExpiresAt`/
+  `insuranceExpiresAt` so the table can render that column), and a vendor
+  detail page (`/vendors/[vendorId]`, ungated base CRUD for
+  view/edit/delete) with two Module 5 sections gated behind
+  `<ModuleGate module="vendor_management">`: a work-history/spend view
+  (`GET .../vendors/:vendorId/work-history?months=`, with a selectable
+  3/6/12/24-month range) and a "Preferred For" list reading
+  `GET .../vendors/preferred-assignments` filtered client-side to that
+  vendor. Preferred-vendor-assignment CRUD itself lives on
+  `/settings/organization` (gated, a new "Preferred Vendors" card) rather
+  than the vendor detail page, since it's naturally a property/category ×
+  vendor matrix better managed alongside the existing module-toggle
+  settings than duplicated per-vendor. The work-order detail page
+  (`/work-orders/[id]`) gained a "Vendor Rating" sidebar card
+  (`<ModuleGate module="vendor_management">`, shown only when the order has
+  an assigned vendor and is `completed`/`closed`) that posts to
+  `POST .../work-orders/:workOrderId/vendor-rating`; `getWorkOrder`'s
+  Prisma `include` was extended with a `vendorRating` select so the UI can
+  tell whether a rating already exists without a second request. **What's
+  still not covered**: there is no endpoint to list a vendor's full rating
+  history — the detail page's work-history view surfaces only the up-to-10
+  most recent ratings *within the selected month range* (from
+  `getVendorWorkHistory`'s existing `ratings.recent` field) plus the
+  all-time rolling `Vendor.rating` average; a dedicated "list every rating
+  for this vendor, unbounded" endpoint was judged out of scope for this
+  follow-up (would be new backend work, not just UI) and is called out
+  precisely rather than glossed over. Base vendor CRUD, work-history/rating
+  endpoints, and preferred-vendor-assignment endpoints are all real,
+  tested, and now reachable from `apps/web` end to end.
 - **How activation works today**: no Stripe Subscription Item billing yet.
   Instead, `PATCH /organizations/:orgId` accepts an `activeModules` array
   (validated against `ALL_MODULE_KEYS`), settable by any `owner`/`manager` —
@@ -158,7 +210,7 @@ with what a module will later extend.
   the web app. This is a placeholder switch to make gating testable, not a
   billing decision; it should move behind an actual paid-subscription check
   once module billing ships. The seed script's demo org
-  (`packages/db/prisma/seed.ts`) defaults all seven gated modules to active
+  (`packages/db/prisma/seed.ts`) defaults all eight gated modules to active
   so local dev/demo environments see the gated features without an extra
   step.
 
@@ -189,7 +241,7 @@ forward-only conditional update (see `schema.md`'s Unit entry).
 | 2 | Unit Intelligence & Appliance Registry | $20–35/mo | High | **Fully shipped (2026-09-17)**: a new `Appliance` model (`unitId` FK, category, make/model/serial, purchase/install dates, warranty expiry, `status: active\|removed`, `removedAt`, `replacesApplianceId` self-relation) with CRUD at `.../units/:unitId/appliances[/:applianceId]`, gated behind `requireModule('unit_intelligence')` at that router's mount in `units.ts`. Maintenance cost tracking reuses `WorkOrder.laborCost/partsCost/totalCost` via a new optional `WorkOrder.applianceId` FK (`ON DELETE SET NULL`) — each appliance exposes a summed `totalMaintenanceCost` and its linked-work-order history. Age-based replacement alerts are computed on read from a per-category expected-lifespan heuristic (`APPLIANCE_EXPECTED_LIFESPAN_YEARS`), not manufacturer data, and are **not** surfaced on the dashboard — only as a badge in the unit detail appliance table. QR labels are generated client-side (`qrcode` npm package, no new endpoint) and link to the unit detail page with `?appliance=<id>` — there's **no separate per-appliance detail page**. `Unit.applianceCount` is recomputed via `appliance.count()` (filtered to `status: active`) on every create/delete/retire/replace (not an in-place increment, since that column defaults to `null` and Postgres NULL-propagation would otherwise leave a naive `{ increment: 1 }` permanently null). **Appliance replacement history**: `POST .../appliances/:id/retire` marks an appliance removed (no replacement), and `POST .../appliances/:id/replace` retires the old appliance and creates a new one in one step, linked via `replacesApplianceId` — the unit page shows a "Current Appliances" section and a separate "Appliance History" section with install→removed date ranges and cross-links between an appliance and what replaced it. **Not built**: appliance photo/document attachments (no S3 hookup despite S3 being a listed dependency), manufacturer-specific lifespan/recall data. See `BUILD_OUTLINE.md` §14 Module 2 for the full breakdown. | Unit Mgmt, S3 |
 | 3 | Grounds & Property Maintenance | $25–40/mo | Medium | **Gated + shipped (2026-09-18)**: a new `MaintenanceSchedule` model (`property`, `title`, `category`/`locationType` reusing `WorkOrder`'s own enums, `cadence: weekly\|monthly\|quarterly\|semi_annual\|annual`, `vendorId?`, `nextDueDate`, `active`) with CRUD at `.../properties/:propertyId/maintenance-schedules[/:scheduleId]`, gated behind `requireModule('grounds_maintenance')` at that router's mount in `properties.ts`. A daily job (`groundsMaintenanceJob.ts`) generates a real `WorkOrder` per due, active schedule — **fixed cadence set, not a full cron-style recurrence-rule engine**, and a schedule missed for multiple periods only backfills one work order per run. `MaintenanceSchedule.vendorId` (reusing `Vendor`, not a new model) auto-populates the generated `WorkOrder.vendorId` and auto-assigns its status — **a single preferred vendor per schedule**, not Module 5's fuller per-category vendor logic. The inspection log reuses Module 6's `Inspection`/`InspectionMedia` models: `Inspection.unitId` is now nullable, a nullable `propertyId` FK was added, and a new `InspectionType.grounds` value marks a property-scoped common-area inspection — created/completed through a **separate, parallel set of functions/routes** (`.../properties/:propertyId/inspections[/:id]`) since Module 6's unit-scoped functions all hard-require `unitId`; grounds inspections skip checklist templates, leases, and signature capture. **The completion-photo requirement is real and server-enforced**: completing one 400s with `PHOTO_REQUIRED` unless at least one photo `InspectionMedia` row already exists. Task completion/compliance reporting ships as `GET .../reports/grounds-maintenance-compliance` (per property: generated count, on-time vs. late completions, open-and-overdue count, photo-compliance rate, completed-grounds-inspection count), gated behind **both** `grounds_maintenance` and `reporting_analytics` (stacked on `reports.ts`'s Module 11 mount-level gate, same pattern as Schedule E export) — recurring task generation and the grounds inspection log are **independent mechanisms**, not cross-linked, so photo compliance there reflects `WorkOrder.photosAfter` only, not whether a matching inspection was also logged. No standalone page for either feature — both live as a single `GroundsMaintenanceCard` on the property detail page, `<ModuleGate module="grounds_maintenance">`-wrapped, plus a gated "Grounds Maintenance" tab on `/reports`. See `BUILD_OUTLINE.md` §14 Module 3 for the full breakdown. | Work Orders, Vendor |
 | 4 | Advanced Payments & Accounting | $30–50/mo | Medium | `taxParcelId` (Property) — used by the Schedule E export. **Gated + shipped (2026-09-17)**: card payments alongside ACH (`initiate-card` on both manager and tenant payment routes); partial payment recording with balance carry-forward, *manager-recorded payments only* (`Payment.record-partial`) — no partial support in the self-service ACH/card checkout flow; a `SecurityDepositDisposition` model formalizing the deposit-vs-deductions math the move-out workflow already computes (reconciled against itemized deductions; as of Module 6 shipping, also linked to the lease's completed move-in/move-out `Inspection` records when they exist, via `moveInInspectionId`/`moveOutInspectionId` — free-text condition notes remain for leases with no inspection on file); a `Disbursement` model computing a configurable management-fee deduction against an `OwnerStatement.distributionAmount` — **bookkeeping only, no payout wiring** since Owner Portal has no owner bank-account capture; a Schedule E data export (`GET /reports/schedule-e-export`) gated behind both `advanced_payments_accounting` and `reporting_analytics`. P&L by property is **not** duplicated here — see the "Notes on base-product overlap" section below for why it stays under Module 11. `requireModule('advanced_payments_accounting')` applied per-route across `payments.ts`, `tenants-portal.ts`, `leases.ts`, `owners.ts`, and `reports.ts` — see "Module gating infrastructure" above | Stripe, Payment Ledger, Owner Portal (for disbursements) |
-| 5 | Vendor & Contractor Management | $20–30/mo | Medium | `w9OnFile` (Vendor) | Work Orders |
+| 5 | Vendor & Contractor Management | $20–30/mo | Medium | **Gated + shipped (2026-09-18)**: base vendor CRUD (list/get/create/update/delete, `routes/vendors.ts`) ships ungated — it barely existed before this change (only a list endpoint), so this change also had to build it out, not just the gated features. Gated behind `requireModule('vendor_management')`, all per-route: **license/insurance expiry alerts** — computed live from the existing `licenseExpiresAt`/`insuranceExpiresAt` fields (`GET .../vendors/expiry-alerts`, 30-day lookahead via `VENDOR_EXPIRY_ALERT_LOOKAHEAD_DAYS`), plus a daily `vendorExpiryAlertJob.ts` that only logs a per-org count for ops visibility — there is no persisted "alert" row and no outbound notification yet, and the dashboard widget/endpoint both compute the same set live rather than reading anything the job writes; **work-history/spend tracking** — `GET .../vendors/:vendorId/work-history?months=`, aggregating completed/closed `WorkOrder`s (including Module 3 schedule-generated ones, which need no special handling since they're just `WorkOrder` rows with `vendorId` set) by count, total spend (`totalCost` if present, else `laborCost + partsCost`), and category breakdown — kept under `vendor_management` rather than Module 11's `reporting_analytics`, since it's vendor-specific detail (mirroring how Module 2's per-appliance `totalMaintenanceCost` sits under `unit_intelligence`, not reporting) rather than a cross-vendor report; **per-completion ratings** — a new `VendorWorkOrderRating` model (`workOrderId` unique, `vendorId`, `rating` 1-5, `note?`), captured via `POST .../work-orders/:workOrderId/vendor-rating` once a work order is `completed`/`closed`, rolling into a recomputed `Vendor.rating` average (approach (a) from the spec — the existing field's consumers are unaffected); **preferred vendor assignments** — a new `PreferredVendorAssignment` model (`propertyId?`, `category` required, `vendorId`) replacing `Vendor.preferred`'s role (the boolean itself is kept, unused, for display/back-compat), resolved property+category-first then org-wide-by-category, and consulted by **both** manual `createWorkOrder` and Module 3's `generateWorkOrderForSchedule` when no vendor is otherwise specified — **simplified to category-required only**, there is no property-only/category-agnostic assignment mode. **A full vendor management web UI now exists** — `/vendors` list, `/vendors/[vendorId]` detail (work-history/spend + "Preferred For", both gated), preferred-vendor-assignment management on `/settings/organization`, and a vendor-rating capture card on the work-order detail page; the only known gap is that ratings history in the UI is bounded to the selected work-history month range (no unbounded "list all ratings for this vendor" endpoint exists) — see the Web UI note above for the full breakdown. See `BUILD_OUTLINE.md` §14 Module 5 for the full breakdown. | Work Orders |
 | 6 | Inspections & Compliance | $25–40/mo | Medium | `lastInspectionAt` (Unit) — no longer dormant, see above. **Gated + shipped (2026-09-18)**: an `Inspection` model (`unitId` FK, nullable `leaseId` FK, `type: move_in\|move_out\|scheduled\|annual\|semi_annual`, `status: scheduled\|in_progress\|completed\|cancelled`, `scheduledAt`/`completedAt`, nullable `inspectorUserId` FK to `User`, nullable `templateId` FK, `checklistResults: Json`, `notes`) with CRUD + schedule + assign-inspector + complete + cancel at `.../units/:unitId/inspections[/:inspectionId]`, gated behind `requireModule('inspections_compliance')` at that router's mount in `units.ts` (same pattern as Module 2's appliances). An `InspectionTemplate` model (`checklistItems: Json` array of `{section, item, description?}`) provides **real per-org stored checklist data with basic CRUD** — but v1 ships a single seeded default template (kitchen/bathrooms/bedrooms/living areas/exterior/appliances/safety devices) rather than a full property-type-aware template picker; **do not describe this as fully configurable per property type**. An `InspectionMedia` model reuses the exact `storage.service.ts` presigned-upload pattern (`Document`/`WorkOrder` photos) for photo/video attachments, with `capturedAt` always populated and `latitude`/`longitude` captured **best-effort only** via the browser Geolocation API — permission-gated, and built/tested in a non-mobile web session, so GPS population from a real device is **unverified**, not confirmed working. Signature capture uses a **typed attestation name + IP + timestamp** (mirrors `lease-esignature.service.ts`'s e-sign flow), **not** a canvas-drawn image — both tenant and manager signatures are captured on the same `/complete` request as a manager/inspector-device walkthrough, not a separate tenant-facing public signing link. Completing an inspection advances `Unit.lastInspectionAt` forward-only via a conditional `updateMany`. A move-in vs. move-out comparison endpoint (`GET .../leases/:leaseId/inspections/compare`, gated per-route in `leases.ts`) diffs the two inspections' checklist results by section+item — the basis for `SecurityDepositDisposition`'s now-real `moveInInspectionId`/`moveOutInspectionId` linkage (see Module 4's row above). PDF report generation is **client-side only** (`apps/web/lib/exportInspectionPdf.ts`, `jspdf` — the existing web dependency, no new server-side PDF library added), listing photo/video references by storage key rather than embedding images. **Not built**: a property-type-aware template picker UI, verified GPS capture from a real device, canvas-drawn signatures, and a public tenant-facing inspection-signing link. See `BUILD_OUTLINE.md` §14 Module 6 for the full breakdown. | Unit Mgmt, S3 |
 | 7 | Lease Renewal (full negotiation flow) | $15–25/mo | Medium | none dedicated — base one-click renewal via `Lease.renewalOfLeaseId` already ships | Lease Mgmt, Messaging |
 | 8 | Eviction Management | $30–50/mo | Medium | none dedicated — will use `Property.state` for jurisdiction lookup | Lease Mgmt, property jurisdiction data |
@@ -332,3 +384,46 @@ than adding a second inspection table was a deliberate schema choice — see
 scoped code path is a parallel set of functions rather than a shared one.
 See the module table above and `BUILD_OUTLINE.md` §14 Module 3 for the full
 breakdown of what shipped vs. what's simplified.
+
+**Module 5 (Vendor & Contractor Management)** is unusual in this series in
+that its "base CRUD already exists" premise turned out to be false — the
+`Vendor` model existed with all the fields the module spec needed
+(`licenseExpiresAt`, `insuranceExpiresAt`, `rating`, `preferred`,
+`specialties`, etc.), but `routes/vendors.ts`/`vendor.service.ts` only ever
+implemented a list endpoint; there was no create/get/update/delete at all.
+This change built that CRUD out as ungated base product (it's plain
+record-keeping, same reasoning as every other resource's CRUD in this
+codebase) alongside the genuinely gated Module 5 features, and the split is
+documented precisely in the module table row above and in `vendors.ts`'s own
+comments. Four things worth calling out precisely, matching this series'
+pattern:
+(1) **the expiry-alert "job" doesn't persist anything** — unlike
+`rentGenerationJob.ts` (creates `Payment` rows) or the SLA breach job (sets
+a persisted boolean), there is nothing new to flag: expiry status is fully
+derivable from the two date columns that already existed, so
+`vendorExpiryAlertJob.ts` only logs a daily per-org summary for ops
+visibility, and both the dashboard widget and the `GET
+.../vendors/expiry-alerts` endpoint compute the same alert set live rather
+than reading anything the job wrote;
+(2) **work-history/spend aggregation was deliberately kept under
+`vendor_management`, not `reporting_analytics`** — see the module table row
+above for the reasoning (vendor-specific detail, not a cross-vendor report),
+mirroring the precedent Module 2 set for per-appliance cost rollups;
+(3) **rating capture is a separate call from completion, not atomic with
+it** — `POST .../work-orders/:workOrderId/vendor-rating` requires the work
+order to already be `completed`/`closed`; there's no rating field folded
+into the completion `PATCH` itself, so a manager marks a work order complete
+and then, as a follow-up action, rates the vendor;
+(4) **preferred-vendor assignment is category-required, not a fully
+independent "property or category" system** — every `PreferredVendorAssignment`
+row needs a `WorkOrderCategory`, with `propertyId` as an optional narrowing
+dimension (null = org-wide default for that category), not a
+property-only/category-agnostic mode, because the auto-assignment lookup at
+work-order-creation time always has a category to match on and a
+category-less assignment would have no deterministic way to pick among
+multiple vendors for the same property. A dedicated vendor management web
+UI (list, detail, preferred-assignment management, rating capture) was
+added as a follow-up on this PR — see the Web UI note above for exactly
+what it covers and its one known gap (no unbounded ratings-history
+endpoint). See the module table above and `BUILD_OUTLINE.md` §14 Module 5
+for the full breakdown of what shipped vs. what's simplified.

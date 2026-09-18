@@ -12,6 +12,7 @@ const MODULE_LABELS: Record<ModuleKey, string> = {
   unit_intelligence: 'Unit Intelligence & Appliance Registry',
   inspections_compliance: 'Inspections & Compliance',
   grounds_maintenance: 'Grounds & Property Maintenance',
+  vendor_management: 'Vendor & Contractor Management',
 };
 
 interface ModuleGateProps {

@@ -999,7 +999,7 @@ _Last updated: 2026-09-16. Status reflects the `main` branch._
 | Late fee auto-apply job                                               | ✅     |                                                                                                      |
 | Rent generation job (monthly Payment records from leases)             | ✅     | `rentGenerationJob.ts`                                                                               |
 | Lease renewal with linkage tracking                                   | ✅     |                                                                                                      |
-| Vendor management                                                     | ✅     | Basic                                                                                                |
+| Vendor management                                                     | ✅     | Basic vendor list only, until Module 5 (§14) shipped full CRUD + expiry alerts/work-history/ratings/preferred-assignment logic on 2026-09-18 |
 | Staff roles + permissions                                             | ✅     |                                                                                                      |
 | Tenant list — search + operational filters                            | ✅     | Search by name/email/unit/property; lease-status and expiry (30d/60d) filters implemented (`tenants/page.tsx`) |
 | Tenant detail — payment history section                               | ✅     | Payment history rendered at `tenants/[id]/page.tsx:502`                                              |
@@ -1417,7 +1417,9 @@ for the full gating detail.
   order, which also auto-transitions the generated order's status to
   `assigned` instead of `new_order`. This is a single preferred/default
   vendor per schedule, not the fuller "preferred vendor per category" logic
-  Module 5 (Vendor & Contractor Management) is scoped to add later.
+  Module 5 (Vendor & Contractor Management) added later (2026-09-18, see
+  §14) — that fallback only applies when this field is left unset; a
+  schedule's own explicit vendor still always wins.
 - **Inspection log with completion-photo requirement** — reuses Module 6's
   `Inspection`/`InspectionMedia` models rather than a second, parallel
   table: `Inspection.unitId` is now nullable and a nullable `propertyId` FK
@@ -1551,17 +1553,120 @@ record rather than an actual funds transfer.
 **Target price:** $20–30/mo
 **Priority:** Medium
 
-**What it adds:**
+**Status: gated + shipped (2026-09-18).** What actually built, and exactly
+how it's simplified relative to the original spec above — read this before
+assuming any bullet below is fully built as originally scoped:
 
-- Full vendor database with contact info, license numbers, insurance certificates
-- License and insurance expiry alerts (flagged on dashboard before expiry)
-- Work history and spend tracking per vendor
-- Star ratings and notes per work order completion
-- Preferred vendor assignments per property or category
+- **Full vendor database with contact info, license numbers, insurance
+  certificates — built out as ungated base product, not gated.** The
+  `Vendor` model already had every field the spec needed, but the API only
+  ever exposed a list endpoint before this change — there was no
+  create/get/update/delete at all. `vendor.service.ts`/`routes/vendors.ts`
+  now have full CRUD (`GET`/`POST`/`PATCH`/`DELETE .../vendors[/:vendorId]`),
+  ungated, same reasoning as every other resource's base CRUD in this
+  codebase (record-keeping, not a paid add-on capability). Deleting a
+  vendor is blocked once it has any linked `WorkOrder` or
+  `MaintenanceSchedule` history (`400 VENDOR_HAS_HISTORY`) — set it inactive
+  instead.
+- **License and insurance expiry alerts — gated, real, computed live.**
+  `GET .../vendors/expiry-alerts` (gated behind `vendor_management`) flags
+  active vendors whose `licenseExpiresAt`/`insuranceExpiresAt` is already
+  past or within a 30-day lookahead (`VENDOR_EXPIRY_ALERT_LOOKAHEAD_DAYS`).
+  Surfaced on the manager dashboard as a "Vendor License/Insurance Alerts"
+  card, gated with `<ModuleGate module="vendor_management">` and fetched
+  only when the org's `activeModules` already includes the key. A daily
+  `vendorExpiryAlertJob.ts` mirrors `rentGenerationJob.ts`'s scan-and-log
+  pattern, but — unlike that job or the SLA breach job — it doesn't persist
+  anything new: expiry status is fully derivable from the two existing date
+  columns, so the job only logs a per-org count for ops visibility, and it
+  is not the source the dashboard/endpoint read from (both compute the same
+  set live on each request).
+- **Work history and spend tracking per vendor — gated, real.**
+  `GET .../vendors/:vendorId/work-history?months=` aggregates completed/
+  closed `WorkOrder`s by count, total spend (`totalCost` if set, else
+  `laborCost + partsCost`), and category breakdown, over a selectable
+  lookback window (default 12 months). This automatically covers Module 3
+  schedule-generated work orders too — they're just ordinary `WorkOrder`
+  rows with `vendorId` set, no special-casing needed. **Decision: this
+  endpoint is gated behind `vendor_management`, not Module 11's
+  `reporting_analytics`** — it's vendor-specific detail info (like Module
+  2's per-appliance `totalMaintenanceCost` rollup, gated under
+  `unit_intelligence` rather than reporting), not a cross-vendor report.
+  There's no dedicated vendor detail page in the web app to display it on
+  (see below) — it's reachable via the API only as of this change.
+- **Star ratings and notes per work order completion — gated, real, but a
+  separate action from completion.** A new `VendorWorkOrderRating` model
+  (`workOrderId` unique — one rating per work order, `vendorId`, `rating`
+  1-5, `note?`) is captured via `POST
+  .../work-orders/:workOrderId/vendor-rating`, which requires the work
+  order to already be `completed`/`closed` and have a vendor assigned. This
+  is **not** folded into the completion `PATCH` itself — rating a vendor is
+  a follow-up call a manager makes after marking a work order complete, not
+  an atomic part of that transition. Each new rating recomputes
+  `Vendor.rating` as the average of all of that vendor's ratings (kept as a
+  rolling-average field rather than replaced, so its existing consumers —
+  e.g. vendor list ordering — are unaffected).
+- **Preferred vendor assignments per property or category — gated, real,
+  but category-required, not a fully independent two-dimension system.** A
+  new `PreferredVendorAssignment` model (`propertyId?`, `category`
+  required, `vendorId`) replaces `Vendor.preferred`'s role in
+  auto-assignment (the boolean is kept, unused, for display/back-compat).
+  `propertyId` narrows an assignment to one property; omitting it makes it
+  the org-wide default for that category. **There is no property-scoped,
+  category-agnostic assignment** ("always use vendor X for this property
+  regardless of category") — every assignment needs a category, since
+  work-order creation always has one to match on. Resolution is
+  property+category first, then org-wide-by-category, else no default.
+  Consulted by **both** manually-created work orders
+  (`workOrder.service.ts`'s `createWorkOrder`, when no `vendorId` is
+  explicitly supplied) and Module 3's recurrence job
+  (`generateWorkOrderForSchedule`, when the schedule itself has no vendor of
+  its own — the schedule's own `vendorId` still always wins over this
+  fallback). CRUD for assignments lives at
+  `GET`/`POST`/`DELETE .../vendors/preferred-assignments[/:assignmentId]`,
+  gated.
+- **Vendor management web UI — added as a follow-up on this PR.** The
+  gated dashboard alert widget described above shipped first; a dedicated
+  vendor list/detail/CRUD page followed in the same PR:
+  - `/vendors` — vendor list (ungated base CRUD): search/filter by
+    status and specialty, a create form, and license/insurance expiry
+    badges (the list endpoint's `select` was extended to include
+    `licenseExpiresAt`/`insuranceExpiresAt`, which weren't previously
+    selected there).
+  - `/vendors/[vendorId]` — vendor detail (ungated base CRUD for
+    view/edit/delete), plus two sections gated behind
+    `<ModuleGate module="vendor_management">`: a work-history/spend view
+    (`GET .../vendors/:vendorId/work-history?months=`, selectable
+    3/6/12/24-month range) and a "Preferred For" list (reads
+    `GET .../vendors/preferred-assignments`, filtered client-side to the
+    current vendor).
+  - Preferred-vendor-assignment CRUD itself lives on
+    `/settings/organization` (a new gated "Preferred Vendors" card), not
+    the vendor detail page — it's a property/category × vendor matrix,
+    a better fit next to the existing module-toggle settings than
+    duplicated per-vendor UI.
+  - The work-order detail page (`/work-orders/[id]`) gained a gated
+    "Vendor Rating" sidebar card, shown only when the order has an
+    assigned vendor and is `completed`/`closed`, posting to
+    `POST .../work-orders/:workOrderId/vendor-rating`.
+    `workOrder.service.ts`'s `getWorkOrder`/`getWorkOrders` `include` was
+    extended with a `vendorRating` select so the UI knows whether a
+    rating already exists without an extra request.
+  - A "Vendors" nav link was added (ungated, shown to `maintenance` too,
+    matching that role's existing access to `vendors.ts`), with an
+    expiry-alert count badge next to it, gated.
+  - **What's still not covered**: there is no endpoint to list a vendor's
+    full rating history. The detail page's work-history/spend view only
+    surfaces the up-to-10 most recent ratings *within the selected month
+    range* (`getVendorWorkHistory`'s existing `ratings.recent` field) plus
+    the all-time rolling `Vendor.rating` average — a dedicated "list every
+    rating for this vendor" endpoint would be new backend work and was
+    judged out of scope for this UI follow-up.
 
 **Data hooks already in schema:**
 
-- `w9_on_file` (Vendor) — required for contractor 1099 tax reporting
+- `w9_on_file` (Vendor) — still dormant; 1099 tax-reporting export was not
+  part of this change's scope.
 
 **Dependencies:** Work orders
 
