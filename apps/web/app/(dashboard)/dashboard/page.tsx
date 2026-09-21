@@ -87,6 +87,10 @@ export default function DashboardPage() {
   const vendorManagementActive = profile?.organization.activeModules?.includes('vendor_management') ?? false;
 
   useEffect(() => {
+    // api.ts builds URLs from the org ID that AuthContext sets after login;
+    // running earlier yields /organizations//properties (404).
+    if (!profile?.orgId) return;
+
     async function loadDashboard() {
       try {
         const [properties, stats, workOrders, leases, threads, vendorExpiryAlerts] = await Promise.all([
@@ -155,7 +159,8 @@ export default function DashboardPage() {
     }
 
     loadDashboard();
-  }, []);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [profile?.orgId]);
 
   if (loading) return <div className="loading">Loading dashboard...</div>;
 
